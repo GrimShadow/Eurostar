@@ -1,148 +1,141 @@
+
 # Aviavox Announcements Manager
 
-A Laravel-based web application for managing and scheduling announcements through the Aviavox system. This application allows you to create, schedule, and manage both text and audio announcements, with direct integration to Aviavox announcement systems.
+A comprehensive Laravel application designed to manage and schedule announcements seamlessly through the Aviavox system. This platform facilitates the creation of both text and audio announcements, with capabilities to test and directly communicate with Aviavox systems.
 
-## Features
+## Key Features
 
-- Create and manage text announcements
-- Schedule audio announcements through Aviavox
-- Real-time updates using Livewire
-- User authentication and authorization
-- Announcement scheduling and recurrence
-- Aviavox system integration
-- Responsive web interface
+- **Text and Audio Announcements**: Create, manage, and schedule both types.
+- **Aviavox Integration**: Direct integration with the Aviavox system for real-time audio announcements.
+- **User Authentication**: Secure access and role-based management.
+- **Scheduling and Recurrence**: Schedule announcements with customizable recurrence options.
+- **Livewire Integration**: Real-time updates for an efficient user experience.
+- **Responsive Design**: Optimized for both desktop and mobile devices.
 
-## Requirements
+## System Requirements
 
-- PHP >= 8.1
-- Composer
-- Node.js & NPM
-- SQLite or MySQL
-- Windows Server or Windows 10/11
-- NSSM (Non-Sucking Service Manager)
+- **PHP**: Version 8.1 or higher
+- **Composer**
+- **Node.js & NPM**
+- **Database**: SQLite or MySQL
+- **Operating System**: Windows 10/11 or Windows Server
+- **NSSM**: For running the application as a Windows service
 
-## Installation
+## Installation Guide
 
-1. Clone the repository:
-
-bash
+### Step 1: Clone the Repository
+\`\`\`bash
 git clone https://github.com/yourusername/aviavox-announcements.git
 cd aviavox-announcements
+\`\`\`
 
-2. Install dependencies:
-
-bash
+### Step 2: Install Backend Dependencies
+\`\`\`bash
 composer install
+\`\`\`
 
-
-3. Install and compile frontend assets:
-
-bash
+### Step 3: Install and Compile Frontend Assets
+\`\`\`bash
 npm install
 npm run build
+\`\`\`
 
-4. Create environment file:
-
+### Step 4: Configure Environment Variables
+\`\`\`bash
 cp .env.example .env
-
-5. Generate application key:
-
-bash
 php artisan key:generate
+\`\`\`
 
-6. Configure your database in `.env`
+- **Database**: Update \`.env\` with your database connection details.
 
-7. Run migrations:
-   
-bash
+### Step 5: Run Migrations
+\`\`\`bash
 php artisan migrate
-
+\`\`\`
 
 ## Running as a Windows Service
 
-### Using NSSM (Recommended)
+### Using NSSM
 
-1. Download NSSM from [nssm.cc](https://nssm.cc/)
+1. **Download NSSM**: [nssm.cc](https://nssm.cc/)
 
-2. Create a startup batch file (`start-laravel.bat`):
-batch
-@echo off
-cd C:\path\to\aviavox-announcements
-php artisan serve --port=8000
+2. **Create a Startup Batch File**
+   \`\`\`batch
+   @echo off
+   cd C:\path\to\aviavox-announcements
+   php artisan serve --host=127.0.0.1 --port=8000
+   \`\`\`
 
-3. Install the service using NSSM:
+3. **Install the Service with NSSM**
+   \`\`\`bash
+   nssm install AviavoxAnnouncements "C:\path\to\php\php.exe" "artisan serve --host=127.0.0.1 --port=8000"
+   nssm set AviavoxAnnouncements AppDirectory "C:\path\to\aviavox-announcements"
+   nssm set AviavoxAnnouncements DisplayName "Aviavox Announcements"
+   nssm set AviavoxAnnouncements Description "Service for Aviavox Announcements Management"
+   nssm set AviavoxAnnouncements Start SERVICE_AUTO_START
+   \`\`\`
 
-batch
-nssm install AviavoxAnnouncements "C:\path\to\start-laravel.bat"
-nssm set AviavoxAnnouncements DisplayName "Aviavox Announcements"
-nssm set AviavoxAnnouncements Description "Aviavox Announcements Management System"
-nssm set AviavoxAnnouncements AppDirectory "C:\path\to\aviavox-announcements"
-nssm set AviavoxAnnouncements Start SERVICE_AUTO_START
+4. **Start the Service**
+   \`\`\`bash
+   net start AviavoxAnnouncements
+   \`\`\`
 
-4. Start the service:
+### Managing the Service
+- **Start**: \`net start AviavoxAnnouncements\`
+- **Stop**: \`net stop AviavoxAnnouncements\`
+- **Remove**: \`nssm remove AviavoxAnnouncements\`
+- **Check Status**: \`sc query AviavoxAnnouncements\`
 
-batch
-net start AviavoxAnnouncements
+Alternatively, use the Windows Services Manager (\`services.msc\`).
 
+## Configuration Instructions
 
-### Service Management
+### Setting Up Aviavox Integration
 
-- Start: `net start AviavoxAnnouncements`
-- Stop: `net stop AviavoxAnnouncements`
-- Remove: `nssm remove AviavoxAnnouncements`
-- Status: `sc query AviavoxAnnouncements`
+1. **Navigate to the Settings Page**
+2. **Enter Aviavox Connection Details**:
+   - **IP Address**
+   - **Port**
+   - **Username**
+   - **Password**
+3. **Test the Connection**: Use the "Test Connection" button to ensure connectivity.
 
-You can also manage the service through Windows Services (services.msc)
+## Using the Application
 
-## Configuration
-
-### Aviavox Settings
-
-1. Navigate to the Settings page
-2. Configure Aviavox connection details:
-   - IP Address
-   - Port
-   - Username
-   - Password
-3. Test the connection using the "Test Connection" button
-
-## Usage
-
-1. Access the application through your web browser
-2. Log in with your credentials
-3. Navigate to the Announcements page
-4. Create new announcements:
-   - Choose between text or audio type
-   - Set scheduling details
-   - Specify recurrence if needed
-   - Select area and author
+1. **Access**: Open your browser and navigate to \`http://127.0.0.1:8000\` (or your specified host and port).
+2. **Login**: Use your credentials to access the system.
+3. **Create Announcements**:
+   - **Choose Type**: Select between text or audio.
+   - **Set Details**: Schedule the announcement and configure recurrence options if needed.
+   - **Manage Announcements**: View, update, or delete announcements as required.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. Service won't start:
-   - Check PHP path in system environment variables
-   - Verify folder permissions
-   - Check error logs in storage/logs
+1. **Service Not Starting**:
+   - Verify your PHP path is set in system environment variables.
+   - Check folder permissions.
+   - Review error logs in \`storage/logs\`.
 
-2. Aviavox connection fails:
-   - Verify network connectivity
-   - Check Aviavox settings
-   - Ensure correct credentials
+2. **Aviavox Connection Fails**:
+   - Ensure network connectivity.
+   - Double-check Aviavox settings (IP, port, credentials).
+   - Verify the Aviavox server is online.
 
-## Security
+## Security Recommendations
 
-Remember to:
-- Keep your application up to date
-- Use strong passwords
-- Configure proper file permissions
-- Regularly backup your database
+- **Update Regularly**: Keep your Laravel and dependencies up to date.
+- **Strong Passwords**: Use secure passwords for authentication.
+- **File Permissions**: Restrict file permissions for security.
+- **Database Backups**: Regularly back up your database to prevent data loss.
 
 ## License
 
-This application is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
 
-## Support
+## Support and Contributions
 
-For support, please create an issue in the GitHub repository or contact your system administrator.
+- **Issues**: Report issues on the GitHub repository.
+- **Contributions**: Feel free to fork the repository and submit pull requests.
+- **Contact**: For support, reach out to your system administrator.
