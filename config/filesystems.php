@@ -57,6 +57,12 @@ return [
             'throw' => false,
         ],
 
+        'gtfs' => [
+        'driver' => 'local',
+        'root' => storage_path('app/gtfs'),
+            'throw' => false,
+        ],
+
     ],
 
     /*

@@ -4,9 +4,8 @@ namespace App\Livewire;
 
 use App\Models\Announcement;
 use App\Models\AviavoxAnnouncement;
-use App\Models\AviavoxSetting; // Import the AviavoxSetting model
+use App\Models\AviavoxSetting;
 use Livewire\Component;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class CreateAnnouncement extends Component
@@ -41,12 +40,94 @@ class CreateAnnouncement extends Component
         $this->message = '';
     }
 
+    public function authenticateAndSendMessage($server, $port, $username, $password, $xml)
+    {
+        try {
+            Log::info('Establishing TCP connection to AviaVox server', ['server' => $server, 'port' => $port]);
+            $socket = fsockopen($server, $port, $errno, $errstr, 5);
+            if (!$socket) {
+                throw new \Exception("Failed to connect: $errstr ($errno)");
+            }
+            Log::info('TCP connection established successfully');
+
+            // Set a read timeout for the socket
+            stream_set_timeout($socket, 20); // 20 seconds timeout
+
+            // Step 1: Send AuthenticationChallengeRequest
+            $authChallengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            fwrite($socket, chr(2) . $authChallengeRequest . chr(3));
+            Log::info('Sent AuthenticationChallengeRequest', ['request' => $authChallengeRequest]);
+
+            // Step 2: Read AuthenticationChallengeResponse
+            $response = fread($socket, 1024);
+            if (stream_get_meta_data($socket)['timed_out']) {
+                Log::error('Stream timed out while waiting for AuthenticationChallengeResponse');
+                throw new \Exception('Stream timed out while waiting for response');
+            }
+            Log::info('Received AuthenticationChallengeResponse', ['response' => $response]);
+
+            // Extract challenge
+            $challenge = $this->extractChallengeFromResponse($response);
+            if (!$challenge) {
+                throw new \Exception('Challenge extraction failed from response.');
+            }
+            Log::info('Challenge code extracted successfully', ['challenge' => $challenge]);
+
+            // Step 3: Hash the password
+            $saltedPassword = $password . ($challenge ^ strlen($password)) . strrev($password);
+            $passwordHash = strtoupper(hash('sha512', $saltedPassword));
+            Log::info('Password hashed successfully', ['passwordHash' => $passwordHash]);
+
+            // Step 4: Send AuthenticationRequest
+            $authRequest = "<AIP>
+                                <MessageID>AuthenticationRequest</MessageID>
+                                <ClientID>1234567</ClientID>
+                                <MessageData>
+                                    <Username>{$username}</Username>
+                                    <PasswordHash>{$passwordHash}</PasswordHash>
+                                </MessageData>
+                            </AIP>";
+            fwrite($socket, chr(2) . $authRequest . chr(3));
+            Log::info('Sent AuthenticationRequest', ['request' => $authRequest]);
+
+            // Step 5: Read AuthenticationResponse
+            $authResponse = fread($socket, 1024);
+            if (stream_get_meta_data($socket)['timed_out']) {
+                Log::error('Stream timed out while waiting for AuthenticationResponse');
+                throw new \Exception('Stream timed out while waiting for response');
+            }
+            Log::info('Received AuthenticationResponse', ['authResponse' => $authResponse]);
+
+            if (strpos($authResponse, "<Authenticated>1</Authenticated>") === false) {
+                throw new \Exception("Authentication failed.");
+            }
+            Log::info('Authentication successful, session is active');
+
+
+            // Step 7: Send the XML announcement message
+            fwrite($socket, chr(2) . $xml . chr(3));
+            Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $xml]);
+
+            // Step 8: Read the final response
+            $finalResponse = fread($socket, 1024);
+            if (stream_get_meta_data($socket)['timed_out']) {
+                Log::error('Stream timed out while waiting for AnnouncementTriggerResponse');
+                throw new \Exception('Stream timed out while waiting for response');
+            }
+            fclose($socket);
+            Log::info('Received response for AnnouncementTriggerRequest', ['response' => $finalResponse]);
+        } catch (\Exception $e) {
+            Log::error('Error during AviaVox communication', ['error' => $e->getMessage()]);
+            session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
+        }
+    }
+
     public function save()
     {
         $this->validate();
+        Log::info('Creating announcement', ['type' => $this->type, 'selectedAnnouncement' => $this->selectedAnnouncement]);
 
         $message = $this->type === 'text' ? $this->message : ($this->type === 'audio' ? $this->audioAnnouncements->find($this->selectedAnnouncement)?->name : null);
-
         $announcement = Announcement::create([
             'type' => $this->type,
             'message' => $message,
@@ -56,49 +137,38 @@ class CreateAnnouncement extends Component
             'area' => $this->area,
             'status' => 'Pending'
         ]);
+        Log::info('Announcement created in database', ['id' => $announcement->id, 'type' => $announcement->type, 'message' => $announcement->message]);
 
         if ($this->type === 'audio' && $this->selectedAnnouncement) {
+            Log::info('Preparing to process audio announcement', ['selectedAnnouncement' => $this->selectedAnnouncement]);
             $selected = AviavoxAnnouncement::find($this->selectedAnnouncement);
-
             if ($selected) {
-                // Fetch connection details from the aviavox_settings table
+                Log::info('Audio announcement details found', ['id' => $selected->id, 'name' => $selected->name, 'item_id' => $selected->item_id, 'value' => $selected->value]);
+
                 $settings = AviavoxSetting::first();
                 if (!$settings) {
+                    Log::error('Aviavox settings not found in database');
                     session()->flash('error', 'Aviavox settings are not configured.');
                     return;
                 }
 
-                // Construct the URL using the IP address and port from the settings
-                $url = "http://{$settings->ip_address}:{$settings->port}";
+                $server = $settings->ip_address;
+                $port = $settings->port;
 
-                $xml = '<AIP>
-                    <MessageID>AnnouncementTriggerRequest</MessageID>
-                    <MessageData>
-                        <AnnouncementData>
-                            <Item ID="MessageName" Value="' . $selected->item_id . '"/>
-                        </AnnouncementData>
-                    </MessageData>
-                </AIP>';
+                // Prepare the XML message
+                $xml = "<AIP>
+                            <MessageID>AnnouncementTriggerRequest</MessageID>
+                            <MessageData>
+                                <AnnouncementData>
+                                    <Item ID=\"{$selected->item_id}\" Value=\"{$selected->value}\"/>
+                                </AnnouncementData>
+                            </MessageData>
+                        </AIP>";
 
-                try {
-                    $response = Http::withHeaders([
-                        'Content-Type' => 'application/xml',
-                    ])->post($url, $xml);
-
-                    // Log the response status and body
-                    Log::info('Aviavox Response', [
-                        'status' => $response->status(),
-                        'body' => $response->body()
-                    ]);
-
-                    if (!$response->successful()) {
-                        session()->flash('error', 'Failed to send the announcement.');
-                    }
-                } catch (\Exception $e) {
-                    // Log the exception message if there's an error
-                    Log::error('Aviavox Connection Error: ' . $e->getMessage());
-                    session()->flash('error', 'Failed to connect to Aviavox server.');
-                }
+                // Authenticate and send the message in the same session
+                $this->authenticateAndSendMessage($server, $port, $settings->username, $settings->password, $xml);
+            } else {
+                Log::error('Audio announcement not found', ['selected_id' => $this->selectedAnnouncement]);
             }
         }
 
@@ -111,5 +181,10 @@ class CreateAnnouncement extends Component
     {
         return view('livewire.create-announcement');
     }
-}
 
+    private function extractChallengeFromResponse($response)
+    {
+        preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+        return $matches[1] ?? null;
+    }
+}
