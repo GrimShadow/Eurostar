@@ -8,6 +8,7 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\RulesAndTriggersController;
 use App\Http\Controllers\AviavoxController;
 use App\Http\Controllers\GtfsController;
+use App\Http\Controllers\TokenController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -53,6 +54,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::post('/tokens', [TokenController::class, 'create'])->name('token.create');
+    Route::delete('/tokens/{token}', [TokenController::class, 'destroy'])->name('token.destroy');
 });
 
 require __DIR__.'/auth.php';
