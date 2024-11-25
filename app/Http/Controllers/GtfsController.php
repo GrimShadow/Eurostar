@@ -264,39 +264,39 @@ class GtfsController extends Controller
 
         Log::info('Starting GTFS calendar dates sync');
 
-        // Read calendar_dates.txt file
         $file = fopen($calendarDatesFile, 'r');
         if (!$file) {
             throw new \Exception('Unable to open calendar_dates.txt');
         }
 
-        // Read headers
         $headers = fgetcsv($file);
         if (!$headers) {
             throw new \Exception('Unable to read calendar_dates.txt headers');
         }
 
-        // Start transaction
         DB::beginTransaction();
         try {
-            // Clear all existing records first
             GtfsCalendarDate::truncate();
             $created = 0;
 
-            // Process each line
             while (($data = fgetcsv($file)) !== FALSE) {
                 $calendarData = array_combine($headers, $data);
                 
-                // Format data for database
+                // Convert YYYYMMDD to Y-m-d format
+                $dateString = $calendarData['date'];
+                $year = substr($dateString, 0, 4);
+                $month = substr($dateString, 4, 2);
+                $day = substr($dateString, 6, 2);
+                $formattedDate = "{$year}-{$month}-{$day}";
+
                 $formattedData = [
                     'service_id' => $calendarData['service_id'],
-                    'date' => $calendarData['date'],
+                    'date' => $formattedDate,
                     'exception_type' => (int)$calendarData['exception_type'],
                     'created_at' => now(),
                     'updated_at' => now()
                 ];
 
-                // Create new record
                 GtfsCalendarDate::create($formattedData);
                 $created++;
             }
