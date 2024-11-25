@@ -13,50 +13,47 @@
 }">
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
         @foreach($trains as $train)
-        <div class="border bg-white border-gray-300 rounded-3xl dark:border-gray-600 h-32 md:h-64">
-            <div class="p-6 flex flex-col h-full">
+        <div class="border bg-white border-gray-300 rounded-3xl dark:border-gray-600 h-auto min-h-[8rem] md:min-h-[16rem]">
+            <div class="p-4 flex flex-col h-full">
                 <!-- Header with Train Number and Menu -->
-                <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center">
                         <x-train-front-on />
-                        <span class="text-2xl font-bold">{{ $train['number'] }}</span>
+                        <span class="text-xl font-bold truncate">{{ $train['number'] }}</span>
                     </div>
                     <button type="button" 
                         @click.stop="modalOpen = true; selectedTrain = $el.dataset.train" 
                         data-train='@json($train)'
-                        class="inline-flex items-center justify-center h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
+                        class="inline-flex items-center justify-center h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
                         <x-heroicon-s-bars-3-bottom-right class="w-5 h-5" />
                     </button>
                 </div>
 
                 <!-- Train Info -->
-                <div class="space-y-4">
+                <div class="space-y-2 overflow-hidden">
                     <!-- Destination & Route -->
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-900">
-                            {{ $train['destination'] }}
-                        </h3>
-                        <p class="text-sm text-gray-600">
+                        <p class="text-sm text-gray-600 truncate">
                             {{ $train['route_name'] }}
                         </p>
                     </div>
 
                     <!-- Departure Time -->
                     <div>
-                        <h4 class="text-sm font-medium text-gray-600 uppercase">
+                        <h4 class="text-xs font-medium text-gray-600 uppercase">
                             Departure
                         </h4>
-                        <p class="text-2xl font-bold text-gray-900">
+                        <p class="text-lg font-bold text-gray-900">
                             {{ $train['departure'] }}
                         </p>
                     </div>
 
                     <!-- Status -->
                     <div>
-                        <h4 class="text-sm font-medium text-gray-600 uppercase">
+                        <h4 class="text-xs font-medium text-gray-600 uppercase">
                             Status
                         </h4>
-                        <p class="text-xl font-bold {{ $train['status_color'] === 'green' ? 'text-green-600' : ($train['status_color'] === 'red' ? 'text-red-600' : 'text-gray-900') }}">
+                        <p class="text-lg font-bold truncate {{ $train['status_color'] === 'green' ? 'text-green-600' : ($train['status_color'] === 'red' ? 'text-red-600' : 'text-gray-900') }}">
                             {{ $train['status'] }}
                         </p>
                     </div>

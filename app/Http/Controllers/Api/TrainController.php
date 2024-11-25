@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GtfsTrip;
+use App\Models\TrainStatus;
 use Carbon\Carbon;
 
 class TrainController extends Controller
@@ -16,6 +17,7 @@ class TrainController extends Controller
             ->join('gtfs_calendar_dates', 'gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
             ->join('gtfs_stop_times', 'gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
+            ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
             ->where('gtfs_trips.route_id', 'like', 'NLAMA%')
             ->whereDate('gtfs_calendar_dates.date', $today)
             ->where('gtfs_calendar_dates.exception_type', 1)
@@ -26,7 +28,8 @@ class TrainController extends Controller
                 'gtfs_trips.service_id',
                 'gtfs_stop_times.departure_time as departure',
                 'gtfs_routes.route_long_name',
-                'gtfs_trips.trip_headsign as destination'
+                'gtfs_trips.trip_headsign as destination',
+                'train_statuses.status'
             ])
             ->orderBy('gtfs_stop_times.departure_time')
             ->get()
@@ -37,8 +40,8 @@ class TrainController extends Controller
                     'departure' => substr($train->departure, 0, 5),
                     'route_name' => $train->route_long_name,
                     'destination' => $train->destination,
-                    'status' => 'On-time',
-                    'status_color' => 'neutral'
+                    'status' => $train->status ?? 'On-time',
+                    'status_color' => ($train->status && $train->status !== 'on-time') ? 'red' : 'neutral'
                 ];
             });
 
