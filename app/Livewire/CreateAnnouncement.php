@@ -154,6 +154,7 @@ class CreateAnnouncement extends Component
                 // Prepare the XML message
                 $xml = "<AIP>
                             <MessageID>AnnouncementTriggerRequest</MessageID>
+                            <ClientID>1234567</ClientID>
                             <MessageData>
                                 <AnnouncementData>
                                     <Item ID=\"{$selected->item_id}\" Value=\"{$selected->value}\"/>
