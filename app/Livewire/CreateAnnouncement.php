@@ -44,26 +44,7 @@ class CreateAnnouncement extends Component
     {
         try {
             Log::info('Establishing TCP connection to AviaVox server', ['server' => $server, 'port' => $port]);
-            
-            // Create SSL context
-            $context = stream_context_create([
-                'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                    'allow_self_signed' => true
-                ]
-            ]);
-            
-            // Use tls:// for secure connection
-            $socket = stream_socket_client(
-                "tcp://{$server}:{$port}", 
-                $errno, 
-                $errstr, 
-                5,
-                STREAM_CLIENT_CONNECT,
-                $context
-            );
-            
+            $socket = fsockopen($server, $port, $errno, $errstr, 5);
             if (!$socket) {
                 throw new \Exception("Failed to connect: $errstr ($errno)");
             }
@@ -122,29 +103,21 @@ class CreateAnnouncement extends Component
             }
             Log::info('Authentication successful, session is active');
 
-            // Send the announcement and wait for immediate response
-            $formattedXml = str_replace(["\n", " "], '', $xml);
-            fwrite($socket, chr(2) . $formattedXml . chr(3));
-            Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $formattedXml]);
 
-            // Read the immediate response
-            $triggerResponse = fread($socket, 1024);
-            Log::info('Received immediate response for AnnouncementTriggerRequest', ['response' => $triggerResponse]);
+            // Step 7: Send the XML announcement message
+            fwrite($socket, chr(2) . $xml . chr(3));
+            Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $xml]);
 
-            if (strpos($triggerResponse, 'ErrorResponse') !== false) {
-                throw new \Exception('Error in announcement trigger: ' . $triggerResponse);
+            // Step 8: Read the final response
+            $finalResponse = fread($socket, 1024);
+            if (stream_get_meta_data($socket)['timed_out']) {
+                Log::error('Stream timed out while waiting for AnnouncementTriggerResponse');
+                throw new \Exception('Stream timed out while waiting for response');
             }
-
-            // Close the socket after getting the immediate response
             fclose($socket);
-            Log::info('Socket closed, waiting for status updates via HTTP');
-            
-            session()->flash('message', 'Announcement sent successfully. Waiting for confirmation...');
+            Log::info('Received response for AnnouncementTriggerRequest', ['response' => $finalResponse]);
         } catch (\Exception $e) {
-            Log::error('Error during AviaVox communication', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('Error during AviaVox communication', ['error' => $e->getMessage()]);
             session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }
@@ -183,10 +156,14 @@ class CreateAnnouncement extends Component
                 $port = $settings->port;
 
                 // Prepare the XML message
-                $xml = sprintf('<AIP><MessageID>AnnouncementTriggerRequest</MessageID><ClientID>1234567</ClientID><MessageData><AnnouncementData><Item ID="%s" Value="%s"/></AnnouncementData></MessageData></AIP>', 
-                    $selected->item_id, 
-                    $selected->value
-                );
+                $xml = "<AIP>
+                            <MessageID>AnnouncementTriggerRequest</MessageID>
+                            <MessageData>
+                                <AnnouncementData>
+                                    <Item ID=\"{$selected->item_id}\" Value=\"{$selected->value}\"/>
+                                </AnnouncementData>
+                            </MessageData>
+                        </AIP>";
 
                 // Authenticate and send the message in the same session
                 $this->authenticateAndSendMessage($server, $port, $settings->username, $settings->password, $xml);

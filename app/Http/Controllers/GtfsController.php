@@ -57,8 +57,11 @@ class GtfsController extends Controller
             if ($response->successful()) {
                 // Ensure storage directories exist with proper permissions
                 $storagePath = storage_path('app/gtfs');
+                Log::info('Storage path: ' . $storagePath);
                 $zipPath = $storagePath . '/latest.zip';
+                Log::info('ZIP path: ' . $zipPath);
                 $extractPath = $storagePath . '/current';
+                Log::info('Extract path: ' . $extractPath);
                 
                 // Create directories if they don't exist
                 if (!file_exists($storagePath)) {

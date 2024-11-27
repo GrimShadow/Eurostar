@@ -1,0 +1,5 @@
+integrations:
+  forge:
+    eurostardev.pads365.com:
+      server-id: 834212
+      site-id: 2539799
