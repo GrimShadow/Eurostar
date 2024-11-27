@@ -44,7 +44,26 @@ class CreateAnnouncement extends Component
     {
         try {
             Log::info('Establishing TCP connection to AviaVox server', ['server' => $server, 'port' => $port]);
-            $socket = fsockopen($server, $port, $errno, $errstr, 5);
+            
+            // Create SSL context
+            $context = stream_context_create([
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                ]
+            ]);
+            
+            // Use tls:// for secure connection
+            $socket = stream_socket_client(
+                "tcp://{$server}:{$port}", 
+                $errno, 
+                $errstr, 
+                5,
+                STREAM_CLIENT_CONNECT,
+                $context
+            );
+            
             if (!$socket) {
                 throw new \Exception("Failed to connect: $errstr ($errno)");
             }
@@ -113,7 +132,10 @@ class CreateAnnouncement extends Component
             
             session()->flash('message', 'Announcement sent successfully. Waiting for confirmation...');
         } catch (\Exception $e) {
-            Log::error('Error during AviaVox communication', ['error' => $e->getMessage()]);
+            Log::error('Error during AviaVox communication', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }
