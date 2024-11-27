@@ -29,6 +29,8 @@ class GtfsController extends Controller
             'url' => 'required|url'
         ]);
 
+        Log::info('GTFS URL being saved: ' . $request->url);
+
         GtfsSetting::updateOrCreate(
             ['id' => 1],
             [
