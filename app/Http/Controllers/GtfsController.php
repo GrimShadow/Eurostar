@@ -268,21 +268,26 @@ class GtfsController extends Controller
         }
 
         Log::info('Starting GTFS calendar dates sync');
-
+        
         $file = fopen($calendarDatesFile, 'r');
         if (!$file) {
             throw new \Exception('Unable to open calendar_dates.txt');
         }
 
-        $headers = fgetcsv($file);
-        if (!$headers) {
-            throw new \Exception('Unable to read calendar_dates.txt headers');
-        }
-
-        DB::beginTransaction();
         try {
-            GtfsCalendarDate::truncate();
+            $headers = fgetcsv($file);
+            if (!$headers) {
+                throw new \Exception('Unable to read calendar_dates.txt headers');
+            }
+
+            DB::beginTransaction();
+            
+            // Use delete instead of truncate to avoid implicit commit
+            GtfsCalendarDate::query()->delete();
+            
             $created = 0;
+            $batch = [];
+            $batchSize = 1000;
 
             while (($data = fgetcsv($file)) !== FALSE) {
                 $calendarData = array_combine($headers, $data);
@@ -294,26 +299,37 @@ class GtfsController extends Controller
                 $day = substr($dateString, 6, 2);
                 $formattedDate = "{$year}-{$month}-{$day}";
 
-                $formattedData = [
+                $batch[] = [
                     'service_id' => $calendarData['service_id'],
                     'date' => $formattedDate,
                     'exception_type' => (int)$calendarData['exception_type'],
                     'created_at' => now(),
                     'updated_at' => now()
                 ];
-
-                GtfsCalendarDate::create($formattedData);
+                
                 $created++;
+
+                if (count($batch) >= $batchSize) {
+                    GtfsCalendarDate::insert($batch);
+                    $batch = [];
+                }
+            }
+
+            // Insert any remaining records
+            if (!empty($batch)) {
+                GtfsCalendarDate::insert($batch);
             }
 
             DB::commit();
-
+            
             Log::info('GTFS calendar dates sync completed', [
                 'created' => $created
             ]);
 
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             throw $e;
         } finally {
             fclose($file);
@@ -439,7 +455,7 @@ class GtfsController extends Controller
         DB::beginTransaction();
         try {
             // Clear all existing records first (more efficient for stop times)
-            GtfsStopTime::truncate();
+            GtfsStopTime::query()->delete();
             $created = 0;
             $batchSize = 1000;
             $batch = [];
