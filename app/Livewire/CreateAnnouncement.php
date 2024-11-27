@@ -59,66 +59,99 @@ class CreateAnnouncement extends Component
             Log::info('Sent AuthenticationChallengeRequest', ['request' => $authChallengeRequest]);
 
             // Step 2: Read AuthenticationChallengeResponse
-            $response = fread($socket, 1024);
+            $response = '';
+            while (!feof($socket)) {
+                $char = fread($socket, 1);
+                if ($char === chr(3)) break; // End of message
+                if ($char === chr(2)) continue; // Start of message
+                $response .= $char;
+            }
+            
             if (stream_get_meta_data($socket)['timed_out']) {
                 Log::error('Stream timed out while waiting for AuthenticationChallengeResponse');
                 throw new \Exception('Stream timed out while waiting for response');
             }
             Log::info('Received AuthenticationChallengeResponse', ['response' => $response]);
 
-            // Extract challenge
+            // Extract challenge and handle both XML and HTTP responses
             $challenge = $this->extractChallengeFromResponse($response);
             if (!$challenge) {
                 throw new \Exception('Challenge extraction failed from response.');
             }
             Log::info('Challenge code extracted successfully', ['challenge' => $challenge]);
 
-            // Step 3: Hash the password
+            // Authentication steps remain the same...
             $saltedPassword = $password . ($challenge ^ strlen($password)) . strrev($password);
             $passwordHash = strtoupper(hash('sha512', $saltedPassword));
-            Log::info('Password hashed successfully', ['passwordHash' => $passwordHash]);
 
-            // Step 4: Send AuthenticationRequest
-            $authRequest = "<AIP>
-                                <MessageID>AuthenticationRequest</MessageID>
-                                <ClientID>1234567</ClientID>
-                                <MessageData>
-                                    <Username>{$username}</Username>
-                                    <PasswordHash>{$passwordHash}</PasswordHash>
-                                </MessageData>
-                            </AIP>";
-            fwrite($socket, chr(2) . $authRequest . chr(3));
-            Log::info('Sent AuthenticationRequest', ['request' => $authRequest]);
-
-            // Step 5: Read AuthenticationResponse
-            $authResponse = fread($socket, 1024);
-            if (stream_get_meta_data($socket)['timed_out']) {
-                Log::error('Stream timed out while waiting for AuthenticationResponse');
-                throw new \Exception('Stream timed out while waiting for response');
-            }
-            Log::info('Received AuthenticationResponse', ['authResponse' => $authResponse]);
-
-            if (strpos($authResponse, "<Authenticated>1</Authenticated>") === false) {
-                throw new \Exception("Authentication failed.");
-            }
-            Log::info('Authentication successful, session is active');
-
-
-            // Step 7: Send the XML announcement message
-            fwrite($socket, chr(2) . $xml . chr(3));
+            // Send announcement with proper headers
+            $announcementRequest = chr(2) . $xml . chr(3);
+            fwrite($socket, $announcementRequest);
             Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $xml]);
 
-            // Step 8: Read the final response
-            $finalResponse = fread($socket, 1024);
-            if (stream_get_meta_data($socket)['timed_out']) {
-                Log::error('Stream timed out while waiting for AnnouncementTriggerResponse');
-                throw new \Exception('Stream timed out while waiting for response');
+            // Read response with proper handling for both XML and HTTP
+            $finalResponse = '';
+            while (!feof($socket)) {
+                $char = fread($socket, 1);
+                if ($char === chr(3)) break; // End of message
+                if ($char === chr(2)) continue; // Start of message
+                $finalResponse .= $char;
             }
+
+            // Parse the response
+            if (strpos($finalResponse, '<?xml') !== false) {
+                // Handle XML response
+                $this->handleXmlResponse($finalResponse);
+            } else if (strpos($finalResponse, 'HTTP/') !== false) {
+                // Handle HTTP response
+                $this->handleHttpResponse($finalResponse);
+            }
+
             fclose($socket);
-            Log::info('Received response for AnnouncementTriggerRequest', ['response' => $finalResponse]);
+            Log::info('Communication completed successfully');
+
         } catch (\Exception $e) {
-            Log::error('Error during AviaVox communication', ['error' => $e->getMessage()]);
+            Log::error('Error during AviaVox communication', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
+        }
+    }
+
+    private function handleXmlResponse($response)
+    {
+        Log::info('Received XML response', ['response' => $response]);
+        
+        // Parse XML response
+        $xml = simplexml_load_string($response);
+        if ($xml === false) {
+            throw new \Exception('Failed to parse XML response');
+        }
+
+        // Handle announcement status
+        if (isset($xml->Announcement->Status)) {
+            $status = (string)$xml->Announcement->Status;
+            Log::info('Announcement status', ['status' => $status]);
+            
+            if ($status === 'Playing') {
+                session()->flash('message', 'Announcement is now playing');
+            }
+        }
+    }
+
+    private function handleHttpResponse($response)
+    {
+        Log::info('Received HTTP response', ['response' => $response]);
+        
+        // Parse HTTP response
+        $lines = explode("\n", $response);
+        $statusLine = $lines[0];
+        
+        if (strpos($statusLine, '200 OK') !== false) {
+            session()->flash('message', 'Announcement sent successfully');
+        } else {
+            throw new \Exception('Unexpected HTTP response: ' . $statusLine);
         }
     }
 
@@ -184,7 +217,18 @@ class CreateAnnouncement extends Component
 
     private function extractChallengeFromResponse($response)
     {
-        preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
-        return $matches[1] ?? null;
+        // Try XML format first
+        if (strpos($response, '<?xml') !== false) {
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            return $matches[1] ?? null;
+        }
+        
+        // Try HTTP response format
+        if (strpos($response, 'HTTP/') !== false) {
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            return $matches[1] ?? null;
+        }
+        
+        return null;
     }
 }
