@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\GtfsController;
 use App\Http\Controllers\Api\TrainController;
 use App\Http\Controllers\AviavoxController;
 use App\Http\Controllers\Api\AviavoxApiController;
+use App\Http\Controllers\Api\HeartbeatController;
 
 Route::post('/aviavox/response', [AviavoxApiController::class, 'handleResponse']);
 
@@ -16,6 +17,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('gtfs/updates', [GtfsController::class, 'index']);
     Route::get('gtfs/updates/{gtfsUpdate}', [GtfsController::class, 'show']);
     Route::get('/trains/today', [TrainController::class, 'today']);
+    Route::post('/gtfs/heartbeat', [HeartbeatController::class, 'store']);
 });
 
 Route::post('/sanctum/token', [AuthController::class, 'token']);

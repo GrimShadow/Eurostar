@@ -14,9 +14,12 @@ use App\Models\GtfsCalendarDate;
 use App\Models\GtfsRoute;
 use App\Models\GtfsStopTime;
 use App\Models\GtfsStop;
+use App\Models\GtfsHeartbeat;
+use Illuminate\Support\Facades\Auth;
 
 class GtfsController extends Controller
 {
+
     public function viewGtfs()
     {
         $gtfsSettings = GtfsSetting::first();
@@ -616,4 +619,5 @@ class GtfsController extends Controller
         
         return $time;
     }
+
 }
