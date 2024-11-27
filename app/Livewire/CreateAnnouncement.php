@@ -122,13 +122,22 @@ class CreateAnnouncement extends Component
             }
             Log::info('Authentication successful, session is active');
 
-            // Send the announcement and don't wait for response
-            fwrite($socket, chr(2) . $xml . chr(3));
-            Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $xml]);
-            
-            // Close the socket immediately - response will come via HTTP
+            // Send the announcement and wait for immediate response
+            $formattedXml = str_replace(["\n", " "], '', $xml);
+            fwrite($socket, chr(2) . $formattedXml . chr(3));
+            Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $formattedXml]);
+
+            // Read the immediate response
+            $triggerResponse = fread($socket, 1024);
+            Log::info('Received immediate response for AnnouncementTriggerRequest', ['response' => $triggerResponse]);
+
+            if (strpos($triggerResponse, 'ErrorResponse') !== false) {
+                throw new \Exception('Error in announcement trigger: ' . $triggerResponse);
+            }
+
+            // Close the socket after getting the immediate response
             fclose($socket);
-            Log::info('Socket closed, waiting for HTTP response');
+            Log::info('Socket closed, waiting for status updates via HTTP');
             
             session()->flash('message', 'Announcement sent successfully. Waiting for confirmation...');
         } catch (\Exception $e) {
@@ -174,15 +183,10 @@ class CreateAnnouncement extends Component
                 $port = $settings->port;
 
                 // Prepare the XML message
-                $xml = "<AIP>
-                            <MessageID>AnnouncementTriggerRequest</MessageID>
-                            <ClientID>1234567</ClientID>
-                            <MessageData>
-                                <AnnouncementData>
-                                    <Item ID=\"{$selected->item_id}\" Value=\"{$selected->value}\"/>
-                                </AnnouncementData>
-                            </MessageData>
-                        </AIP>";
+                $xml = sprintf('<AIP><MessageID>AnnouncementTriggerRequest</MessageID><ClientID>1234567</ClientID><MessageData><AnnouncementData><Item ID="%s" Value="%s"/></AnnouncementData></MessageData></AIP>', 
+                    $selected->item_id, 
+                    $selected->value
+                );
 
                 // Authenticate and send the message in the same session
                 $this->authenticateAndSendMessage($server, $port, $settings->username, $settings->password, $xml);
