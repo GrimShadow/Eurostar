@@ -27,6 +27,9 @@
                 </header>
             @endisset
 
+            <!-- Status Banner -->
+            <livewire:status-banner />
+
             <!-- Page Content -->
             <main>
                 {{ $slot }}

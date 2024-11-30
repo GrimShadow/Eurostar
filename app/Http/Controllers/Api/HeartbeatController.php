@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GtfsHeartbeat;
+use App\Events\HeartbeatReceived;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -27,22 +28,21 @@ class HeartbeatController extends Controller
         ]);
 
         try {
-            GtfsHeartbeat::create([
+
+            $heartbeat = GtfsHeartbeat::create([
                 'timestamp' => $request->timestamp,
                 'status' => $request->status,
                 'status_reason' => $request->statusReason,
                 'last_update_sent_timestamp' => $request->lastUpdateSentTimestamp
             ]);
 
+            event(new HeartbeatReceived($heartbeat));
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Heartbeat received'
             ]);
         } catch (\Exception $e) {
-            Log::error('Failed to process heartbeat', [
-                'error' => $e->getMessage(),
-                'payload' => $request->all()
-            ]);
 
             return response()->json([
                 'status' => 'error',
