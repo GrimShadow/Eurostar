@@ -53,10 +53,30 @@
     </div>
 
     <div>
-        <label class="block text-sm font-medium text-gray-700">Area</label>
-        <input type="text" wire:model="area" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
+        <label class="block text-sm font-medium text-gray-700">Zone</label>
+        <select wire:model="area" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
+            <option value="">Select Zone</option>
+            @foreach($zones as $zone)
+                <option value="{{ $zone->value }}">{{ $zone->value }}</option>
+            @endforeach
+        </select>
         @error('area') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
     </div>
+
+    @if($type === 'audio')
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Select Train</label>
+            <select wire:model="selectedTrain" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
+                <option value="">Select a train</option>
+                @foreach($trains as $train)
+                    <option value="{{ $train['number'] }}">
+                        Train {{ $train['number'] }} (Departure: {{ substr($train['departure_time'], 0, 5) }})
+                    </option>
+                @endforeach
+            </select>
+            @error('selectedTrain') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        </div>
+    @endif
 
     <div class="flex justify-end space-x-2">
         <button type="button" @click="modalOpen = false" 

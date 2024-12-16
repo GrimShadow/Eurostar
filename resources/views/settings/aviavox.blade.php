@@ -142,6 +142,8 @@
                 </div>
             </div>
 
+            <livewire:zones-table />
+
             <!-- Announcements Card -->
             <div class="bg-white shadow-sm sm:rounded-xl divide-y divide-gray-200">
                 <div class="p-6">

@@ -5,8 +5,11 @@ namespace App\Livewire;
 use App\Models\Announcement;
 use App\Models\AviavoxAnnouncement;
 use App\Models\AviavoxSetting;
+use App\Models\Zone;
+use App\Models\GtfsTrip;
 use Livewire\Component;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class CreateAnnouncement extends Component
 {
@@ -18,6 +21,9 @@ class CreateAnnouncement extends Component
     public $area = '';
     public $selectedAnnouncement = '';
     public $audioAnnouncements;
+    public $zones;
+    public $selectedTrain = '';
+    public $trains = [];
 
     protected $rules = [
         'type' => 'required|in:audio,text',
@@ -27,11 +33,37 @@ class CreateAnnouncement extends Component
         'author' => 'required',
         'area' => 'required',
         'selectedAnnouncement' => 'required_if:type,audio',
+        'selectedTrain' => 'required_if:type,audio'
     ];
 
     public function mount()
     {
+        $this->loadTrains();
         $this->audioAnnouncements = AviavoxAnnouncement::all();
+        $this->zones = Zone::orderBy('value')->get();
+    }
+
+    private function loadTrains()
+    {
+        $today = Carbon::now()->format('Y-m-d');
+        $currentTime = Carbon::now()->format('H:i:s');
+
+        $this->trains = GtfsTrip::query()
+            ->join('gtfs_calendar_dates', 'gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
+            ->join('gtfs_stop_times', 'gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
+            ->where('gtfs_trips.route_id', 'like', 'NLAMA%')
+            ->whereDate('gtfs_calendar_dates.date', $today)
+            ->where('gtfs_calendar_dates.exception_type', 1)
+            ->where('gtfs_stop_times.stop_sequence', 1)
+            ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
+            ->select([
+                'gtfs_trips.trip_headsign as number',
+                'gtfs_stop_times.departure_time'
+            ])
+            ->orderBy('gtfs_stop_times.departure_time')
+            ->limit(6)
+            ->get()
+            ->toArray();
     }
 
     public function updatedType()
@@ -125,6 +157,37 @@ class CreateAnnouncement extends Component
     public function save()
     {
         $this->validate();
+
+        if ($this->type === 'audio') {
+            $settings = AviavoxSetting::first();
+            if (!$settings) {
+                session()->flash('error', 'Aviavox settings are not configured.');
+                return;
+            }
+
+            // Find the selected train's departure time
+            $selectedTrainData = collect($this->trains)->firstWhere('number', $this->selectedTrain);
+            $trainDepartureTime = $selectedTrainData['departure_time'];
+            
+            // Format the date time using today's date and train's departure time
+            $scheduledDateTime = Carbon::now()->format('Y-m-d') . 'T' . substr($trainDepartureTime, 0, 5) . ':00';
+
+            $xml = "<AIP>
+                <MessageID>AnnouncementTriggerRequest</MessageID>
+                <MessageData>
+                    <AnnouncementData>
+                        <Item ID=\"MessageName\" Value=\"CHECKIN_WELCOME_CLOSED\"/>
+                        <Item ID=\"TrainNumber\" Value=\"{$this->selectedTrain}\"/>
+                        <Item ID=\"Route\" Value=\"GBR_LON\"/>
+                        <Item ID=\"ScheduledTime\" Value=\"{$scheduledDateTime}\"/>
+                        <Item ID=\"Zones\" Value=\"{$this->area}\"/>
+                    </AnnouncementData>
+                </MessageData>
+            </AIP>";
+
+            $this->authenticateAndSendMessage($settings->ip_address, $settings->port, $settings->username, $settings->password, $xml);
+        }
+
         Log::info('Creating announcement', ['type' => $this->type, 'selectedAnnouncement' => $this->selectedAnnouncement]);
 
         $message = $this->type === 'text' ? $this->message : ($this->type === 'audio' ? $this->audioAnnouncements->find($this->selectedAnnouncement)?->name : null);
@@ -138,39 +201,6 @@ class CreateAnnouncement extends Component
             'status' => 'Pending'
         ]);
         Log::info('Announcement created in database', ['id' => $announcement->id, 'type' => $announcement->type, 'message' => $announcement->message]);
-
-        if ($this->type === 'audio' && $this->selectedAnnouncement) {
-            Log::info('Preparing to process audio announcement', ['selectedAnnouncement' => $this->selectedAnnouncement]);
-            $selected = AviavoxAnnouncement::find($this->selectedAnnouncement);
-            if ($selected) {
-                Log::info('Audio announcement details found', ['id' => $selected->id, 'name' => $selected->name, 'item_id' => $selected->item_id, 'value' => $selected->value]);
-
-                $settings = AviavoxSetting::first();
-                if (!$settings) {
-                    Log::error('Aviavox settings not found in database');
-                    session()->flash('error', 'Aviavox settings are not configured.');
-                    return;
-                }
-
-                $server = $settings->ip_address;
-                $port = $settings->port;
-
-                // Prepare the XML message
-                $xml = "<AIP>
-                            <MessageID>AnnouncementTriggerRequest</MessageID>
-                            <MessageData>
-                                <AnnouncementData>
-                                    <Item ID=\"{$selected->item_id}\" Value=\"{$selected->value}\"/>
-                                </AnnouncementData>
-                            </MessageData>
-                        </AIP>";
-
-                // Authenticate and send the message in the same session
-                $this->authenticateAndSendMessage($server, $port, $settings->username, $settings->password, $xml);
-            } else {
-                Log::error('Audio announcement not found', ['selected_id' => $this->selectedAnnouncement]);
-            }
-        }
 
         $this->reset(['type', 'message', 'scheduled_time', 'recurrence', 'author', 'area', 'selectedAnnouncement']);
         $this->dispatch('announcement-created');

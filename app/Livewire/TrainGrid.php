@@ -25,6 +25,7 @@ class TrainGrid extends Component
     private function loadTrains()
     {
         $today = Carbon::now()->format('Y-m-d');
+        $currentTime = Carbon::now()->format('H:i:s');
 
         $trains = GtfsTrip::query()
             ->join('gtfs_calendar_dates', 'gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
@@ -35,6 +36,7 @@ class TrainGrid extends Component
             ->whereDate('gtfs_calendar_dates.date', $today)
             ->where('gtfs_calendar_dates.exception_type', 1)
             ->where('gtfs_stop_times.stop_sequence', 1)
+            ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
             ->select([
                 'gtfs_trips.trip_headsign as number',
                 'gtfs_trips.trip_id',
@@ -45,6 +47,7 @@ class TrainGrid extends Component
                 'train_statuses.status'
             ])
             ->orderBy('gtfs_stop_times.departure_time')
+            ->limit(6)
             ->get();
 
         $this->trains = $trains->map(function ($train) {
