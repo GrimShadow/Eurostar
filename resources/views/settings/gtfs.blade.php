@@ -50,10 +50,26 @@
                                         class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
                                         Download Now
                                     </a>
+
+                                    <form action="{{ route('settings.gtfs.clear') }}" method="POST" class="inline">
+                                        @csrf
+                                        <button type="submit"
+                                            onclick="return confirm('Are you sure you want to clear all GTFS data? This action cannot be undone.')"
+                                            class="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                            Clear GTFS Data
+                                        </button>
+                                    </form>
                                 @endif
                             </div>
                         </div>
                     </form>
+
+                    <div class="mt-8 border-t border-gray-200 pt-8">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Route Selection</h3>
+                        <p class="text-sm text-gray-600 mb-4">Select which routes should appear in the dashboard.</p>
+
+                        <livewire:route-selector />
+                    </div>
                 </div>
             </div>
         </div>

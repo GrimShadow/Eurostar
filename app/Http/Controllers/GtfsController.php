@@ -620,4 +620,45 @@ class GtfsController extends Controller
         return $time;
     }
 
+    public function clearGtfsData()
+    {
+        try {
+            // Disable foreign key checks for MySQL
+            DB::statement('SET FOREIGN_KEY_CHECKS = 0');
+            
+            // Clear all GTFS-related tables
+            DB::table('gtfs_trips')->truncate();
+            DB::table('gtfs_calendar_dates')->truncate();
+            DB::table('gtfs_routes')->truncate();
+            DB::table('gtfs_stop_times')->truncate();
+            DB::table('gtfs_stops')->truncate();
+            DB::table('gtfs_heartbeats')->truncate();
+            
+            // Re-enable foreign key checks
+            DB::statement('SET FOREIGN_KEY_CHECKS = 1');
+            
+            // Update the last_download timestamp to null
+            if ($settings = GtfsSetting::first()) {
+                $settings->update([
+                    'last_download' => null,
+                    'next_download' => null
+                ]);
+            }
+
+            return redirect()->route('settings.gtfs')
+                ->with('success', 'All GTFS data has been cleared successfully.');
+        } catch (\Exception $e) {
+            // Re-enable foreign key checks even if there's an error
+            DB::statement('SET FOREIGN_KEY_CHECKS = 1');
+            
+            Log::error('Failed to clear GTFS data', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->route('settings.gtfs')
+                ->with('error', 'Failed to clear GTFS data: ' . $e->getMessage());
+        }
+    }
+
 }

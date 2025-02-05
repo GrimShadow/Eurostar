@@ -32,7 +32,11 @@ class TrainGrid extends Component
             ->join('gtfs_stop_times', 'gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
             ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
-            ->where('gtfs_trips.route_id', 'like', 'NLAMA%')
+            ->whereIn('gtfs_trips.route_id', function($query) {
+                $query->select('route_id')
+                    ->from('selected_routes')
+                    ->where('is_active', true);
+            })
             ->whereDate('gtfs_calendar_dates.date', $today)
             ->where('gtfs_calendar_dates.exception_type', 1)
             ->where('gtfs_stop_times.stop_sequence', 1)
