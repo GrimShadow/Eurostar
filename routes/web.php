@@ -32,6 +32,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/aviavox', [AviavoxController::class, 'updateAviavox'])->name('settings.aviavox.update');
     Route::post('/settings/aviavox/test-connection', [AviavoxController::class, 'testConnection'])->name('settings.aviavox.test');
     Route::post('/settings/aviavox/store-announcement', [AviavoxController::class, 'storeAnnouncement'])->name('settings.aviavox.storeAnnouncement');
+    Route::post('/settings/aviavox/checkin-aware-fault', [AviavoxController::class, 'sendCheckinAwareFault'])
+        ->name('settings.aviavox.checkin-aware-fault');
 
     // GTFS settings
     Route::get('/settings/gtfs', [GtfsController::class, 'viewGtfs'])->name('settings.gtfs');
@@ -64,6 +66,8 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::post('/settings/aviavox', [AviavoxController::class, 'updateAviavox'])->name('settings.aviavox.update');
     Route::post('/settings/aviavox/test-connection', [AviavoxController::class, 'testConnection'])->name('settings.aviavox.test');
     Route::post('/settings/aviavox/store-announcement', [AviavoxController::class, 'storeAnnouncement'])->name('settings.aviavox.storeAnnouncement');
+    Route::delete('/settings/aviavox/announcements/{announcement}', [AviavoxController::class, 'deleteAnnouncement'])
+        ->name('settings.aviavox.deleteAnnouncement');
 
     // GTFS settings
     Route::get('/settings/gtfs', [GtfsController::class, 'viewGtfs'])->name('settings.gtfs');

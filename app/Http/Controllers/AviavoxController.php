@@ -170,4 +170,72 @@ class AviavoxController extends Controller
         
         return response()->json(['status' => 'success']);
     }
+
+    public function deleteAnnouncement(AviavoxAnnouncement $announcement)
+    {
+        $announcement->delete();
+        
+        return redirect()->back()->with('success', 'Announcement deleted successfully');
+    }
+
+    public function sendCheckinAwareFault()
+    {
+        $settings = AviavoxSetting::first();
+
+        try {
+            $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
+            if (!$socket) {
+                throw new \Exception("Failed to connect: $errstr ($errno)");
+            }
+
+            // Authentication steps (reusing from testConnection method)
+            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            fwrite($socket, chr(2) . $challengeRequest . chr(3));
+            
+            $response = fread($socket, 1024);
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            $challenge = $matches[1] ?? null;
+            
+            if (!$challenge) {
+                throw new \Exception('Invalid challenge received.');
+            }
+
+            // Hash password
+            $password = $settings->password;
+            $passwordLength = strlen($password);
+            $salt = $passwordLength ^ $challenge;
+            $saltedPassword = $password . $salt . strrev($password);
+            $hash = strtoupper(hash('sha512', $saltedPassword));
+
+            // Send authentication request
+            $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+            fwrite($socket, chr(2) . $authRequest . chr(3));
+
+            $authResponse = fread($socket, 1024);
+
+            if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                throw new \Exception('Authentication failed.');
+            }
+
+            // Send the specific announcement message
+            $announcementMessage = "<AIP>
+                <MessageID>AnnouncementTriggerRequest</MessageID>
+                <MessageData>
+                    <AnnouncementData>
+                        <Item ID=\"MessageName\" Value=\"CHECKIN_AWARE_FAULT\"/>
+                        <Item ID=\"Zones\" Value=\"Terminal\"/>
+                    </AnnouncementData>
+                </MessageData>
+            </AIP>";
+
+            fwrite($socket, chr(2) . $announcementMessage . chr(3));
+            $finalResponse = fread($socket, 1024);
+            fclose($socket);
+
+            return redirect()->back()->with('success', 'Check-in aware fault announcement sent successfully');
+        } catch (Exception $e) {
+            Log::error('Failed to send check-in aware fault announcement: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
+        }
+    }
 }
