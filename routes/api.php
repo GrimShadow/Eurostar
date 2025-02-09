@@ -9,6 +9,7 @@ use App\Http\Controllers\AviavoxController;
 use App\Http\Controllers\Api\AviavoxApiController;
 use App\Http\Controllers\Api\HeartbeatController;
 use App\Http\Controllers\Api\AnnouncementApiController;
+use App\Http\Controllers\Api\BrokerController;
 
 Route::post('/aviavox/response', [AviavoxApiController::class, 'handleResponse']);
 
@@ -20,6 +21,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/trains/today', [TrainController::class, 'today']);
     Route::post('/gtfs/heartbeat', [HeartbeatController::class, 'store']);
     Route::get('/announcements', [AnnouncementApiController::class, 'index']);
+    Route::middleware('auth:sanctum')->prefix('broker')->group(function () {
+        Route::get('/pending-announcements', [BrokerController::class, 'getPendingAnnouncements']);
+        Route::post('/announcement/{id}/status', [BrokerController::class, 'updateAnnouncementStatus']);
+    });
 });
 
 Route::post('/sanctum/token', [AuthController::class, 'token']);

@@ -7,6 +7,7 @@ use App\Models\AviavoxAnnouncement;
 use App\Models\AviavoxSetting;
 use App\Models\Zone;
 use App\Models\GtfsTrip;
+use App\Models\PendingAnnouncement;
 use Livewire\Component;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -185,7 +186,13 @@ class CreateAnnouncement extends Component
                 </MessageData>
             </AIP>";
 
-            $this->authenticateAndSendMessage($settings->ip_address, $settings->port, $settings->username, $settings->password, $xml);
+            // Queue the announcement instead of sending directly
+            PendingAnnouncement::create([
+                'xml_content' => $xml,
+                'status' => 'pending'
+            ]);
+
+            session()->flash('success', 'Announcement queued successfully.');
         }
 
         Log::info('Creating announcement', ['type' => $this->type, 'selectedAnnouncement' => $this->selectedAnnouncement]);
