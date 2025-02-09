@@ -225,6 +225,127 @@
                     Send Check-in Aware Fault
                 </button>
             </form>
+
+            <form action="{{ route('settings.aviavox.storeMessage') }}" method="POST" class="space-y-4 mt-6">
+                @csrf
+                <div>
+                    <label for="message_name" class="block text-sm font-medium text-gray-700">Select Message Type</label>
+                    <select name="message_name" id="message_name" required 
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            x-on:change="updateParameters($event.target.value)">
+                        <option value="">Select a message...</option>
+                        @foreach($predefinedMessages as $name => $params)
+                            <option value="{{ $name }}" data-params="{{ json_encode($params) }}">{{ $name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div id="parameters-container" class="space-y-4">
+                    <!-- Dynamic parameters will be inserted here -->
+                </div>
+
+                <div>
+                    <label for="zones" class="block text-sm font-medium text-gray-700">Zones</label>
+                    <select name="zones" id="zones" required 
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="Terminal">Terminal</option>
+                        <option value="Terminal,Lounge">Terminal & Lounge</option>
+                        <option value="Lounge">Lounge Only</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Add Message
+                </button>
+            </form>
+
+            <!-- Custom XML Announcement Card -->
+            <div class="bg-white shadow-sm sm:rounded-xl divide-y divide-gray-200 mt-6">
+                <div class="p-6">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Send Custom XML Announcement</h3>
+                    
+                    <!-- Available Message Names -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Available Message Names:</label>
+                            <select id="availableMessages" name="message_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm" onchange="updateCustomXml(this.value)" required>
+                                <option value="">Select a message name...</option>
+                                @foreach($availableMessageNames as $name)
+                                    <option value="{{ $name }}">{{ $name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="description" class="block text-sm font-medium text-gray-700">Description</label>
+                            <input type="text" name="description" id="description" 
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="E.g., Check-in announcement for train 9018">
+                        </div>
+                    </div>
+
+                    <form action="{{ route('settings.aviavox.sendCustom') }}" method="POST">
+                        @csrf
+                        <div>
+                            <label for="custom_xml" class="block text-sm font-medium text-gray-700">XML Content</label>
+                            <textarea name="custom_xml" id="custom_xml" rows="10" required
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm"
+                                ><AIP>
+    <MessageID>AnnouncementTriggerRequest</MessageID>
+    <MessageData>
+        <AnnouncementData>
+            <Item ID="MessageName" Value="CHECKIN_AWARE_FAULT"/>
+            <Item ID="Zones" Value="Terminal"/>
+        </AnnouncementData>
+    </MessageData>
+</AIP></textarea>
+                        </div>
+                        <button type="submit" class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                            Send Custom Announcement
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </x-admin-layout>
+
+<!-- Add Alpine.js script for dynamic form handling -->
+<script>
+function updateParameters(messageName) {
+    const select = document.querySelector('#message_name');
+    const option = select.querySelector(`option[value="${messageName}"]`);
+    const container = document.querySelector('#parameters-container');
+    container.innerHTML = '';
+
+    if (!option) return;
+
+    const params = JSON.parse(option.dataset.params);
+    params.forEach(param => {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <label for="${param}" class="block text-sm font-medium text-gray-700">${param}</label>
+            <input type="text" name="parameters[${param}]" id="${param}" 
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                   ${param === 'ScheduledTime' ? 'placeholder="YYYY-MM-DDThh:mm:ssZ"' : ''}>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function updateCustomXml(messageName) {
+    if (!messageName) return;
+    
+    const xmlTemplate = `<AIP>
+    <MessageID>AnnouncementTriggerRequest</MessageID>
+    <MessageData>
+        <AnnouncementData>
+            <Item ID="MessageName" Value="${messageName}"/>
+            <Item ID="Zones" Value="Terminal"/>
+        </AnnouncementData>
+    </MessageData>
+</AIP>`;
+    
+    document.getElementById('custom_xml').value = xmlTemplate;
+}
+</script>

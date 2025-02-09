@@ -34,6 +34,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/settings/aviavox/store-announcement', [AviavoxController::class, 'storeAnnouncement'])->name('settings.aviavox.storeAnnouncement');
     Route::post('/settings/aviavox/checkin-aware-fault', [AviavoxController::class, 'sendCheckinAwareFault'])
         ->name('settings.aviavox.checkin-aware-fault');
+    Route::post('/settings/aviavox/messages', [AviavoxController::class, 'storeMessage'])
+        ->name('settings.aviavox.storeMessage');
+    Route::post('/settings/aviavox/send-custom', [AviavoxController::class, 'sendCustomAnnouncement'])
+        ->name('settings.aviavox.sendCustom');
 
     // GTFS settings
     Route::get('/settings/gtfs', [GtfsController::class, 'viewGtfs'])->name('settings.gtfs');

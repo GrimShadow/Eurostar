@@ -48,8 +48,13 @@
 
     <div>
         <label class="block text-sm font-medium text-gray-700">Author</label>
-        <input type="text" wire:model="author" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
-        @error('author') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        <input 
+            wire:model="author" 
+            type="text" 
+            readonly 
+            disabled
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500 bg-gray-100"
+        >
     </div>
 
     <div>

@@ -40,6 +40,7 @@
 
                             <!-- Form Content -->
                             <livewire:create-announcement />
+                            
                         </div>
                     </div>
                 </div>

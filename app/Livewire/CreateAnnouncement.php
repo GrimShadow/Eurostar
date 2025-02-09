@@ -11,6 +11,7 @@ use App\Models\PendingAnnouncement;
 use Livewire\Component;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class CreateAnnouncement extends Component
 {
@@ -31,7 +32,6 @@ class CreateAnnouncement extends Component
         'message' => 'required_if:type,text',
         'scheduled_time' => 'required',
         'recurrence' => 'nullable',
-        'author' => 'required',
         'area' => 'required',
         'selectedAnnouncement' => 'required_if:type,audio',
         'selectedTrain' => 'required_if:type,audio'
@@ -42,6 +42,7 @@ class CreateAnnouncement extends Component
         $this->loadTrains();
         $this->audioAnnouncements = AviavoxAnnouncement::all();
         $this->zones = Zone::orderBy('value')->get();
+        $this->author = Auth::user()->name;
     }
 
     private function loadTrains()
@@ -166,52 +167,88 @@ class CreateAnnouncement extends Component
                 return;
             }
 
-            // Find the selected train's departure time
-            $selectedTrainData = collect($this->trains)->firstWhere('number', $this->selectedTrain);
-            $trainDepartureTime = $selectedTrainData['departure_time'];
-            
-            // Format the date time using today's date and train's departure time
-            $scheduledDateTime = Carbon::now()->format('Y-m-d') . 'T' . substr($trainDepartureTime, 0, 5) . ':00';
+            try {
+                $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
+                if (!$socket) {
+                    throw new \Exception("Failed to connect: $errstr ($errno)");
+                }
 
-            $xml = "<AIP>
-                <MessageID>AnnouncementTriggerRequest</MessageID>
-                <MessageData>
-                    <AnnouncementData>
-                        <Item ID=\"MessageName\" Value=\"CHECKIN_WELCOME_CLOSED\"/>
-                        <Item ID=\"TrainNumber\" Value=\"{$this->selectedTrain}\"/>
-                        <Item ID=\"Route\" Value=\"GBR_LON\"/>
-                        <Item ID=\"ScheduledTime\" Value=\"{$scheduledDateTime}\"/>
-                        <Item ID=\"Zones\" Value=\"{$this->area}\"/>
-                    </AnnouncementData>
-                </MessageData>
-            </AIP>";
+                // Set stream timeout
+                stream_set_timeout($socket, 20);
 
-            // Queue the announcement instead of sending directly
-            PendingAnnouncement::create([
-                'xml_content' => $xml,
-                'status' => 'pending'
-            ]);
+                // Authentication steps
+                $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+                fwrite($socket, chr(2) . $challengeRequest . chr(3));
+                
+                $response = fread($socket, 1024);
+                preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+                $challenge = $matches[1] ?? null;
+                
+                if (!$challenge) {
+                    throw new \Exception('Invalid challenge received.');
+                }
 
-            session()->flash('success', 'Announcement queued successfully.');
+                // Hash password
+                $saltedPassword = $settings->password . ($challenge ^ strlen($settings->password)) . strrev($settings->password);
+                $hash = strtoupper(hash('sha512', $saltedPassword));
+
+                // Send authentication request
+                $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+                fwrite($socket, chr(2) . $authRequest . chr(3));
+
+                $authResponse = fread($socket, 1024);
+                if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                    throw new \Exception('Authentication failed.');
+                }
+
+                // Get the announcement message name
+                $announcement = AviavoxAnnouncement::find($this->selectedAnnouncement);
+                
+                // Create and send the announcement XML
+                $xml = "<AIP>
+                    <MessageID>AnnouncementTriggerRequest</MessageID>
+                    <MessageData>
+                        <AnnouncementData>
+                            <Item ID=\"MessageName\" Value=\"{$announcement->name}\"/>
+                            <Item ID=\"Zones\" Value=\"{$this->area}\"/>
+                        </AnnouncementData>
+                    </MessageData>
+                </AIP>";
+
+                // Send the announcement
+                fwrite($socket, chr(2) . $xml . chr(3));
+                $finalResponse = fread($socket, 1024);
+                fclose($socket);
+
+                // Create the announcement record
+                $announcementRecord = Announcement::create([
+                    'type' => $this->type,
+                    'message' => AviavoxAnnouncement::find($this->selectedAnnouncement)->name,
+                    'area' => $this->area,
+                    'user_id' => Auth::id(),
+                    'author' => Auth::user()->name,
+                    'status' => 'sent'
+                ]);
+
+                Log::info('Announcement created in database', [
+                    'id' => $announcementRecord->id,
+                    'type' => $announcementRecord->type,
+                    'message' => $announcementRecord->message
+                ]);
+
+                $this->dispatch('close-modal');
+                $this->dispatch('announcement-created');
+                session()->flash('success', 'Announcement sent and stored successfully.');
+                
+                return redirect()->route('announcements.index');
+            } catch (\Exception $e) {
+                Log::error('Failed to process announcement: ' . $e->getMessage());
+                session()->flash('error', 'Failed to process announcement: ' . $e->getMessage());
+                return;
+            }
         }
 
-        Log::info('Creating announcement', ['type' => $this->type, 'selectedAnnouncement' => $this->selectedAnnouncement]);
-
-        $message = $this->type === 'text' ? $this->message : ($this->type === 'audio' ? $this->audioAnnouncements->find($this->selectedAnnouncement)?->name : null);
-        $announcement = Announcement::create([
-            'type' => $this->type,
-            'message' => $message,
-            'scheduled_time' => $this->scheduled_time,
-            'recurrence' => $this->recurrence,
-            'author' => $this->author,
-            'area' => $this->area,
-            'status' => 'Pending'
-        ]);
-        Log::info('Announcement created in database', ['id' => $announcement->id, 'type' => $announcement->type, 'message' => $announcement->message]);
-
-        $this->reset(['type', 'message', 'scheduled_time', 'recurrence', 'author', 'area', 'selectedAnnouncement']);
-        $this->dispatch('announcement-created');
-        $this->dispatch('close-modal');
+        // Handle other announcement types if needed
     }
 
     public function render()

@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Response;
 
 class AviavoxController extends Controller
@@ -16,7 +17,25 @@ class AviavoxController extends Controller
     {
         $aviavoxSettings = AviavoxSetting::first();
         $announcements = AviavoxAnnouncement::all();
-        return view('settings.aviavox', compact('aviavoxSettings', 'announcements'));
+        
+        // Load predefined messages from the text file
+        $messagesFile = storage_path('app/aviavox/Eurostar - AviaVox AIP Message Triggers.txt');
+        $predefinedMessages = [];
+        $availableMessageNames = [];
+        
+        if (File::exists($messagesFile)) {
+            $content = File::get($messagesFile);
+            preg_match_all('/<Item ID="MessageName" Value="([^"]+)"/', $content, $matches);
+            $availableMessageNames = array_unique($matches[1]);
+            
+            foreach ($availableMessageNames as $name) {
+                preg_match_all('/<Item ID="([^"]+)" Value="[^"]+"\/>/', $content, $paramMatches);
+                $parameters = array_diff($paramMatches[1], ['MessageName', 'Zones']);
+                $predefinedMessages[$name] = array_values(array_unique($parameters));
+            }
+        }
+        
+        return view('settings.aviavox', compact('aviavoxSettings', 'announcements', 'predefinedMessages', 'availableMessageNames'));
     }
 
     public function updateAviavox(Request $request)
@@ -235,6 +254,168 @@ class AviavoxController extends Controller
             return redirect()->back()->with('success', 'Check-in aware fault announcement sent successfully');
         } catch (Exception $e) {
             Log::error('Failed to send check-in aware fault announcement: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
+        }
+    }
+
+    public function storeMessage(Request $request)
+    {
+        $request->validate([
+            'message_name' => 'required|string',
+            'parameters' => 'nullable|array',
+            'zones' => 'required|string',
+            'description' => 'nullable|string'
+        ]);
+
+        $settings = AviavoxSetting::first();
+        if (!$settings) {
+            return redirect()->back()->with('error', 'Aviavox settings are not configured.');
+        }
+
+        try {
+            $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
+            if (!$socket) {
+                throw new \Exception("Failed to connect: $errstr ($errno)");
+            }
+
+            // Authentication steps
+            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            fwrite($socket, chr(2) . $challengeRequest . chr(3));
+            
+            $response = fread($socket, 1024);
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            $challenge = $matches[1] ?? null;
+            
+            if (!$challenge) {
+                throw new \Exception('Invalid challenge received.');
+            }
+
+            // Hash password
+            $saltedPassword = $settings->password . ($challenge ^ strlen($settings->password)) . strrev($settings->password);
+            $hash = strtoupper(hash('sha512', $saltedPassword));
+
+            // Send authentication request
+            $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+            fwrite($socket, chr(2) . $authRequest . chr(3));
+
+            $authResponse = fread($socket, 1024);
+            if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                throw new \Exception('Authentication failed.');
+            }
+
+            // Create and send announcement XML
+            $xml = "<AIP>\n";
+            $xml .= "\t<MessageID>AnnouncementTriggerRequest</MessageID>\n";
+            $xml .= "\t<MessageData>\n";
+            $xml .= "\t\t<AnnouncementData>\n";
+            $xml .= "\t\t\t<Item ID=\"MessageName\" Value=\"{$request->message_name}\"/>\n";
+            
+            if ($request->parameters) {
+                foreach ($request->parameters as $key => $value) {
+                    if (!empty($value)) {
+                        $xml .= "\t\t\t<Item ID=\"{$key}\" Value=\"{$value}\"/>\n";
+                    }
+                }
+            }
+            
+            $xml .= "\t\t\t<Item ID=\"Zones\" Value=\"{$request->zones}\"/>\n";
+            $xml .= "\t\t</AnnouncementData>\n";
+            $xml .= "\t</MessageData>\n";
+            $xml .= "</AIP>";
+
+            // Send the announcement
+            fwrite($socket, chr(2) . $xml . chr(3));
+            $finalResponse = fread($socket, 1024);
+            fclose($socket);
+
+            // Store the announcement
+            AviavoxAnnouncement::create([
+                'name' => $request->message_name,
+                'description' => $request->description,
+                'xml_content' => $xml,
+                'type' => 'audio',
+                'user_id' => auth()->id(),
+                'item_id' => 'MessageName',
+                'value' => $request->message_name
+            ]);
+
+            return redirect()->back()->with('success', 'Announcement sent and stored successfully');
+        } catch (Exception $e) {
+            Log::error('Failed to send announcement: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
+        }
+    }
+
+    public function sendCustomAnnouncement(Request $request)
+    {
+        $request->validate([
+            'custom_xml' => 'required|string'
+        ]);
+
+        $settings = AviavoxSetting::first();
+
+        try {
+            // Log the incoming XML for debugging
+            Log::info('Attempting to send custom XML', ['xml' => $request->custom_xml]);
+            
+            $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
+            if (!$socket) {
+                throw new \Exception("Failed to connect: $errstr ($errno)");
+            }
+
+            // Set stream timeout
+            stream_set_timeout($socket, 20);
+
+            // Authentication steps
+            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            fwrite($socket, chr(2) . $challengeRequest . chr(3));
+            Log::info('Sent challenge request');
+            
+            $response = fread($socket, 1024);
+            if (stream_get_meta_data($socket)['timed_out']) {
+                throw new \Exception('Stream timed out while waiting for challenge response');
+            }
+            Log::info('Received challenge response', ['response' => $response]);
+
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            $challenge = $matches[1] ?? null;
+            
+            if (!$challenge) {
+                throw new \Exception('Invalid challenge received.');
+            }
+
+            // Hash password
+            $saltedPassword = $settings->password . ($challenge ^ strlen($settings->password)) . strrev($settings->password);
+            $hash = strtoupper(hash('sha512', $saltedPassword));
+
+            // Send authentication request
+            $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+            fwrite($socket, chr(2) . $authRequest . chr(3));
+            Log::info('Sent auth request');
+
+            $authResponse = fread($socket, 1024);
+            Log::info('Received auth response', ['response' => $authResponse]);
+            
+            if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                throw new \Exception('Authentication failed.');
+            }
+
+            // Clean up the XML - remove any extra whitespace and ensure proper formatting
+            $cleanXml = preg_replace('/>\s+</', '><', trim($request->custom_xml));
+            Log::info('Sending cleaned XML', ['xml' => $cleanXml]);
+
+            // Send the custom announcement with STX/ETX characters
+            fwrite($socket, chr(2) . $cleanXml . chr(3));
+            
+            // Wait for response
+            $finalResponse = fread($socket, 1024);
+            Log::info('Received final response', ['response' => $finalResponse]);
+            
+            fclose($socket);
+
+            return redirect()->back()->with('success', 'Custom announcement sent successfully');
+        } catch (Exception $e) {
+            Log::error('Failed to send custom announcement: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }
