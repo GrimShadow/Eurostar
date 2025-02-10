@@ -100,13 +100,15 @@
                                 class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
                                 Cancel
                             </button>
-                            <button x-on:click="
-        let trainData = JSON.parse(selectedTrain);
-        $wire.updateTrainStatus(trainData.number, status, status === 'delayed' ? newTime : null).then(() => {
-            modalOpen = false;
-            $wire.$refresh();
-        });
-    " type="button" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700">
+                            <button 
+                                wire:click="updateTrainStatus(
+                                    JSON.parse(selectedTrain).number,
+                                    status,
+                                    status === 'delayed' ? newTime : null
+                                )"
+                                @click="modalOpen = false"
+                                type="button" 
+                                class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700">
                                 Update Status
                             </button>
                         </div>
