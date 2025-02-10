@@ -7,6 +7,7 @@ use App\Models\GtfsTrip;
 use App\Models\GtfsCalendarDate;
 use App\Models\GtfsStopTime;
 use App\Models\TrainStatus;
+use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -16,10 +17,12 @@ class TrainGrid extends Component
     public $selectedTrain = null;
     public $newDepartureTime = '';
     public $status = 'on-time';
+    public $statuses = [];
 
     public function mount()
     {
         $this->loadTrains();
+        $this->statuses = Status::orderBy('status')->get();
     }
 
     private function loadTrains()

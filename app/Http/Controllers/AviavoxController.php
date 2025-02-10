@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Response;
+use App\Models\AviavoxTemplate;
 
 class AviavoxController extends Controller
 {
@@ -17,6 +18,7 @@ class AviavoxController extends Controller
     {
         $aviavoxSettings = AviavoxSetting::first();
         $announcements = AviavoxAnnouncement::all();
+        $templates = AviavoxTemplate::orderBy('created_at', 'desc')->get();
         
         // Load predefined messages from the text file
         $messagesFile = storage_path('app/aviavox/Eurostar - AviaVox AIP Message Triggers.txt');
@@ -35,7 +37,7 @@ class AviavoxController extends Controller
             }
         }
         
-        return view('settings.aviavox', compact('aviavoxSettings', 'announcements', 'predefinedMessages', 'availableMessageNames'));
+        return view('settings.aviavox', compact('aviavoxSettings', 'announcements', 'predefinedMessages', 'availableMessageNames', 'templates'));
     }
 
     public function updateAviavox(Request $request)
@@ -260,64 +262,47 @@ class AviavoxController extends Controller
 
     public function storeMessage(Request $request)
     {
-        $request->validate([
-            'message_name' => 'required|string',
-            'parameters' => 'nullable|array',
-            'zones' => 'required|string',
-            'description' => 'nullable|string'
-        ]);
-
-        $settings = AviavoxSetting::first();
-        if (!$settings) {
-            return redirect()->back()->with('error', 'Aviavox settings are not configured.');
-        }
-
         try {
-            $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
+            $request->validate([
+                'message_name' => 'required|string',
+                'zones' => 'required|string',
+                'parameters' => 'array|nullable'
+            ]);
+
+            // Get Aviavox settings
+            $settings = AviavoxSetting::first();
+            if (!$settings) {
+                throw new Exception('Aviavox settings not configured');
+            }
+
+            // Connect to Aviavox server
+            $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 30);
             if (!$socket) {
-                throw new \Exception("Failed to connect: $errstr ($errno)");
+                throw new Exception("Failed to connect: $errstr ($errno)");
             }
 
-            // Authentication steps
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            fwrite($socket, chr(2) . $challengeRequest . chr(3));
-            
-            $response = fread($socket, 1024);
-            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
-            $challenge = $matches[1] ?? null;
-            
-            if (!$challenge) {
-                throw new \Exception('Invalid challenge received.');
-            }
-
-            // Hash password
-            $saltedPassword = $settings->password . ($challenge ^ strlen($settings->password)) . strrev($settings->password);
-            $hash = strtoupper(hash('sha512', $saltedPassword));
-
-            // Send authentication request
-            $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            fwrite($socket, chr(2) . $authRequest . chr(3));
-
-            $authResponse = fread($socket, 1024);
-            if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
-                throw new \Exception('Authentication failed.');
-            }
-
-            // Create and send announcement XML
-            $xml = "<AIP>\n";
+            // Build the XML message
+            $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            $xml .= "<AIP>\n";
             $xml .= "\t<MessageID>AnnouncementTriggerRequest</MessageID>\n";
             $xml .= "\t<MessageData>\n";
             $xml .= "\t\t<AnnouncementData>\n";
             $xml .= "\t\t\t<Item ID=\"MessageName\" Value=\"{$request->message_name}\"/>\n";
-            
+
+            // Add any parameters if they exist
             if ($request->parameters) {
                 foreach ($request->parameters as $key => $value) {
                     if (!empty($value)) {
+                        // Format datetime parameters
+                        if (in_array($key, ['ScheduledTime', 'PublicTime']) && $value) {
+                            $datetime = new \DateTime($value);
+                            $value = $datetime->format('Y-m-d\TH:i:s\Z');
+                        }
                         $xml .= "\t\t\t<Item ID=\"{$key}\" Value=\"{$value}\"/>\n";
                     }
                 }
             }
-            
+
             $xml .= "\t\t\t<Item ID=\"Zones\" Value=\"{$request->zones}\"/>\n";
             $xml .= "\t\t</AnnouncementData>\n";
             $xml .= "\t</MessageData>\n";
@@ -325,13 +310,12 @@ class AviavoxController extends Controller
 
             // Send the announcement
             fwrite($socket, chr(2) . $xml . chr(3));
-            $finalResponse = fread($socket, 1024);
+            $response = fread($socket, 1024);
             fclose($socket);
 
-            // Store the announcement
+            // Store the announcement in the database
             AviavoxAnnouncement::create([
                 'name' => $request->message_name,
-                'description' => $request->description,
                 'xml_content' => $xml,
                 'type' => 'audio',
                 'user_id' => auth()->id(),
@@ -418,5 +402,37 @@ class AviavoxController extends Controller
             Log::error('Failed to send custom announcement: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
         }
+    }
+
+    public function storeTemplate(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|unique:aviavox_templates,name',
+            'xml_template' => 'required|string',
+            'variables' => 'required|array'
+        ]);
+
+        try {
+            // Parse XML to validate format
+            $xml = simplexml_load_string($request->xml_template);
+            
+            AviavoxTemplate::create([
+                'name' => $request->name,
+                'xml_template' => $request->xml_template,
+                'variables' => $request->variables
+            ]);
+
+            return redirect()->back()->with('success', 'Announcement template added successfully');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Invalid XML format: ' . $e->getMessage());
+        }
+    }
+
+    public function deleteTemplate(AviavoxTemplate $template)
+    {
+        $template->delete();
+        return redirect()->back()->with('success', 'Template deleted successfully');
     }
 }

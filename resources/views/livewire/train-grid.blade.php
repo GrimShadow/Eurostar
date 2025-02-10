@@ -85,9 +85,9 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
                             <select x-model="status" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="on-time">On Time</option>
-                                <option value="delayed">Delayed</option>
-                                <option value="cancelled">Cancelled</option>
+                                @foreach($statuses as $status)
+                                    <option value="{{ $status->status }}">{{ ucfirst($status->status) }}</option>
+                                @endforeach
                             </select>
                         </div>
 

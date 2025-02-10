@@ -12,9 +12,10 @@ class Announcement extends Model
     protected $fillable = [
         'type',
         'message',
-        'area',
-        'user_id',
+        'scheduled_time',
+        'recurrence',
         'author',
+        'area',
         'status'
     ];
 }

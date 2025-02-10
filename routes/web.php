@@ -36,8 +36,9 @@ Route::middleware(['auth'])->group(function () {
         ->name('settings.aviavox.checkin-aware-fault');
     Route::post('/settings/aviavox/messages', [AviavoxController::class, 'storeMessage'])
         ->name('settings.aviavox.storeMessage');
-    Route::post('/settings/aviavox/send-custom', [AviavoxController::class, 'sendCustomAnnouncement'])
-        ->name('settings.aviavox.sendCustom');
+    Route::post('/settings/aviavox/custom', [AviavoxController::class, 'sendCustomAnnouncement'])
+        ->name('settings.aviavox.custom');
+    Route::post('/settings/aviavox/template', [AviavoxController::class, 'storeTemplate'])->name('settings.aviavox.storeTemplate');
 
     // GTFS settings
     Route::get('/settings/gtfs', [GtfsController::class, 'viewGtfs'])->name('settings.gtfs');
@@ -89,5 +90,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/settings/logs', [LogsController::class, 'viewLogs'])->name('settings.logs');
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
 });
+
+Route::delete('/settings/aviavox/template/{template}', [AviavoxController::class, 'deleteTemplate'])->name('settings.aviavox.deleteTemplate');
 
 require __DIR__.'/auth.php';

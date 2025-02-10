@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\Announcement;
 use App\Models\AviavoxAnnouncement;
 use App\Models\AviavoxSetting;
+use App\Models\AviavoxTemplate;
 use App\Models\Zone;
 use App\Models\GtfsTrip;
 use App\Models\PendingAnnouncement;
@@ -15,34 +16,27 @@ use Illuminate\Support\Facades\Auth;
 
 class CreateAnnouncement extends Component
 {
-    public $type = '';
-    public $message = '';
-    public $scheduled_time = '';
-    public $recurrence = '';
-    public $author = '';
-    public $area = '';
+    public $type = 'audio';
     public $selectedAnnouncement = '';
-    public $audioAnnouncements;
+    public $variables = [];
     public $zones;
-    public $selectedTrain = '';
     public $trains = [];
-
-    protected $rules = [
-        'type' => 'required|in:audio,text',
-        'message' => 'required_if:type,text',
-        'scheduled_time' => 'required',
-        'recurrence' => 'nullable',
-        'area' => 'required',
-        'selectedAnnouncement' => 'required_if:type,audio',
-        'selectedTrain' => 'required_if:type,audio'
-    ];
+    public $selectedZone = '';
+    public $selectedTrain = '';
+    public $scheduledTime = '';
+    public $selectedRoute = '';
+    public $templates = [];
 
     public function mount()
     {
-        $this->loadTrains();
-        $this->audioAnnouncements = AviavoxAnnouncement::all();
         $this->zones = Zone::orderBy('value')->get();
-        $this->author = Auth::user()->name;
+        $this->loadTrains();
+        $this->templates = AviavoxTemplate::all()->mapWithKeys(function ($template) {
+            return [$template->name => [
+                'variables' => $template->variables,
+                'xml_template' => $template->xml_template
+            ]];
+        })->toArray();
     }
 
     private function loadTrains()
@@ -50,28 +44,86 @@ class CreateAnnouncement extends Component
         $today = Carbon::now()->format('Y-m-d');
         $currentTime = Carbon::now()->format('H:i:s');
 
-        $this->trains = GtfsTrip::query()
+        $trains = GtfsTrip::query()
             ->join('gtfs_calendar_dates', 'gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
             ->join('gtfs_stop_times', 'gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
-            ->where('gtfs_trips.route_id', 'like', 'NLAMA%')
+            ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
+            ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
+            ->whereIn('gtfs_trips.route_id', function($query) {
+                $query->select('route_id')
+                    ->from('selected_routes')
+                    ->where('is_active', true);
+            })
             ->whereDate('gtfs_calendar_dates.date', $today)
             ->where('gtfs_calendar_dates.exception_type', 1)
             ->where('gtfs_stop_times.stop_sequence', 1)
             ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
             ->select([
                 'gtfs_trips.trip_headsign as number',
-                'gtfs_stop_times.departure_time'
+                'gtfs_trips.trip_id',
+                'gtfs_stop_times.departure_time as departure',
+                'gtfs_routes.route_long_name',
+                'gtfs_trips.trip_headsign as destination'
             ])
             ->orderBy('gtfs_stop_times.departure_time')
             ->limit(6)
             ->get()
+            ->map(function ($train) {
+                return [
+                    'number' => $train->number,
+                    'departure' => substr($train->departure, 0, 5),
+                    'route_name' => $train->route_long_name,
+                    'destination' => $train->destination
+                ];
+            })
             ->toArray();
+
+        $this->trains = $trains;
     }
 
-    public function updatedType()
+    public function updatedSelectedAnnouncement($value)
     {
-        $this->selectedAnnouncement = '';
-        $this->message = '';
+        if (isset($this->templates[$value])) {
+            $this->variables = $this->templates[$value]['variables'];
+        }
+    }
+
+    public function generateXml()
+    {
+        $template = $this->templates[$this->selectedAnnouncement];
+        $xml = "<AIP>\n";
+        $xml .= "\t<MessageID>AnnouncementTriggerRequest</MessageID>\n";
+        $xml .= "\t<MessageData>\n";
+        $xml .= "\t\t<AnnouncementData>\n";
+        $xml .= "\t\t\t<Item ID=\"MessageName\" Value=\"{$this->selectedAnnouncement}\"/>\n";
+
+        foreach ($template['variables'] as $id => $type) {
+            $value = $this->getVariableValue($id, $type);
+            $xml .= "\t\t\t<Item ID=\"{$id}\" Value=\"{$value}\"/>\n";
+        }
+
+        $xml .= "\t\t</AnnouncementData>\n";
+        $xml .= "\t</MessageData>\n";
+        $xml .= "</AIP>";
+
+        return $xml;
+    }
+
+    private function getVariableValue($id, $type)
+    {
+        switch ($type) {
+            case 'zone':
+                return $this->selectedZone;
+            case 'train':
+                $train = GtfsTrip::where('trip_headsign', $this->selectedTrain)->first();
+                return $train ? $train->trip_headsign : '';
+            case 'datetime':
+                return $this->scheduledTime ? date('Y-m-d\TH:i:s\Z', strtotime($this->scheduledTime)) : '';
+            case 'route':
+                return $this->selectedRoute ?? 'GBR_LON'; // Default to London
+            default:
+                return '';
+        }
     }
 
     public function authenticateAndSendMessage($server, $port, $username, $password, $xml)
@@ -157,98 +209,44 @@ class CreateAnnouncement extends Component
     }
 
     public function save()
-    {
-        $this->validate();
+{
+    $settings = AviavoxSetting::first();
+    if (!$settings) {
+        session()->flash('error', 'Aviavox settings not configured');
+        return;
+    }
 
-        if ($this->type === 'audio') {
-            $settings = AviavoxSetting::first();
-            if (!$settings) {
-                session()->flash('error', 'Aviavox settings are not configured.');
-                return;
-            }
+    try {
+        // Generate XML from template
+        $xml = $this->generateXml();
+        
+        // Send the announcement via TCP
+        $this->authenticateAndSendMessage(
+            $settings->ip_address,
+            $settings->port,
+            $settings->username,
+            $settings->password,
+            $xml
+        );
 
-            try {
-                $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
-                if (!$socket) {
-                    throw new \Exception("Failed to connect: $errstr ($errno)");
-                }
+        // Create announcement record with all required fields
+        Announcement::create([
+            'type' => 'audio',
+            'message' => $this->selectedAnnouncement,
+            'scheduled_time' => $this->scheduledTime ? Carbon::parse($this->scheduledTime)->format('H:i:s') : Carbon::now()->format('H:i:s'),
+            'author' => Auth::user()->name,
+            'area' => $this->selectedZone ?? 'Terminal',
+            'status' => 'Finished',
+            'recurrence' => null, // No recurrence for immediate announcements
+        ]);
 
-                // Set stream timeout
-                stream_set_timeout($socket, 20);
+        session()->flash('success', 'Announcement sent successfully');
+        $this->reset(['selectedAnnouncement', 'selectedZone', 'selectedTrain', 'scheduledTime', 'selectedRoute']);
 
-                // Authentication steps
-                $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-                fwrite($socket, chr(2) . $challengeRequest . chr(3));
-                
-                $response = fread($socket, 1024);
-                preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
-                $challenge = $matches[1] ?? null;
-                
-                if (!$challenge) {
-                    throw new \Exception('Invalid challenge received.');
-                }
-
-                // Hash password
-                $saltedPassword = $settings->password . ($challenge ^ strlen($settings->password)) . strrev($settings->password);
-                $hash = strtoupper(hash('sha512', $saltedPassword));
-
-                // Send authentication request
-                $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-                fwrite($socket, chr(2) . $authRequest . chr(3));
-
-                $authResponse = fread($socket, 1024);
-                if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
-                    throw new \Exception('Authentication failed.');
-                }
-
-                // Get the announcement message name
-                $announcement = AviavoxAnnouncement::find($this->selectedAnnouncement);
-                
-                // Create and send the announcement XML
-                $xml = "<AIP>
-                    <MessageID>AnnouncementTriggerRequest</MessageID>
-                    <MessageData>
-                        <AnnouncementData>
-                            <Item ID=\"MessageName\" Value=\"{$announcement->name}\"/>
-                            <Item ID=\"Zones\" Value=\"{$this->area}\"/>
-                        </AnnouncementData>
-                    </MessageData>
-                </AIP>";
-
-                // Send the announcement
-                fwrite($socket, chr(2) . $xml . chr(3));
-                $finalResponse = fread($socket, 1024);
-                fclose($socket);
-
-                // Create the announcement record
-                $announcementRecord = Announcement::create([
-                    'type' => $this->type,
-                    'message' => AviavoxAnnouncement::find($this->selectedAnnouncement)->name,
-                    'area' => $this->area,
-                    'user_id' => Auth::id(),
-                    'author' => Auth::user()->name,
-                    'status' => 'sent'
-                ]);
-
-                Log::info('Announcement created in database', [
-                    'id' => $announcementRecord->id,
-                    'type' => $announcementRecord->type,
-                    'message' => $announcementRecord->message
-                ]);
-
-                $this->dispatch('close-modal');
-                $this->dispatch('announcement-created');
-                session()->flash('success', 'Announcement sent and stored successfully.');
-                
-                return redirect()->route('announcements.index');
-            } catch (\Exception $e) {
-                Log::error('Failed to process announcement: ' . $e->getMessage());
-                session()->flash('error', 'Failed to process announcement: ' . $e->getMessage());
-                return;
-            }
+    } catch (\Exception $e) {
+        Log::error('Failed to send announcement: ' . $e->getMessage());
+            session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
         }
-
-        // Handle other announcement types if needed
     }
 
     public function render()

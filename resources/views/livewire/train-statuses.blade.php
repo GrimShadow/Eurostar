@@ -59,7 +59,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 <button wire:click="deleteStatus({{ $status->id }})" 
-                                    wire:confirm="Are you sure you want to delete this status?"
+                                    onclick="return confirm('Are you sure you want to delete this status?')"
                                     class="text-red-600 hover:text-red-900">
                                     Delete
                                 </button>

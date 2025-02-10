@@ -70,6 +70,25 @@
 
                         <livewire:route-selector />
                     </div>
+
+                    <div class="mt-8 border-t border-gray-200 pt-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900">Train Table Data</h3>
+                                <p class="text-sm text-gray-600">Select which train data should appear in the dashboard table.</p>
+                            </div>
+                            <button 
+                                type="button"
+                                x-data=""
+                                x-on:click="$dispatch('open-modal', 'train-table-selector')"
+                                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500"
+                            >
+                                Configure Table Data
+                            </button>
+                        </div>
+                        
+                        <livewire:train-table-selector />
+                    </div>
                 </div>
             </div>
         </div>
