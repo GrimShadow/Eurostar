@@ -11,6 +11,7 @@
         "devdojo/auth": "^1.0",
         "doctrine/dbal": "^4.2",
         "laravel/framework": "^11.9",
+        "laravel/pulse": "^1.4",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.9",
         "socialiteproviders/microsoft": "^4.6"

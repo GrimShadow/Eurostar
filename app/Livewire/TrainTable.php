@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\GtfsTrip;
 use App\Models\Setting;
+use App\Models\SelectedRoute;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Carbon\Carbon;
@@ -39,6 +40,43 @@ class TrainTable extends Component
             ])
             ->orderBy('gtfs_stop_times.departure_time')
             ->paginate(8);
+    }
+
+    public function loadTrains()
+    {
+        $today = Carbon::now()->format('Y-m-d');
+        $currentTime = Carbon::now()->format('H:i:s');
+
+        // Cache the selected routes to avoid subquery
+        $selectedRouteIds = SelectedRoute::where('is_active', true)
+            ->pluck('route_id')
+            ->toArray();
+
+        $this->trains = GtfsTrip::query()
+            ->select([
+                'gtfs_trips.trip_short_name as number',
+                'gtfs_stop_times.departure_time as departure',
+                'gtfs_routes.route_long_name',
+                'gtfs_routes.route_short_name',
+                'train_statuses.status'
+            ])
+            ->join('gtfs_stop_times', function ($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
+                    ->where('gtfs_stop_times.stop_sequence', 1);
+            })
+            ->join('gtfs_calendar_dates', function ($join) use ($today) {
+                $join->on('gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
+                    ->whereDate('gtfs_calendar_dates.date', $today)
+                    ->where('gtfs_calendar_dates.exception_type', 1);
+            })
+            ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
+            ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
+            ->whereIn('gtfs_trips.route_id', $selectedRouteIds)
+            ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
+            ->orderBy('gtfs_stop_times.departure_time')
+            ->limit(8)
+            ->get()
+            ->toArray();
     }
 
     public function render()
