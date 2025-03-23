@@ -79,7 +79,7 @@
                                 When {{ str_replace('_', ' ', $rule->condition_type) }} {{ $rule->operator }} {{ $rule->value }} minutes
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {{ str_replace('_', ' ', $rule->action) }} to {{ $rule->action_value }}
+                                {{ str_replace('_', ' ', $rule->action) }} to {{ $rule->status->status }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <button wire:click="toggleRule({{ $rule->id }})" 

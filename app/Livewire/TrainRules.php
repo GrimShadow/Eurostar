@@ -19,14 +19,17 @@ class TrainRules extends Component
     public $isActive = true;
     public $statuses;
 
-    protected $rules = [
-        'conditionType' => 'required|in:time_until_departure',
-        'operator' => 'required|in:>,<,=',
-        'value' => 'required|integer|min:1',
-        'action' => 'required|in:set_status',
-        'actionValue' => 'required|in:delayed,cancelled,on-time',
-        'isActive' => 'boolean'
-    ];
+    protected function rules()
+    {
+        return [
+            'conditionType' => 'required|in:time_until_departure',
+            'operator' => 'required|in:>,<,=',
+            'value' => 'required|integer|min:1',
+            'action' => 'required|in:set_status',
+            'actionValue' => ['required', 'exists:statuses,id'],
+            'isActive' => 'boolean'
+        ];
+    }
 
     public function mount()
     {
@@ -65,7 +68,7 @@ class TrainRules extends Component
     public function render()
     {
         return view('livewire.train-rules', [
-            'rules' => TrainRule::orderBy('created_at', 'desc')->paginate(10)
+            'rules' => TrainRule::with('status')->orderBy('created_at', 'desc')->paginate(10)
         ]);
     }
 }

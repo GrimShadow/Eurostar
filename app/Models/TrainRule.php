@@ -22,4 +22,9 @@ class TrainRule extends Model
         'is_active' => 'boolean',
         'value' => 'integer'
     ];
+
+    public function status()
+    {
+        return $this->belongsTo(Status::class, 'action_value');
+    }
 }

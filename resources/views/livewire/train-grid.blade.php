@@ -5,9 +5,9 @@
             status: 'on-time',
             newTime: null,
             init() {
-                this.$watch('status', value => {
-                    if (value === 'delayed' && !this.newTime) {
-                        this.newTime = JSON.parse(this.selectedTrain).departure;
+                this.$watch('selectedTrain', value => {
+                    if (value) {
+                        this.newTime = JSON.parse(value).departure;
                     }
                 })
             }
@@ -78,6 +78,7 @@
                         </h3>
 
                         <div class="space-y-4">
+                            <!-- Status Select -->
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
                                 <select x-model="status"
@@ -88,10 +89,12 @@
                                 </select>
                             </div>
 
-                            <div x-show="status === 'delayed'" x-transition>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">New Time</label>
+                            <!-- Time Input - Always Visible -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Departure Time</label>
                                 <input type="time" x-model="newTime"
                                     class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <p class="mt-1 text-sm text-gray-500">Update the departure time if needed</p>
                             </div>
                         </div>
 
@@ -104,7 +107,7 @@
                                 wire:click="updateTrainStatus(
                                     JSON.parse(selectedTrain).number,
                                     status,
-                                    status === 'delayed' ? newTime : null
+                                    newTime
                                 )"
                                 @click="modalOpen = false"
                                 type="button" 
