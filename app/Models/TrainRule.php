@@ -15,7 +15,8 @@ class TrainRule extends Model
         'value',
         'action',
         'action_value',
-        'is_active'
+        'is_active',
+        'announcement_text'
     ];
 
     protected $casts = [

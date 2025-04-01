@@ -7,6 +7,9 @@ use App\Models\GtfsTrip;
 use App\Models\TrainStatus;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use App\Events\TrainAnnouncement;
+use App\Models\AviavoxSetting;
+use App\Livewire\CreateAnnouncement;
 
 class ProcessTrainRules extends Command
 {
@@ -33,30 +36,68 @@ class ProcessTrainRules extends Command
 
                 // Check if the condition is met
                 $conditionMet = $this->evaluateCondition(
-                    $minutesUntilDeparture,
-                    $rule->operator,
-                    $rule->value
+                    $train,
+                    $rule
                 );
 
                 if ($conditionMet) {
-                    // Apply the status change
-                    TrainStatus::updateOrCreate(
-                        ['trip_id' => $train->trip_id],
-                        ['status' => $rule->status->status]
-                    );
+                    if ($rule->action === 'set_status') {
+                        // Apply the status change
+                        TrainStatus::updateOrCreate(
+                            ['trip_id' => $train->trip_id],
+                            ['status' => $rule->status->status]
+                        );
 
-                    $this->info("Applied status {$rule->status->status} to train {$train->trip_id}");
+                        $this->info("Applied status {$rule->status->status} to train {$train->trip_id}");
+                    } elseif ($rule->action === 'make_announcement') {
+                        $settings = AviavoxSetting::first();
+                        if (!$settings) {
+                            $this->error('Aviavox settings not configured');
+                            continue;
+                        }
+
+                        $announcement = new CreateAnnouncement();
+                        $announcement->selectedAnnouncement = $rule->action_value;
+                        $announcement->selectedTrain = $train->trip_headsign;
+                        
+                        try {
+                            $xml = $announcement->generateXml();
+                            $announcement->authenticateAndSendMessage(
+                                $settings->ip_address,
+                                $settings->port,
+                                $settings->username,
+                                $settings->password,
+                                $xml
+                            );
+                            
+                            $this->info("Made announcement for train {$train->trip_id}");
+                        } catch (\Exception $e) {
+                            $this->error("Failed to make announcement: {$e->getMessage()}");
+                        }
+                    }
                 }
             }
         }
     }
 
-    private function evaluateCondition($actual, $operator, $expected)
+    private function evaluateCondition($train, $rule)
     {
-        return match($operator) {
-            '>' => $actual > $expected,
-            '<' => $actual < $expected,
-            '=' => $actual == $expected,
+        $value = match ($rule->condition_type) {
+            'time_until_departure' => now()->diffInMinutes($train->departure_time, false),
+            'time_since_arrival' => now()->diffInMinutes($train->arrival_time),
+            'platform_change' => $train->platform_changed,
+            'delay_duration' => $train->delay_minutes,
+            'current_status' => $train->status_id,
+            'time_of_day' => now()->format('H:i'),
+            default => null,
+        };
+
+        if ($value === null) return false;
+
+        return match($rule->operator) {
+            '>' => $value > $rule->value,
+            '<' => $value < $rule->value,
+            '=' => $value == $rule->value,
             default => false,
         };
     }

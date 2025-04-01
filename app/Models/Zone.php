@@ -6,5 +6,5 @@ use Illuminate\Database\Eloquent\Model;
 
 class Zone extends Model
 {
-    protected $fillable = ['value'];
+    protected $fillable = ['item_id', 'value'];
 }
