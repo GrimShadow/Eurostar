@@ -4,101 +4,125 @@ namespace App\Console\Commands;
 
 use App\Models\TrainRule;
 use App\Models\GtfsTrip;
-use App\Models\TrainStatus;
+use App\Models\Status;
+use App\Models\AviavoxTemplate;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
-use App\Events\TrainAnnouncement;
-use App\Models\AviavoxSetting;
-use App\Livewire\CreateAnnouncement;
 
 class ProcessTrainRules extends Command
 {
-    protected $signature = 'trains:process-rules';
-    protected $description = 'Process all active train rules and apply status changes';
+    protected $signature = 'trains:process-rules {--debug : Show debug information} {--test : Run in test mode with shorter intervals}';
+    protected $description = 'Process all active train rules and apply actions';
 
     public function handle()
     {
-        $activeRules = TrainRule::with('status')
+        if ($this->option('test')) {
+            while (true) {
+                $this->processRules();
+                $this->info("\n=== Waiting 10 seconds before next check ===\n");
+                sleep(10);
+            }
+        } else {
+            $this->processRules();
+        }
+    }
+
+    private function processRules()
+    {
+        $activeRules = TrainRule::with(['status', 'conditionStatus'])
             ->where('is_active', true)
             ->get();
 
+        $this->info("Processing " . $activeRules->count() . " active rules");
+
         foreach ($activeRules as $rule) {
-            // Get all trains for today
-            $today = Carbon::now()->format('Y-m-d');
-            $trains = GtfsTrip::whereHas('calendar_date', function ($query) use ($today) {
-                $query->where('date', $today)
-                    ->where('exception_type', 1);
-            })->get();
+            $this->processRule($rule);
+        }
+    }
 
-            foreach ($trains as $train) {
-                $departureTime = Carbon::createFromFormat('H:i:s', $train->departure_time);
-                $minutesUntilDeparture = now()->diffInMinutes($departureTime, false);
+    private function processRule($rule)
+    {
+        $this->info("\nProcessing rule: When {$rule->condition_type} {$rule->operator} " . 
+            ($rule->condition_type === 'current_status' ? $rule->conditionStatus->status : $rule->value));
 
-                // Check if the condition is met
-                $conditionMet = $this->evaluateCondition(
-                    $train,
-                    $rule
-                );
+        // Get all trains without status restriction
+        $trains = GtfsTrip::with('status')->get();
 
-                if ($conditionMet) {
-                    if ($rule->action === 'set_status') {
-                        // Apply the status change
-                        TrainStatus::updateOrCreate(
-                            ['trip_id' => $train->trip_id],
-                            ['status' => $rule->status->status]
-                        );
+        $this->info("Found " . $trains->count() . " trains");
 
-                        $this->info("Applied status {$rule->status->status} to train {$train->trip_id}");
-                    } elseif ($rule->action === 'make_announcement') {
-                        $settings = AviavoxSetting::first();
-                        if (!$settings) {
-                            $this->error('Aviavox settings not configured');
-                            continue;
-                        }
+        foreach ($trains as $train) {
+            $this->info("\nChecking train {$train->trip_id}:");
+            $this->info("Current status: " . ($train->status ? $train->status->status : 'No status'));
+            
+            $conditionMet = $this->evaluateCondition($rule, $train);
+            
+            $this->info("Condition " . ($conditionMet ? 'MET ✓' : 'NOT MET ✗'));
 
-                        $announcement = new CreateAnnouncement();
-                        $announcement->selectedAnnouncement = $rule->action_value;
-                        $announcement->selectedTrain = $train->trip_headsign;
-                        
-                        try {
-                            $xml = $announcement->generateXml();
-                            $announcement->authenticateAndSendMessage(
-                                $settings->ip_address,
-                                $settings->port,
-                                $settings->username,
-                                $settings->password,
-                                $xml
-                            );
-                            
-                            $this->info("Made announcement for train {$train->trip_id}");
-                        } catch (\Exception $e) {
-                            $this->error("Failed to make announcement: {$e->getMessage()}");
-                        }
-                    }
-                }
+            if ($conditionMet) {
+                $this->info("Applying action: {$rule->action}");
+                $this->applyAction($rule, $train);
             }
         }
     }
 
-    private function evaluateCondition($train, $rule)
+    private function evaluateCondition($rule, $train)
     {
         $value = match ($rule->condition_type) {
-            'time_until_departure' => now()->diffInMinutes($train->departure_time, false),
-            'time_since_arrival' => now()->diffInMinutes($train->arrival_time),
+            'time_until_departure' => $this->getMinutesUntilDeparture($train),
+            'time_since_arrival' => $this->getMinutesSinceArrival($train),
             'platform_change' => $train->platform_changed,
             'delay_duration' => $train->delay_minutes,
-            'current_status' => $train->status_id,
+            'current_status' => $train->status_id ?? null,  // Changed to status_id
             'time_of_day' => now()->format('H:i'),
             default => null,
         };
 
-        if ($value === null) return false;
+        
 
         return match($rule->operator) {
+            '=' => $value == $rule->value,
             '>' => $value > $rule->value,
             '<' => $value < $rule->value,
-            '=' => $value == $rule->value,
             default => false,
         };
+    }
+
+    private function applyAction($rule, $train)
+    {
+        if ($rule->action === 'set_status') {
+            $train->update(['status_id' => $rule->action_value]);
+            $this->info("Set status for train {$train->trip_id} to {$rule->status->status}");
+        } 
+        elseif ($rule->action === 'make_announcement') {
+            $announcementData = json_decode($rule->action_value, true);
+            $template = AviavoxTemplate::find($announcementData['template_id']);
+            
+            $this->makeAnnouncement($template, $announcementData, $train);
+            
+            $this->info("Made announcement for train {$train->trip_id} using template {$template->name}");
+        }
+    }
+
+    private function getMinutesUntilDeparture($train)
+    {
+        $departureTime = Carbon::createFromFormat('H:i:s', $train->departure_time);
+        return now()->diffInMinutes($departureTime, false);
+    }
+
+    private function getMinutesSinceArrival($train)
+    {
+        $arrivalTime = Carbon::createFromFormat('H:i:s', $train->arrival_time);
+        return now()->diffInMinutes($arrivalTime);
+    }
+
+    private function makeAnnouncement($template, $announcementData, $train)
+    {
+        $this->info("🔊 Making announcement:");
+        $this->info("Template: " . $template->name);
+        $this->info("Zone: " . $announcementData['zone']);
+        if (!empty($announcementData['variables'])) {
+            $this->info("Variables: " . json_encode($announcementData['variables'], JSON_PRETTY_PRINT));
+        }
+        // Here you would integrate with your actual announcement system
     }
 } 

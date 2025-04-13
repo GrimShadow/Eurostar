@@ -5,9 +5,12 @@ namespace App\Livewire;
 use App\Models\Group;
 use App\Models\User;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class GroupManagement extends Component
 {
+    use WithFileUploads;
+
     public $groups;
     public $name;
     public $description;
@@ -16,13 +19,17 @@ class GroupManagement extends Component
     public $isEditing = false;
     public $showModal = false;
     public $availableUsers;
+    public $image;
+    public $active = true;
 
     protected function rules()
     {
         return [
             'name' => ['required', 'min:2', 'unique:groups,name,' . $this->editingGroupId],
             'description' => 'nullable|max:255',
-            'selectedUsers' => 'array'
+            'selectedUsers' => 'array',
+            'image' => 'nullable|image|max:2048',
+            'active' => 'boolean'
         ];
     }
 
@@ -63,6 +70,8 @@ class GroupManagement extends Component
         $this->name = $group->name;
         $this->description = $group->description;
         $this->selectedUsers = $group->users->pluck('id')->toArray();
+        $this->image = null;
+        $this->active = $group->active;
         
         $this->showModal = true;
     }
@@ -71,24 +80,35 @@ class GroupManagement extends Component
     {
         $this->validate();
 
+        $data = [
+            'name' => $this->name,
+            'description' => $this->description,
+            'active' => $this->active,
+        ];
+
+        if ($this->image) {
+            $data['image'] = $this->image->store('groups', 'public');
+        }
+
         if ($this->isEditing) {
             $group = Group::find($this->editingGroupId);
-            $group->update([
-                'name' => $this->name,
-                'description' => $this->description,
-            ]);
+            $group->update($data);
             $group->users()->sync($this->selectedUsers);
             session()->flash('success', 'Group updated successfully.');
         } else {
-            $group = Group::create([
-                'name' => $this->name,
-                'description' => $this->description,
-            ]);
+            $group = Group::create($data);
             $group->users()->attach($this->selectedUsers);
             session()->flash('success', 'Group created successfully.');
         }
 
         $this->closeModal();
+        $this->loadGroups();
+    }
+
+    public function toggleActive($groupId)
+    {
+        $group = Group::find($groupId);
+        $group->update(['active' => !$group->active]);
         $this->loadGroups();
     }
 
@@ -99,6 +119,8 @@ class GroupManagement extends Component
         $this->selectedUsers = [];
         $this->isEditing = false;
         $this->editingGroupId = null;
+        $this->image = null;
+        $this->active = true;
         $this->resetValidation();
     }
 

@@ -51,7 +51,7 @@ xmlns="http://www.w3.org/2000/svg">
     ],
     'alignment' => [
         'heading' => 'center',
-        'container' => 'right',
+        'container' => 'center',
     ],
     'favicon' => [
         'light' => '/auth/img/favicon.png',

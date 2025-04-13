@@ -20,7 +20,9 @@ class Kernel extends ConsoleKernel
         // ... existing scheduled tasks ...
         
         // Run every minute
-        $schedule->command('trains:process-rules')->everyMinute();
+        $schedule->command('trains:process-rules --debug')
+                ->everyMinute()
+                ->appendOutputTo(storage_path('logs/scheduler.log'));
     }
 
     /**
@@ -34,4 +36,8 @@ class Kernel extends ConsoleKernel
 
         require base_path('routes/console.php');
     }
+
+    protected $commands = [
+        Commands\ProcessTrainRules::class,
+    ];
 } 

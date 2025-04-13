@@ -2,6 +2,11 @@
     <!-- Create Rule Form -->
     <div class="p-6">
         <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Create New Rule</h3>
+        @if (session()->has('error'))
+            <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+                {{ session('error') }}
+            </div>
+        @endif
         <form wire:submit="save" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
@@ -142,7 +147,14 @@
                     @foreach($rules as $rule)
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                When {{ str_replace('_', ' ', $rule->condition_type) }} {{ $rule->operator }} {{ $rule->value }} minutes
+                                When {{ str_replace('_', ' ', $rule->condition_type) }} {{ $rule->operator }} 
+                                @if($rule->condition_type === 'current_status')
+                                    {{ $rule->conditionStatus?->status ?? 'Unknown Status' }}
+                                @elseif($rule->condition_type === 'time_of_day')
+                                    {{ $rule->value }}
+                                @else
+                                    {{ $rule->value }} minutes
+                                @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 @if($rule->action === 'set_status')
@@ -151,10 +163,15 @@
                                     @php
                                         $announcementData = json_decode($rule->action_value, true);
                                         $template = \App\Models\AviavoxTemplate::find($announcementData['template_id']);
-                                        $zone = $announcementData['variables']['zone'] ?? 'unknown';
+                                        $zone = $announcementData['zone'] ?? 'unknown';
                                     @endphp
                                     Make announcement: {{ $template->name }} 
                                     <span class="text-gray-500">({{ $zone }})</span>
+                                    @if(count($announcementData['variables'] ?? []) > 0)
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            Variables: {{ collect($announcementData['variables'])->map(fn($value, $key) => "$key: $value")->join(', ') }}
+                                        </div>
+                                    @endif
                                 @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">

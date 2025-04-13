@@ -28,4 +28,9 @@ class TrainRule extends Model
     {
         return $this->belongsTo(Status::class, 'action_value');
     }
+
+    public function conditionStatus()
+    {
+        return $this->belongsTo(Status::class, 'value');
+    }
 }

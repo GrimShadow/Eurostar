@@ -21,4 +21,14 @@ class GtfsTrip extends Model
         'direction_id' => 'integer',
         'wheelchair_accessible' => 'boolean'
     ];
+
+    public function calendarDate()
+    {
+        return $this->belongsTo(CalendarDate::class, 'service_id', 'service_id');
+    }
+
+    public function status()
+    {
+        return $this->belongsTo(Status::class, 'current_status');
+    }
 }

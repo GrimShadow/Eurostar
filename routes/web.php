@@ -9,11 +9,16 @@ use App\Http\Controllers\RulesAndTriggersController;
 use App\Http\Controllers\AviavoxController;
 use App\Http\Controllers\GtfsController;
 use App\Http\Controllers\TokenController;
+use App\Http\Controllers\SelectorController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect()->route('login');
 });
+
+Route::get('/selector', [SelectorController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('selector');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

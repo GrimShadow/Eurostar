@@ -75,17 +75,24 @@ class TrainRules extends Component
                 'required_if:action,set_status',
                 'exists:statuses,id'
             ],
-            'selectedAnnouncement' => 'required_if:action,make_announcement',
             'isActive' => 'boolean',
-            'selectedTemplate' => 'required_if:action,make_announcement|exists:aviavox_templates,id',
-            'announcementZone' => 'required_if:action,make_announcement',
         ];
 
-        // Add validation rules for template variables dynamically
-        if ($this->action === 'make_announcement' && $this->selectedTemplate) {
-            $template = AviavoxTemplate::find($this->selectedTemplate);
-            foreach ($template->variables as $variable) {
-                $rules["templateVariables.{$variable}"] = 'required';
+        // Add announcement-specific rules only when make_announcement is selected
+        if ($this->action === 'make_announcement') {
+            $rules['selectedTemplate'] = 'required|exists:aviavox_templates,id';
+            $rules['announcementZone'] = 'required';
+
+            // Add validation rules for template variables dynamically
+            if ($this->selectedTemplate) {
+                $template = AviavoxTemplate::find($this->selectedTemplate);
+                if ($template && !empty($template->variables)) {
+                    foreach ($template->variables as $variable) {
+                        if ($variable !== 'zone') { // Skip zone as it's handled separately
+                            $rules["templateVariables.$variable"] = 'required';
+                        }
+                    }
+                }
             }
         }
 
@@ -117,33 +124,35 @@ class TrainRules extends Component
 
     public function save()
     {
-        $this->validate();
+        $validatedData = $this->validate();
 
         if ($this->action === 'make_announcement') {
-            // Add the selected zone to the variables array
-            $variables = array_merge($this->templateVariables, ['zone' => $this->announcementZone]);
-            
             $announcementData = [
                 'template_id' => $this->selectedTemplate,
-                'variables' => $variables
+                'zone' => $this->announcementZone,
+                'variables' => $this->templateVariables
             ];
             $actionValue = json_encode($announcementData);
         } else {
             $actionValue = $this->actionValue;
         }
 
-        TrainRule::create([
-            'condition_type' => $this->conditionType,
-            'operator' => $this->operator,
-            'value' => $this->value,
-            'action' => $this->action,
-            'action_value' => $actionValue,
-            'is_active' => $this->isActive,
-        ]);
+        try {
+            TrainRule::create([
+                'condition_type' => $this->conditionType,
+                'operator' => $this->operator,
+                'value' => $this->value,
+                'action' => $this->action,
+                'action_value' => $actionValue,
+                'is_active' => $this->isActive,
+            ]);
 
-        $this->reset(['conditionType', 'operator', 'value', 'action', 'actionValue', 
-                     'selectedTemplate', 'announcementZone', 'templateVariables']);
-        session()->flash('success', 'Rule created successfully.');
+            $this->reset(['conditionType', 'operator', 'value', 'action', 'actionValue', 
+                         'selectedTemplate', 'announcementZone', 'templateVariables']);
+            session()->flash('success', 'Rule created successfully.');
+        } catch (\Exception $e) {
+            session()->flash('error', 'Failed to create rule: ' . $e->getMessage());
+        }
     }
 
     public function toggleRule($ruleId)
@@ -184,7 +193,7 @@ class TrainRules extends Component
         };
 
         return view('livewire.train-rules', [
-            'rules' => TrainRule::with('status')->orderBy('created_at', 'desc')->paginate(10),
+            'rules' => TrainRule::with(['status', 'conditionStatus'])->orderBy('created_at', 'desc')->paginate(10),
             'valueField' => $valueField
         ]);
     }
