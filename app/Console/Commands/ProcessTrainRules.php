@@ -6,6 +6,7 @@ use App\Models\TrainRule;
 use App\Models\GtfsTrip;
 use App\Models\Status;
 use App\Models\AviavoxTemplate;
+use App\Models\TrainStatus;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 
@@ -43,18 +44,18 @@ class ProcessTrainRules extends Command
     private function processRule($rule)
     {
         $this->info("\nProcessing rule: When {$rule->condition_type} {$rule->operator} " . 
-            ($rule->condition_type === 'current_status' ? $rule->conditionStatus->status : $rule->value));
+            ($rule->condition_type === 'current_status' ? $rule->conditionStatus?->status : $rule->value));
 
         // Get all trains without status restriction
-        $trains = GtfsTrip::with('status')->get();
+        $trains = GtfsTrip::with('currentStatus')->get();
 
         $this->info("Found " . $trains->count() . " trains");
 
         foreach ($trains as $train) {
             $this->info("\nChecking train {$train->trip_id}:");
-            $this->info("Current status: " . ($train->status ? $train->status->status : 'No status'));
+            $this->info("Current status: " . ($train->currentStatus ? $train->currentStatus->status : 'No status'));
             
-            $conditionMet = $this->evaluateCondition($rule, $train);
+            $conditionMet = $this->evaluateCondition($train, $rule);
             
             $this->info("Condition " . ($conditionMet ? 'MET ✓' : 'NOT MET ✗'));
 
@@ -65,33 +66,75 @@ class ProcessTrainRules extends Command
         }
     }
 
-    private function evaluateCondition($rule, $train)
+    private function evaluateCondition($trip, $rule)
     {
-        $value = match ($rule->condition_type) {
-            'time_until_departure' => $this->getMinutesUntilDeparture($train),
-            'time_since_arrival' => $this->getMinutesSinceArrival($train),
-            'platform_change' => $train->platform_changed,
-            'delay_duration' => $train->delay_minutes,
-            'current_status' => $train->status_id ?? null,  // Changed to status_id
-            'time_of_day' => now()->format('H:i'),
-            default => null,
-        };
+        switch ($rule->condition_type) {
+            case 'current_status':
+                $currentStatus = $trip->currentStatus;
+                $status = $currentStatus ? $currentStatus->status : 'on-time';
+                $ruleStatus = $rule->conditionStatus?->status;
+                $this->info("Comparing current status '{$status}' with rule status '{$ruleStatus}'");
+                return $status === $ruleStatus;
+            
+            case 'departure_time':
+                $departureTime = strtotime($trip->departure_time);
+                $ruleTime = strtotime($rule->value);
+                return $departureTime >= $ruleTime;
+            
+            case 'arrival_time':
+                $arrivalTime = strtotime($trip->arrival_time);
+                $ruleTime = strtotime($rule->value);
+                return $arrivalTime >= $ruleTime;
+            
+            case 'time_until_departure':
+                $minutesUntilDeparture = $this->getMinutesUntilDeparture($trip);
+                $this->info("Minutes until departure: {$minutesUntilDeparture}, Rule value: {$rule->value}");
+                return $this->compareWithOperator($minutesUntilDeparture, $rule->operator, (int)$rule->value);
+            
+            case 'time_since_arrival':
+                $minutesSinceArrival = $this->getMinutesSinceArrival($trip);
+                $this->info("Minutes since arrival: {$minutesSinceArrival}, Rule value: {$rule->value}");
+                return $this->compareWithOperator($minutesSinceArrival, $rule->operator, (int)$rule->value);
+            
+            default:
+                $this->info("Unknown condition type: {$rule->condition_type}");
+                return false;
+        }
+    }
 
-        
-
-        return match($rule->operator) {
-            '=' => $value == $rule->value,
-            '>' => $value > $rule->value,
-            '<' => $value < $rule->value,
-            default => false,
-        };
+    private function compareWithOperator($value, $operator, $ruleValue)
+    {
+        switch ($operator) {
+            case '>':
+                return $value > $ruleValue;
+            case '<':
+                return $value < $ruleValue;
+            case '=':
+                return $value == $ruleValue;
+            default:
+                return false;
+        }
     }
 
     private function applyAction($rule, $train)
     {
         if ($rule->action === 'set_status') {
-            $train->update(['status_id' => $rule->action_value]);
-            $this->info("Set status for train {$train->trip_id} to {$rule->status->status}");
+            // Get the status text from the statuses table
+            $status = Status::find($rule->action_value);
+            if (!$status) {
+                $this->error("Status with ID {$rule->action_value} not found");
+                return;
+            }
+
+            // Update or create the status in train_statuses table
+            $trainStatus = TrainStatus::updateOrCreate(
+                ['trip_id' => $train->trip_id],
+                ['status' => $status->status]
+            );
+            $this->info("Set status for train {$train->trip_id} to {$status->status}");
+
+            // Broadcast the status change event
+            event(new \App\Events\TrainStatusUpdated($train->trip_id, $status->status));
         } 
         elseif ($rule->action === 'make_announcement') {
             $announcementData = json_decode($rule->action_value, true);

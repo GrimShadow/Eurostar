@@ -10,6 +10,7 @@ class TrainRule extends Model
     use HasFactory;
 
     protected $fillable = [
+        'name',
         'condition_type',
         'operator',
         'value',
@@ -21,7 +22,7 @@ class TrainRule extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
-        'value' => 'integer'
+        'value' => 'string'
     ];
 
     public function status()
@@ -32,5 +33,13 @@ class TrainRule extends Model
     public function conditionStatus()
     {
         return $this->belongsTo(Status::class, 'value');
+    }
+
+    public function getValueAttribute($value)
+    {
+        if ($this->condition_type === 'current_status') {
+            return $value;
+        }
+        return (int)$value;
     }
 }

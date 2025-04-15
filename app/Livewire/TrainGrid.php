@@ -22,8 +22,14 @@ class TrainGrid extends Component
 
     protected $listeners = [
         'refreshTrains' => 'loadTrains',
-        'updateTrainStatus' => 'updateTrainStatus'
+        'updateTrainStatus' => 'updateTrainStatus',
+        'echo:train-statuses,TrainStatusUpdated' => 'handleTrainStatusUpdated'
     ];
+
+    public function handleTrainStatusUpdated($event)
+    {
+        $this->loadTrains();
+    }
 
     public function mount()
     {
@@ -60,7 +66,8 @@ class TrainGrid extends Component
                 'gtfs_stop_times.departure_time as departure',
                 'gtfs_routes.route_long_name',
                 'gtfs_trips.trip_headsign as destination',
-                DB::raw('COALESCE(train_statuses.status, "on-time") as train_status'),
+                'train_statuses.status as train_status',
+                'statuses.status as status_text',
                 'statuses.color'
             ])
             ->orderBy('gtfs_stop_times.departure_time')
@@ -76,7 +83,7 @@ class TrainGrid extends Component
                 'departure' => substr($train->departure, 0, 5),
                 'route_name' => $train->route_long_name,
                 'destination' => $train->destination,
-                'status' => ucfirst($train->train_status),
+                'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
                 'status_color' => $train->color ?? 'gray'
             ];
         })->toArray();

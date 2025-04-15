@@ -176,21 +176,28 @@ class TrainRules extends Component
 
     public function render()
     {
-        $valueField = match ($this->conditionType) {
-            'current_status' => [
-                'type' => 'select',
-                'options' => Status::pluck('status', 'id'),
-                'label' => 'Status'
-            ],
-            'time_of_day' => [
-                'type' => 'time',
-                'label' => 'Time (24h)'
-            ],
-            default => [
-                'type' => 'number',
-                'label' => 'Value (minutes)'
-            ],
-        };
+        $valueField = [
+            'type' => 'number',
+            'label' => 'Value (minutes)'
+        ];
+
+        if ($this->conditionType) {
+            $valueField = match ($this->conditionType) {
+                'current_status' => [
+                    'type' => 'select',
+                    'options' => Status::pluck('status', 'id'),
+                    'label' => 'Status'
+                ],
+                'time_of_day' => [
+                    'type' => 'time',
+                    'label' => 'Time (24h)'
+                ],
+                default => [
+                    'type' => 'number',
+                    'label' => 'Value (minutes)'
+                ],
+            };
+        }
 
         return view('livewire.train-rules', [
             'rules' => TrainRule::with(['status', 'conditionStatus'])->orderBy('created_at', 'desc')->paginate(10),

@@ -31,4 +31,9 @@ class GtfsTrip extends Model
     {
         return $this->belongsTo(Status::class, 'current_status');
     }
+
+    public function currentStatus()
+    {
+        return $this->hasOne(TrainStatus::class, 'trip_id', 'trip_id');
+    }
 }
