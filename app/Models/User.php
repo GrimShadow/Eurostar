@@ -25,6 +25,7 @@ class User extends AuthUser
         'email',
         'password',
         'role',
+        'last_activity_at',
     ];
 
     /**
@@ -47,11 +48,17 @@ class User extends AuthUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'last_activity_at' => 'datetime',
         ];
     }
 
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
     }
 }

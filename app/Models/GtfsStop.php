@@ -13,7 +13,8 @@ class GtfsStop extends Model
         'stop_lon',
         'stop_lat',
         'stop_timezone',
-        'location_type'
+        'location_type',
+        'platform_code'
     ];
 
     protected $casts = [

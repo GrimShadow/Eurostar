@@ -496,6 +496,7 @@ class GtfsController extends Controller
                     'stop_lat' => (float)$stopData['stop_lat'],
                     'stop_timezone' => $stopData['stop_timezone'] ?: null,
                     'location_type' => (int)($stopData['location_type'] ?? 0),
+                    'platform_code' => $stopData['platform_code'] ?? null,
                     'updated_at' => now()
                 ];
 

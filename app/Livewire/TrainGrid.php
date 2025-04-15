@@ -6,6 +6,7 @@ use Livewire\Component;
 use App\Models\GtfsTrip;
 use App\Models\GtfsCalendarDate;
 use App\Models\GtfsStopTime;
+use App\Models\GtfsStop;
 use App\Models\TrainStatus;
 use App\Models\Status;
 use Carbon\Carbon;
@@ -19,6 +20,7 @@ class TrainGrid extends Component
     public $newDepartureTime = '';
     public $status = 'on-time';
     public $statuses = [];
+    public $routeStops = [];
 
     protected $listeners = [
         'refreshTrains' => 'loadTrains',
@@ -41,6 +43,10 @@ class TrainGrid extends Component
     {
         $today = Carbon::now()->format('Y-m-d');
         $currentTime = Carbon::now()->format('H:i:s');
+
+        // Clear any cached data
+        DB::flushQueryLog();
+        DB::enableQueryLog();
 
         $trains = GtfsTrip::query()
             ->join('gtfs_calendar_dates', 'gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
@@ -87,6 +93,33 @@ class TrainGrid extends Component
                 'status_color' => $train->color ?? 'gray'
             ];
         })->toArray();
+
+        // Force a re-render of the component
+        $this->dispatch('refresh');
+    }
+
+    public function loadRouteStops($tripId)
+    {
+        $this->routeStops = GtfsStopTime::query()
+            ->join('gtfs_stops', 'gtfs_stop_times.stop_id', '=', 'gtfs_stops.stop_id')
+            ->where('gtfs_stop_times.trip_id', $tripId)
+            ->orderBy('gtfs_stop_times.stop_sequence')
+            ->select([
+                'gtfs_stops.stop_name',
+                'gtfs_stop_times.arrival_time',
+                'gtfs_stop_times.departure_time',
+                'gtfs_stop_times.stop_sequence'
+            ])
+            ->get()
+            ->map(function ($stop) {
+                return [
+                    'name' => $stop->stop_name,
+                    'arrival' => substr($stop->arrival_time, 0, 5),
+                    'departure' => substr($stop->departure_time, 0, 5),
+                    'sequence' => $stop->stop_sequence
+                ];
+            })
+            ->toArray();
     }
 
     public function updateTrainStatus(string $trainNumber, string $status, ?string $newTime = null)

@@ -30,6 +30,9 @@
                     <x-nav-link :href="route('settings.logs')" :active="request()->routeIs('settings.logs')">
                         {{ __('Logs') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('settings.admin')" :active="request()->routeIs('settings.admin')">
+                        {{ __('Admin Settings') }}
+                    </x-nav-link>
                 </div>
             </div>
 

@@ -408,6 +408,7 @@ class AviavoxController extends Controller
     {
         $request->validate([
             'name' => 'required|string|unique:aviavox_templates,name',
+            'friendly_name' => 'nullable|string',
             'xml_template' => 'required|string',
             'variables' => 'required|array'
         ]);
@@ -418,6 +419,7 @@ class AviavoxController extends Controller
             
             AviavoxTemplate::create([
                 'name' => $request->name,
+                'friendly_name' => $request->friendly_name,
                 'xml_template' => $request->xml_template,
                 'variables' => $request->variables
             ]);

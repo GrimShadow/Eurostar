@@ -180,6 +180,13 @@
                     @csrf
                     <div class="grid grid-cols-1 gap-6">
                         <div>
+                            <label for="friendly_name" class="block text-sm font-medium text-gray-700">Friendly Name</label>
+                            <input type="text" name="friendly_name" id="friendly_name" 
+                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                placeholder="e.g., Check-in Welcome (Closed)">
+                        </div>
+
+                        <div>
                             <label for="name" class="block text-sm font-medium text-gray-700">Template Name</label>
                             <input type="text" name="name" id="name" 
                                 class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -216,6 +223,9 @@
                         <thead class="bg-gray-50">
                             <tr>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Friendly Name
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Template Name
                                 </th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -233,6 +243,9 @@
                             @foreach($templates as $template)
                             <tr>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {{ $template->friendly_name ?? '-' }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     {{ $template->name }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'admin' => AdminMiddleware::class,
+            'update-activity' => \App\Http\Middleware\UpdateUserActivity::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

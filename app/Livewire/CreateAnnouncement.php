@@ -33,6 +33,7 @@ class CreateAnnouncement extends Component
         $this->loadTrains();
         $this->templates = AviavoxTemplate::all()->mapWithKeys(function ($template) {
             return [$template->name => [
+                'friendly_name' => $template->friendly_name ?? $template->name,
                 'variables' => $template->variables,
                 'xml_template' => $template->xml_template
             ]];

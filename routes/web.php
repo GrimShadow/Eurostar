@@ -10,6 +10,7 @@ use App\Http\Controllers\AviavoxController;
 use App\Http\Controllers\GtfsController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\SelectorController;
+use App\Http\Controllers\AdminSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -24,7 +25,7 @@ Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements');
     Route::post('/announcements', [AnnouncementController::class, 'store'])->name('announcements.store');
     Route::post('/announcements/make-audio', [AnnouncementController::class, 'makeAudioAnnouncement'])->name('announcements.makeAudio');
@@ -60,9 +61,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/settings/logs', [LogsController::class, 'viewLogs'])->name('settings.logs');
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
 
+    // Admin settings
+    
+
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -70,7 +74,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/tokens/{token}', [TokenController::class, 'destroy'])->name('token.destroy');
 });
 
-Route::middleware(['auth', 'admin'])->group(function () {
+Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
+    // Admin settings
+    Route::get('/settings/admin', [AdminSettingsController::class, 'index'])->name('settings.admin');
+    
     // Aviavox settings
     Route::get('/settings/aviavox', [AviavoxController::class, 'viewAviavox'])->name('settings.aviavox');
     Route::post('/settings/aviavox', [AviavoxController::class, 'updateAviavox'])->name('settings.aviavox.update');

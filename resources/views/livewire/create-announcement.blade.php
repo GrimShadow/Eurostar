@@ -5,8 +5,8 @@
             <select wire:model.live="selectedAnnouncement"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
                 <option value="">Select announcement type</option>
-                @foreach(array_keys($templates) as $type)
-                <option value="{{ $type }}">{{ $type }}</option>
+                @foreach($templates as $type => $template)
+                    <option value="{{ $type }}">{{ $template['friendly_name'] }}</option>
                 @endforeach
             </select>
         </div>

@@ -28,7 +28,12 @@
             @endisset
 
             <!-- Status Banner -->
-            <livewire:status-banner />
+            @if(\App\Models\Setting::where('key', 'banner_status')->value('value') ?? true)
+                <livewire:status-banner />
+            @endif
+
+            <!-- Maintenance Modal -->
+            <livewire:maintenance-modal />
 
             <!-- Page Content -->
             <main>
