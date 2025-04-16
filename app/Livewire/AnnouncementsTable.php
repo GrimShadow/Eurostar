@@ -12,10 +12,20 @@ class AnnouncementsTable extends Component
 
     protected $listeners = ['announcement-created' => '$refresh'];
 
-    public function deleteAnnouncement(Announcement $announcement)
+    public function deleteAnnouncement($id)
     {
-        $announcement->delete();
-        session()->flash('success', 'Announcement deleted successfully.');
+        Announcement::find($id)->delete();
+        $this->dispatch('announcement-deleted');
+    }
+
+    public function clearAllAnnouncements()
+    {
+        try {
+            Announcement::truncate();
+            $this->dispatch('announcements-cleared');
+        } catch (\Exception $e) {
+            $this->dispatch('error', message: 'Failed to clear announcements: ' . $e->getMessage());
+        }
     }
 
     public function render()
