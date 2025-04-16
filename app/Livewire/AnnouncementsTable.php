@@ -10,7 +10,10 @@ class AnnouncementsTable extends Component
 {
     use WithPagination;
 
-    protected $listeners = ['announcement-created' => '$refresh'];
+    protected $listeners = [
+        'announcement-created' => '$refresh',
+        'announcements-cleared' => '$refresh'
+    ];
 
     public function deleteAnnouncement($id)
     {
@@ -24,7 +27,6 @@ class AnnouncementsTable extends Component
             Announcement::truncate();
             $this->resetPage();
             $this->dispatch('announcements-cleared');
-            $this->render();
         } catch (\Exception $e) {
             $this->dispatch('error', message: 'Failed to clear announcements: ' . $e->getMessage());
         }
