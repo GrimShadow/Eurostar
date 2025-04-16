@@ -22,7 +22,9 @@ class AnnouncementsTable extends Component
     {
         try {
             Announcement::truncate();
+            $this->resetPage();
             $this->dispatch('announcements-cleared');
+            $this->render();
         } catch (\Exception $e) {
             $this->dispatch('error', message: 'Failed to clear announcements: ' . $e->getMessage());
         }
