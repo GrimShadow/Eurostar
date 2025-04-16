@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('train_rules', function (Blueprint $table) {
-            $table->text('announcement_text')->nullable();
-        });
+        if (!Schema::hasColumn('train_rules', 'announcement_text')) {
+            Schema::table('train_rules', function (Blueprint $table) {
+                $table->text('announcement_text')->nullable();
+            });
+        }
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('train_rules', function (Blueprint $table) {
-            $table->dropColumn('announcement_text');
-        });
+        if (Schema::hasColumn('train_rules', 'announcement_text')) {
+            Schema::table('train_rules', function (Blueprint $table) {
+                $table->dropColumn('announcement_text');
+            });
+        }
     }
 }; 
