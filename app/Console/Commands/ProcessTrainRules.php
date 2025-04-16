@@ -9,6 +9,9 @@ use App\Models\AviavoxTemplate;
 use App\Models\TrainStatus;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use App\Events\TrainStatusUpdated;
+use App\Models\GtfsStopTime;
 
 class ProcessTrainRules extends Command
 {
@@ -17,14 +20,161 @@ class ProcessTrainRules extends Command
 
     public function handle()
     {
-        if ($this->option('test')) {
-            while (true) {
-                $this->processRules();
-                $this->info("\n=== Waiting 10 seconds before next check ===\n");
-                sleep(10);
+        try {
+            Log::info('Starting train rules processing');
+            
+            // Get current date and time
+            $now = Carbon::now();
+            $today = $now->format('Y-m-d');
+            $currentTime = $now->format('H:i:s');
+            
+            Log::info('Processing rules for date and time', [
+                'date' => $today,
+                'time' => $currentTime
+            ]);
+
+            // Get all active rules
+            $rules = TrainRule::where('is_active', true)->get();
+            Log::info('Found active rules', ['count' => $rules->count()]);
+
+            foreach ($rules as $rule) {
+                try {
+                    Log::info('Processing rule', [
+                        'rule_id' => $rule->id,
+                        'name' => $rule->name
+                    ]);
+
+                    // Get trains that match the rule's criteria
+                    $trains = GtfsTrip::query()
+                        ->join('gtfs_calendar_dates', 'gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
+                        ->join('gtfs_stop_times', 'gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
+                        ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
+                        ->whereIn('gtfs_trips.route_id', function($query) {
+                            $query->select('route_id')
+                                ->from('selected_routes')
+                                ->where('is_active', true);
+                        })
+                        ->whereDate('gtfs_calendar_dates.date', $today)
+                        ->where('gtfs_calendar_dates.exception_type', 1)
+                        ->where('gtfs_stop_times.stop_sequence', 1)
+                        ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
+                        ->where('gtfs_stop_times.departure_time', '<=', date('H:i:s', strtotime($currentTime . ' +4 hours')))
+                        ->select([
+                            'gtfs_trips.trip_id',
+                            'gtfs_trips.trip_headsign',
+                            'gtfs_stop_times.departure_time',
+                            'gtfs_routes.route_long_name'
+                        ])
+                        ->get();
+
+                    Log::info('Found matching trains for rule', [
+                        'rule_id' => $rule->id,
+                        'train_count' => $trains->count()
+                    ]);
+
+                    foreach ($trains as $train) {
+                        try {
+                            // Check if the train matches the rule's conditions
+                            if ($this->matchesRule($train, $rule)) {
+                                Log::info('Train matches rule', [
+                                    'rule_id' => $rule->id,
+                                    'train_id' => $train->trip_id,
+                                    'departure_time' => $train->departure_time
+                                ]);
+
+                                // Update train status
+                                TrainStatus::updateOrCreate(
+                                    ['trip_id' => $train->trip_id],
+                                    ['status' => $rule->status]
+                                );
+
+                                // If the rule specifies a new departure time, update it
+                                if ($rule->new_departure_time) {
+                                    Log::info('Updating departure time', [
+                                        'train_id' => $train->trip_id,
+                                        'new_time' => $rule->new_departure_time
+                                    ]);
+
+                                    GtfsStopTime::where('trip_id', $train->trip_id)
+                                        ->where('stop_sequence', 1)
+                                        ->update(['departure_time' => $rule->new_departure_time]);
+                                }
+
+                                // Broadcast the status update
+                                broadcast(new TrainStatusUpdated($train->trip_id, $rule->status));
+                            }
+                        } catch (\Exception $e) {
+                            Log::error('Error processing train for rule', [
+                                'rule_id' => $rule->id,
+                                'train_id' => $train->trip_id,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error processing rule', [
+                        'rule_id' => $rule->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
             }
-        } else {
-            $this->processRules();
+
+            Log::info('Completed train rules processing');
+        } catch (\Exception $e) {
+            Log::error('Error in ProcessTrainRules command', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            $this->error('Error processing train rules: ' . $e->getMessage());
+        }
+    }
+
+    private function matchesRule($train, $rule)
+    {
+        try {
+            // Log the data being compared
+            Log::info('Checking rule conditions', [
+                'train' => [
+                    'trip_headsign' => $train->trip_headsign,
+                    'route_name' => $train->route_long_name,
+                    'departure_time' => $train->departure_time
+                ],
+                'rule' => [
+                    'train_number' => $rule->train_number,
+                    'route_name' => $rule->route_name,
+                    'departure_time' => $rule->departure_time
+                ]
+            ]);
+
+            // Check if the train matches the rule's conditions
+            $matches = true;
+
+            if ($rule->train_number && $train->trip_headsign != $rule->train_number) {
+                $matches = false;
+            }
+
+            if ($rule->route_name && $train->route_long_name != $rule->route_name) {
+                $matches = false;
+            }
+
+            if ($rule->departure_time && $train->departure_time != $rule->departure_time) {
+                $matches = false;
+            }
+
+            Log::info('Rule match result', [
+                'matches' => $matches,
+                'train_id' => $train->trip_id,
+                'rule_id' => $rule->id
+            ]);
+
+            return $matches;
+        } catch (\Exception $e) {
+            Log::error('Error in matchesRule', [
+                'error' => $e->getMessage(),
+                'train' => $train,
+                'rule' => $rule
+            ]);
+            return false;
         }
     }
 
