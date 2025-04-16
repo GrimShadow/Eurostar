@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Log;
 
 class LogsController extends Controller
 {
@@ -31,5 +32,20 @@ class LogsController extends Controller
         ];
 
         return Response::make($logContents, 200, $headers);
+    }
+
+    public function clear()
+    {
+        try {
+            $logFilePath = storage_path('logs/laravel.log');
+            if (File::exists($logFilePath)) {
+                File::put($logFilePath, '');
+            }
+            return redirect()->route('settings.logs')
+                ->with('success', 'All logs have been cleared successfully.');
+        } catch (\Exception $e) {
+            return redirect()->route('settings.logs')
+                ->with('error', 'Failed to clear logs: ' . $e->getMessage());
+        }
     }
 }

@@ -60,6 +60,7 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
     // Logs
     Route::get('/settings/logs', [LogsController::class, 'viewLogs'])->name('settings.logs');
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
+    Route::delete('/settings/logs/clear', [LogsController::class, 'clear'])->name('settings.logs.clear');
 
     // Admin settings
     
@@ -101,6 +102,7 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
     // Logs
     Route::get('/settings/logs', [LogsController::class, 'viewLogs'])->name('settings.logs');
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
+    Route::delete('/settings/logs/clear', [LogsController::class, 'clear'])->name('settings.logs.clear');
 });
 
 Route::delete('/settings/aviavox/template/{template}', [AviavoxController::class, 'deleteTemplate'])->name('settings.aviavox.deleteTemplate');
