@@ -25,6 +25,7 @@ class CreateAnnouncement extends Component
     public $selectedTrain = '';
     public $scheduledTime = '';
     public $selectedRoute = '';
+    public $textInput = '';
     public $templates = [];
 
     public function mount()
@@ -122,6 +123,8 @@ class CreateAnnouncement extends Component
                 return $this->scheduledTime ? date('Y-m-d\TH:i:s\Z', strtotime($this->scheduledTime)) : '';
             case 'route':
                 return $this->selectedRoute ?? 'GBR_LON'; // Default to London
+            case 'text':
+                return $this->textInput;
             default:
                 return '';
         }
@@ -210,42 +213,44 @@ class CreateAnnouncement extends Component
     }
 
     public function save()
-{
-    $settings = AviavoxSetting::first();
-    if (!$settings) {
-        session()->flash('error', 'Aviavox settings not configured');
-        return;
-    }
+    {
+        $settings = AviavoxSetting::first();
+        if (!$settings) {
+            session()->flash('error', 'Aviavox settings not configured');
+            return;
+        }
 
-    try {
-        // Generate XML from template
-        $xml = $this->generateXml();
-        
-        // Send the announcement via TCP
-        $this->authenticateAndSendMessage(
-            $settings->ip_address,
-            $settings->port,
-            $settings->username,
-            $settings->password,
-            $xml
-        );
+        try {
+            // Generate XML from template
+            $xml = $this->generateXml();
+            
+            // Send the announcement via TCP
+            $this->authenticateAndSendMessage(
+                $settings->ip_address,
+                $settings->port,
+                $settings->username,
+                $settings->password,
+                $xml
+            );
 
-        // Create announcement record with all required fields
-        Announcement::create([
-            'type' => 'audio',
-            'message' => $this->selectedAnnouncement,
-            'scheduled_time' => $this->scheduledTime ? Carbon::parse($this->scheduledTime)->format('H:i:s') : Carbon::now()->format('H:i:s'),
-            'author' => Auth::user()->name,
-            'area' => $this->selectedZone ?? 'Terminal',
-            'status' => 'Finished',
-            'recurrence' => null, // No recurrence for immediate announcements
-        ]);
+            // Create announcement record with all required fields
+            Announcement::create([
+                'type' => 'audio',
+                'message' => $this->selectedAnnouncement,
+                'scheduled_time' => $this->scheduledTime ? Carbon::parse($this->scheduledTime)->format('H:i:s') : Carbon::now()->format('H:i:s'),
+                'author' => Auth::user()->name,
+                'area' => $this->selectedZone ?? 'Terminal',
+                'status' => 'Finished',
+                'recurrence' => null, // No recurrence for immediate announcements
+            ]);
 
-        session()->flash('success', 'Announcement sent successfully');
-        $this->reset(['selectedAnnouncement', 'selectedZone', 'selectedTrain', 'scheduledTime', 'selectedRoute']);
+            session()->flash('success', 'Announcement sent successfully');
+            
+            // Refresh the page immediately
+            $this->js('window.location.reload()');
 
-    } catch (\Exception $e) {
-        Log::error('Failed to send announcement: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            Log::error('Failed to send announcement: ' . $e->getMessage());
             session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }
