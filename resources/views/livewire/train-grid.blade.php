@@ -39,11 +39,13 @@
                                     <div>
                                         <div class="text-sm text-gray-500 mb-1">Departure</div>
                                         <div class="text-2xl font-bold">{{ $train['departure'] }}</div>
+                                        <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] }}</div>
                                     </div>
                                     <div class="text-right">
                                         <div class="text-sm text-gray-500 mb-1">Arrival</div>
                                         <div class="text-2xl font-bold">{{ date('H:i', strtotime($train['departure'] . ' +3 hours 40 minutes')) }}</div>
                                         <div class="text-sm text-gray-500">{{ $train['destination'] }}</div>
+                                        <div class="text-sm text-gray-500">Platform {{ $train['arrival_platform'] }}</div>
                                     </div>
                                 </div>
                             </div>

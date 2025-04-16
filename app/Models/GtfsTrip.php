@@ -36,4 +36,15 @@ class GtfsTrip extends Model
     {
         return $this->hasOne(TrainStatus::class, 'trip_id', 'trip_id');
     }
+
+    public function route()
+    {
+        return $this->belongsTo(GtfsRoute::class, 'route_id', 'route_id');
+    }
+
+    public function stopTimes()
+    {
+        return $this->hasMany(GtfsStopTime::class, 'trip_id', 'trip_id')
+            ->orderBy('stop_sequence');
+    }
 }
