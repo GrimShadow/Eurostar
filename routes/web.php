@@ -31,6 +31,7 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::post('/announcements/make-audio', [AnnouncementController::class, 'makeAudioAnnouncement'])->name('announcements.makeAudio');
     Route::put('/announcements/{announcement}', [AnnouncementController::class, 'update'])->name('announcements.update');
     Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
+    Route::delete('/announcements/clear', [AnnouncementController::class, 'clear'])->name('announcements.clear');
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
    
     // Aviavox settings

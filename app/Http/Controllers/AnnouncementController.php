@@ -74,4 +74,16 @@ class AnnouncementController extends Controller
         return redirect()->route('announcements.index')
             ->with('success', 'Announcement deleted successfully.');
     }
+
+    public function clear()
+    {
+        try {
+            Announcement::truncate();
+            return redirect()->route('announcements')
+                ->with('success', 'All announcements have been cleared successfully.');
+        } catch (\Exception $e) {
+            return redirect()->route('announcements')
+                ->with('error', 'Failed to clear announcements: ' . $e->getMessage());
+        }
+    }
 }

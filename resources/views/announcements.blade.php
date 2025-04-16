@@ -15,6 +15,7 @@
                     New Announcement
                 </button>
 
+
                 <!-- Modal -->
                 <div x-show="modalOpen" 
                     x-cloak
