@@ -18,12 +18,15 @@ class UserManagement extends Component
     public $isEditing = false;
     public $showModal = false;
 
-    protected $rules = [
-        'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users,email',
-        'password' => 'required|string|min:8',
-        'role' => 'required|in:user,administrator,admin'
-    ];
+    protected function rules()
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($this->editingUserId)],
+            'password' => $this->isEditing ? 'nullable|string|min:8' : 'required|string|min:8',
+            'role' => 'required|in:user,administrator,admin'
+        ];
+    }
 
     public function mount()
     {
