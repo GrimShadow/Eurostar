@@ -453,8 +453,9 @@ class DownloadAndProcessGtfs implements ShouldQueue
         DB::beginTransaction();
         try {
             $processedStopIds = [];
-            $batchSize = 1000;
-            $batch = [];
+            $created = 0;
+            $updated = 0;
+            $unchanged = 0;
 
             while (($data = fgetcsv($file)) !== FALSE) {
                 $stopData = array_combine($headers, $data);
@@ -469,24 +470,47 @@ class DownloadAndProcessGtfs implements ShouldQueue
                     'stop_lat' => (float)$stopData['stop_lat'],
                     'stop_timezone' => $stopData['stop_timezone'] ?: null,
                     'location_type' => (int)($stopData['location_type'] ?? 0),
+                    'platform_code' => isset($stopData['platform_code']) && $stopData['platform_code'] !== '' ? $stopData['platform_code'] : null,
                     'updated_at' => now()
                 ];
 
-                $batch[] = $formattedData;
+                // Check if stop exists and if it needs updating
+                $existingStop = GtfsStop::where('stop_id', $stopId)->first();
+                
+                if (!$existingStop) {
+                    // Create new stop
+                    GtfsStop::create($formattedData);
+                    $created++;
+                } else {
+                    // Check if data is different
+                    $needsUpdate = false;
+                    foreach ($formattedData as $key => $value) {
+                        if ($existingStop->$key != $value && $key !== 'updated_at') {
+                            $needsUpdate = true;
+                            break;
+                        }
+                    }
 
-                if (count($batch) >= $batchSize) {
-                    $this->processBatch($batch, 'stops');
-                    $batch = [];
+                    if ($needsUpdate) {
+                        $existingStop->update($formattedData);
+                        $updated++;
+                    } else {
+                        $unchanged++;
+                    }
                 }
             }
 
-            if (!empty($batch)) {
-                $this->processBatch($batch, 'stops');
-            }
+            // Remove stops that no longer exist in the file
+            $deleted = GtfsStop::whereNotIn('stop_id', $processedStopIds)->delete();
 
-            GtfsStop::whereNotIn('stop_id', $processedStopIds)->delete();
             DB::commit();
-            Log::info('GTFS stops sync completed');
+
+            Log::info('GTFS stops sync completed', [
+                'created' => $created,
+                'updated' => $updated,
+                'unchanged' => $unchanged,
+                'deleted' => $deleted
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();

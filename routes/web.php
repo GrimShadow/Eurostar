@@ -11,6 +11,7 @@ use App\Http\Controllers\GtfsController;
 use App\Http\Controllers\TokenController;
 use App\Http\Controllers\SelectorController;
 use App\Http\Controllers\AdminSettingsController;
+use App\Http\Controllers\VariablesController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -63,7 +64,8 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
     Route::delete('/settings/logs/clear', [LogsController::class, 'clear'])->name('settings.logs.clear');
 
-    // Admin settings
+    // Admin variables
+    Route::get('/settings/variables', [VariablesController::class, 'index'])->name('settings.variables');
     
 
 });
@@ -107,5 +109,43 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
 });
 
 Route::delete('/settings/aviavox/template/{template}', [AviavoxController::class, 'deleteTemplate'])->name('settings.aviavox.deleteTemplate');
+
+Route::get('/test-platforms', function() {
+    $stops = \App\Models\GtfsStop::whereNotNull('platform_code')
+        ->select('stop_id', 'stop_name', 'platform_code')
+        ->limit(5)
+        ->get();
+    
+    return response()->json($stops);
+});
+
+Route::get('/debug-gtfs', function() {
+    $stopsFile = storage_path('app/gtfs/stops.txt');
+    if (!file_exists($stopsFile)) {
+        return response()->json(['error' => 'stops.txt not found']);
+    }
+
+    $file = fopen($stopsFile, 'r');
+    $headers = fgetcsv($file);
+    $data = [];
+    $count = 0;
+
+    while (($row = fgetcsv($file)) !== FALSE && $count < 5) {
+        $data[] = array_combine($headers, $row);
+        $count++;
+    }
+
+    fclose($file);
+    return response()->json($data);
+});
+
+Route::get('/debug-db', function() {
+    $stops = \App\Models\GtfsStop::whereNotNull('platform_code')
+        ->select('stop_id', 'stop_name', 'platform_code')
+        ->limit(5)
+        ->get();
+    
+    return response()->json($stops);
+});
 
 require __DIR__.'/auth.php';

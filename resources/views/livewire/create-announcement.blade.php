@@ -47,6 +47,16 @@
                 <option value="NLD_AMS">Amsterdam</option>
             </select>
             @break
+            @case('reason')
+            <select wire:model="selectedReason"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
+                <option value="">Select Reason</option>
+                @foreach($reasons as $reason)
+                <option value="{{ $reason->code }}">{{ $reason->name }}</option>
+                @endforeach
+            </select>
+            @break
+            
             @case('text')
             <input type="text" wire:model="textInput"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500"

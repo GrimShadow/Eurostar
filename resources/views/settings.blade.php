@@ -50,12 +50,7 @@
                 </div>
             </div>
 
-            <!-- Reasons Management -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mt-6">
-                <div class="p-6">
-                    <livewire:reasons-management />
-                </div>
-            </div>
+           
         </div>
     </div>
 </x-admin-layout>

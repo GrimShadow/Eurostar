@@ -18,6 +18,9 @@
                     <x-nav-link :href="route('settings.aviavox')" :active="request()->routeIs('settings.aviavox')">
                         {{ __('AviaVox') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('settings.variables')" :active="request()->routeIs('settings.variables')">
+                        {{ __('Variables') }}
+                    </x-nav-link>
                     <x-nav-link :href="route('settings.gtfs')" :active="request()->routeIs('settings.gtfs')">
                         {{ __('GTFS') }}
                     </x-nav-link>

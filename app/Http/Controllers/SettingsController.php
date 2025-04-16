@@ -14,9 +14,7 @@ class SettingsController extends Controller
 {
     public function index()
     {
-        $aviavoxSettings = AviavoxSetting::first();
-        $announcements = AviavoxAnnouncement::all();
-        return view('settings', compact('aviavoxSettings', 'announcements'));
+        return view('settings');
     }
 
     public function updateAviavox(Request $request)

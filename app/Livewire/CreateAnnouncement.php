@@ -9,6 +9,7 @@ use App\Models\AviavoxTemplate;
 use App\Models\Zone;
 use App\Models\GtfsTrip;
 use App\Models\PendingAnnouncement;
+use App\Models\Reason;
 use Livewire\Component;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -26,11 +27,14 @@ class CreateAnnouncement extends Component
     public $scheduledTime = '';
     public $selectedRoute = '';
     public $textInput = '';
+    public $selectedReason = '';
     public $templates = [];
+    public $reasons = [];
 
     public function mount()
     {
         $this->zones = Zone::orderBy('value')->get();
+        $this->reasons = Reason::orderBy('code')->get();
         $this->loadTrains();
         $this->templates = AviavoxTemplate::all()->mapWithKeys(function ($template) {
             return [$template->name => [
@@ -125,6 +129,8 @@ class CreateAnnouncement extends Component
                 return $this->selectedRoute ?? 'GBR_LON'; // Default to London
             case 'text':
                 return $this->textInput;
+            case 'reason':
+                return $this->selectedReason;
             default:
                 return '';
         }

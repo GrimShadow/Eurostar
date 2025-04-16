@@ -49,7 +49,30 @@ class TrainTable extends Component
         $this->total = $query->count();
         $this->trains = $query->skip(($this->page - 1) * $this->perPage)
             ->take($this->perPage)
-            ->get();
+            ->get()
+            ->map(function ($train) {
+                return [
+                    'number' => $train->number,
+                    'departure' => $train->departure,
+                    'route_long_name' => $train->route_long_name,
+                    'status' => $train->status,
+                    'departure_platform' => $train->departure_platform ?? 'TBD',
+                    'arrival_platform' => $train->arrival_platform ?? 'TBD'
+                ];
+            });
+
+        // Debug the first train's data
+        if ($this->trains->isNotEmpty()) {
+            $firstTrain = $this->trains->first();
+            \Illuminate\Support\Facades\Log::info('First train data', [
+                'number' => $firstTrain['number'],
+                'departure' => $firstTrain['departure'],
+                'departure_platform' => $firstTrain['departure_platform'],
+                'arrival_platform' => $firstTrain['arrival_platform'],
+                'route_long_name' => $firstTrain['route_long_name'],
+                'status' => $firstTrain['status']
+            ]);
+        }
     }
 
     public function getTrainsQuery()
@@ -60,15 +83,23 @@ class TrainTable extends Component
         return GtfsTrip::query()
             ->select([
                 'gtfs_trips.trip_short_name as number',
-                'gtfs_stop_times.departure_time as departure',
+                'departure_stop.departure_time as departure',
                 'gtfs_routes.route_long_name',
                 'gtfs_routes.route_short_name',
-                'train_statuses.status'
+                'train_statuses.status',
+                'departure_station.platform_code as departure_platform',
+                'arrival_station.platform_code as arrival_platform'
             ])
-            ->join('gtfs_stop_times', function ($join) {
-                $join->on('gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
-                    ->where('gtfs_stop_times.stop_sequence', 1);
+            ->join('gtfs_stop_times as departure_stop', function ($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'departure_stop.trip_id')
+                    ->where('departure_stop.stop_sequence', 1);
             })
+            ->join('gtfs_stops as departure_station', 'departure_stop.stop_id', '=', 'departure_station.stop_id')
+            ->join('gtfs_stop_times as arrival_stop', function($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'arrival_stop.trip_id')
+                    ->whereRaw('arrival_stop.stop_sequence = (SELECT MAX(stop_sequence) FROM gtfs_stop_times WHERE trip_id = gtfs_trips.trip_id)');
+            })
+            ->join('gtfs_stops as arrival_station', 'arrival_stop.stop_id', '=', 'arrival_station.stop_id')
             ->join('gtfs_calendar_dates', function ($join) use ($today) {
                 $join->on('gtfs_trips.service_id', '=', 'gtfs_calendar_dates.service_id')
                     ->whereDate('gtfs_calendar_dates.date', $today)
@@ -77,8 +108,8 @@ class TrainTable extends Component
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
             ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
             ->whereIn('gtfs_trips.route_id', $this->selectedRoutes)
-            ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
-            ->orderBy('gtfs_stop_times.departure_time');
+            ->where('departure_stop.departure_time', '>=', $currentTime)
+            ->orderBy('departure_stop.departure_time');
     }
 
     public function nextPage()

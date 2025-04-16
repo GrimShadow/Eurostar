@@ -414,6 +414,7 @@
                     <option value="datetime">Date/Time Input</option>
                     <option value="route">Route Selection</option>
                     <option value="text">Text Input</option>
+                    <option value="reason">Reason Selection</option>
                 </select>
             `;
             container.appendChild(div);
