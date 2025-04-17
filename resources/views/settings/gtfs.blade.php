@@ -63,22 +63,36 @@
                                                 '</svg>' +
                                                 'Downloading...' +
                                             '</span>';
-                                            fetch($el.href)
-                                                .then(response => response.json())
-                                                .then(data => {
-                                                    if (data.success) {
-                                                        window.location.reload();
-                                                    } else {
-                                                        alert(data.message || 'Download failed');
-                                                        $el.classList.remove('opacity-50', 'cursor-not-allowed');
-                                                        $el.innerHTML = 'Download Now';
-                                                    }
-                                                })
-                                                .catch(error => {
-                                                    alert('Download failed: ' + error);
+                                            
+                                            fetch($el.href, {
+                                                method: 'GET',
+                                                headers: {
+                                                    'Accept': 'application/json',
+                                                    'X-Requested-With': 'XMLHttpRequest'
+                                                },
+                                                credentials: 'same-origin'
+                                            })
+                                            .then(response => {
+                                                if (!response.ok) {
+                                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                                }
+                                                return response.json();
+                                            })
+                                            .then(data => {
+                                                if (data.success) {
+                                                    window.location.reload();
+                                                } else {
+                                                    alert(data.message || 'Download failed');
                                                     $el.classList.remove('opacity-50', 'cursor-not-allowed');
                                                     $el.innerHTML = 'Download Now';
-                                                });
+                                                }
+                                            })
+                                            .catch(error => {
+                                                console.error('Error:', error);
+                                                alert('Download failed: ' + error.message);
+                                                $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                $el.innerHTML = 'Download Now';
+                                            });
                                             return false;
                                         ">
                                         Download Now
