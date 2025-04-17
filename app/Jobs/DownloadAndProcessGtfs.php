@@ -62,19 +62,36 @@ class DownloadAndProcessGtfs implements ShouldQueue
                 $extractPath = $storagePath . '/current';
                 Log::info('Extract path: ' . $extractPath);
                 
-                // Create directories if they don't exist
+                // Create directories if they don't exist with proper permissions
                 if (!file_exists($storagePath)) {
-                    mkdir($storagePath, 0755, true);
+                    if (!mkdir($storagePath, 0775, true)) {
+                        throw new \Exception('Failed to create storage directory. Check permissions.');
+                    }
+                    // Set proper ownership (assuming www-data is the web server user)
+                    chown($storagePath, 'www-data');
+                    chgrp($storagePath, 'www-data');
+                }
+
+                // Ensure the directory is writable
+                if (!is_writable($storagePath)) {
+                    throw new \Exception('Storage directory is not writable. Current permissions: ' . substr(sprintf('%o', fileperms($storagePath)), -4));
                 }
                 
                 // Save the ZIP content to a file
                 Log::info('Saving ZIP file to: ' . $zipPath);
-                file_put_contents($zipPath, $response->body());
+                if (!file_put_contents($zipPath, $response->body())) {
+                    throw new \Exception('Failed to save ZIP file. Check permissions.');
+                }
                 
                 // Verify the ZIP file exists and is readable
                 if (!file_exists($zipPath)) {
                     throw new \Exception('ZIP file was not saved properly');
                 }
+                
+                // Set proper permissions on the ZIP file
+                chmod($zipPath, 0664);
+                chown($zipPath, 'www-data');
+                chgrp($zipPath, 'www-data');
                 
                 Log::info('ZIP file size: ' . filesize($zipPath) . ' bytes');
 

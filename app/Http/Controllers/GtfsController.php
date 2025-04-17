@@ -71,6 +71,12 @@ class GtfsController extends Controller
                 ], 400);
             }
 
+            // Check storage permissions
+            $storagePath = storage_path('app/gtfs');
+            if (!is_writable(dirname($storagePath))) {
+                throw new \Exception('Storage directory is not writable. Please check permissions on ' . dirname($storagePath));
+            }
+
             // Update settings to indicate download is starting
             $settings->update([
                 'is_downloading' => true,
@@ -102,7 +108,9 @@ class GtfsController extends Controller
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'storage_path' => storage_path('app/gtfs'),
+                'storage_permissions' => is_writable(storage_path('app/gtfs')) ? 'writable' : 'not writable'
             ]);
             
             return response()->json([
