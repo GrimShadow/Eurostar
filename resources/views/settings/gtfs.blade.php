@@ -38,9 +38,27 @@
                                     <p class="text-sm text-gray-600">Last Download: {{ $gtfsSettings->last_download ? $gtfsSettings->last_download->format('Y-m-d H:i:s') : 'Never' }}</p>
                                     <p class="text-sm text-gray-600">Next Download: {{ $gtfsSettings->next_download ? $gtfsSettings->next_download->format('Y-m-d H:i:s') : 'Not Scheduled' }}</p>
                                     @if($gtfsSettings->is_downloading)
-                                        <p class="text-sm text-blue-600">
-                                            Download in progress since {{ $gtfsSettings->download_started_at->format('Y-m-d H:i:s') }}
-                                        </p>
+                                        <div class="mt-2">
+                                            <p class="text-sm text-blue-600">
+                                                <span class="inline-block animate-spin mr-2">⟳</span>
+                                                Download in progress since {{ $gtfsSettings->download_started_at->format('Y-m-d H:i:s') }}
+                                            </p>
+                                            @if($gtfsSettings->download_status)
+                                                <p class="text-sm text-gray-600 mt-1">
+                                                    Status: {{ $gtfsSettings->download_status }}
+                                                </p>
+                                            @endif
+                                            <div class="mt-2">
+                                                <div class="flex justify-between text-sm text-gray-600 mb-1">
+                                                    <span>Progress</span>
+                                                    <span>{{ $gtfsSettings->download_progress ?? 0 }}%</span>
+                                                </div>
+                                                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                                    <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                                                         style="width: {{ $gtfsSettings->download_progress ?? 0 }}%"></div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     @endif
                                 @endif
                             </div>
@@ -72,24 +90,22 @@
                                                 },
                                                 credentials: 'same-origin'
                                             })
-                                            .then(response => {
-                                                if (!response.ok) {
-                                                    throw new Error(`HTTP error! status: ${response.status}`);
-                                                }
-                                                return response.json();
-                                            })
-                                            .then(data => {
-                                                if (data.success) {
-                                                    window.location.reload();
+                                            .then(response => response.json().then(data => {
+                                                if (response.ok) {
+                                                    if (data.status === 'in_progress') {
+                                                        alert(`Download already in progress for ${data.elapsed_time} seconds. Progress: ${data.progress}%. Please wait.`);
+                                                        $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                        $el.innerHTML = 'Download Now';
+                                                    } else {
+                                                        window.location.reload();
+                                                    }
                                                 } else {
-                                                    alert(data.message || 'Download failed');
-                                                    $el.classList.remove('opacity-50', 'cursor-not-allowed');
-                                                    $el.innerHTML = 'Download Now';
+                                                    throw new Error(data.message || 'Download failed');
                                                 }
-                                            })
+                                            }))
                                             .catch(error => {
                                                 console.error('Error:', error);
-                                                alert('Download failed: ' + error.message);
+                                                alert(error.message);
                                                 $el.classList.remove('opacity-50', 'cursor-not-allowed');
                                                 $el.innerHTML = 'Download Now';
                                             });

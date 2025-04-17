@@ -60,26 +60,44 @@ class GtfsController extends Controller
 
         try {
             // Check if a download is already in progress
-            $existingJob = DB::table('jobs')
-                ->where('queue', 'default')
-                ->where('payload', 'like', '%DownloadAndProcessGtfs%')
-                ->first();
-
-            if ($existingJob) {
+            if ($settings->is_downloading) {
+                $elapsed = now()->diffInSeconds($settings->download_started_at);
                 return response()->json([
                     'success' => false,
-                    'message' => 'A download is already in progress. Please wait for it to complete.'
+                    'message' => 'A download is already in progress. Please wait for it to complete.',
+                    'status' => 'in_progress',
+                    'elapsed_time' => $elapsed,
+                    'progress' => $settings->download_progress ?? 0
                 ], 400);
             }
+
+            // Update settings to indicate download is starting
+            $settings->update([
+                'is_downloading' => true,
+                'download_started_at' => now(),
+                'download_status' => 'Starting download...',
+                'download_progress' => 0
+            ]);
 
             // Dispatch the job to handle the download and processing
             DownloadAndProcessGtfs::dispatch();
 
             return response()->json([
                 'success' => true,
-                'message' => 'GTFS data download started. The page will refresh when complete.'
+                'message' => 'GTFS data download started. The page will refresh when complete.',
+                'status' => 'started',
+                'progress' => 0
             ]);
         } catch (\Exception $e) {
+            // Reset the downloading flag if something went wrong
+            if ($settings) {
+                $settings->update([
+                    'is_downloading' => false,
+                    'download_status' => 'Error: ' . $e->getMessage(),
+                    'download_progress' => 0
+                ]);
+            }
+
             Log::error('Failed to start GTFS download', [
                 'error' => $e->getMessage(),
                 'file' => $e->getFile(),
@@ -89,7 +107,9 @@ class GtfsController extends Controller
             
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage()
+                'message' => 'Error: ' . $e->getMessage(),
+                'status' => 'error',
+                'progress' => 0
             ], 500);
         }
     }
