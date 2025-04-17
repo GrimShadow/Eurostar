@@ -57,6 +57,23 @@
                                                     <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
                                                          style="width: {{ $gtfsSettings->download_progress ?? 0 }}%"></div>
                                                 </div>
+                                                <div class="mt-2 grid grid-cols-5 gap-2 text-xs text-gray-500">
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 5 ? 'text-blue-600 font-medium' : '' }}">
+                                                        Download
+                                                    </div>
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 20 ? 'text-blue-600 font-medium' : '' }}">
+                                                        Trips
+                                                    </div>
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 40 ? 'text-blue-600 font-medium' : '' }}">
+                                                        Calendar
+                                                    </div>
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 60 ? 'text-blue-600 font-medium' : '' }}">
+                                                        Routes
+                                                    </div>
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 80 ? 'text-blue-600 font-medium' : '' }}">
+                                                        Stops
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     @endif

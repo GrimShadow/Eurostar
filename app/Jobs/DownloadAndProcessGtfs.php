@@ -22,6 +22,14 @@ class DownloadAndProcessGtfs implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    private function updateProgress($settings, $progress, $status)
+    {
+        $settings->update([
+            'download_progress' => $progress,
+            'download_status' => $status
+        ]);
+    }
+
     public function handle()
     {
         $settings = GtfsSetting::first();
@@ -35,11 +43,14 @@ class DownloadAndProcessGtfs implements ShouldQueue
             // Update settings to show download in progress
             $settings->update([
                 'is_downloading' => true,
-                'download_started_at' => now()
+                'download_started_at' => now(),
+                'download_progress' => 0,
+                'download_status' => 'Starting download...'
             ]);
 
             // Download the ZIP file with increased timeout
             Log::info('Downloading GTFS file from: ' . $settings->url);
+            $this->updateProgress($settings, 5, 'Downloading GTFS file...');
             $response = Http::timeout(300)->get($settings->url);
             
             if ($response->successful()) {
@@ -102,11 +113,20 @@ class DownloadAndProcessGtfs implements ShouldQueue
                     $files = scandir($extractPath);
                     Log::info('Extracted files:', array_diff($files, ['.', '..']));
 
-                    // Process each file
+                    // Process each file with progress updates
+                    $this->updateProgress($settings, 20, 'Processing trips...');
                     $this->syncTripsData($extractPath);
+
+                    $this->updateProgress($settings, 40, 'Processing calendar dates...');
                     $this->syncCalendarDatesData($extractPath);
+
+                    $this->updateProgress($settings, 60, 'Processing routes...');
                     $this->syncRoutesData($extractPath);
+
+                    $this->updateProgress($settings, 80, 'Processing stop times...');
                     $this->syncStopTimesData($extractPath);
+
+                    $this->updateProgress($settings, 90, 'Processing stops...');
                     $this->syncStopsData($extractPath);
 
                     // Update settings
@@ -114,7 +134,9 @@ class DownloadAndProcessGtfs implements ShouldQueue
                         'last_download' => now(),
                         'next_download' => now()->addDay(),
                         'is_downloading' => false,
-                        'download_started_at' => null
+                        'download_started_at' => null,
+                        'download_progress' => 100,
+                        'download_status' => 'Completed successfully'
                     ]);
 
                     Log::info('GTFS data processing completed successfully');
@@ -133,7 +155,9 @@ class DownloadAndProcessGtfs implements ShouldQueue
             // Update settings to show error state
             $settings->update([
                 'is_downloading' => false,
-                'download_started_at' => null
+                'download_started_at' => null,
+                'download_progress' => 0,
+                'download_status' => 'Error: ' . $e->getMessage()
             ]);
 
             throw $e;
@@ -175,13 +199,27 @@ class DownloadAndProcessGtfs implements ShouldQueue
             throw new \Exception('Unable to read trips.txt headers');
         }
 
+        // Get total lines for progress calculation
+        $totalLines = 0;
+        while (fgets($file) !== false) {
+            $totalLines++;
+        }
+        rewind($file);
+        fgetcsv($file); // Skip headers
+
         DB::beginTransaction();
         try {
             $processedTripIds = [];
             $batchSize = 1000;
             $batch = [];
+            $currentLine = 0;
 
             while (($data = fgetcsv($file)) !== FALSE) {
+                $currentLine++;
+                $progress = 20 + (($currentLine / $totalLines) * 20); // 20-40% range
+                $settings = GtfsSetting::first();
+                $this->updateProgress($settings, $progress, "Processing trips: {$currentLine}/{$totalLines}");
+
                 $tripData = array_combine($headers, $data);
                 $tripId = $tripData['trip_id'];
                 $processedTripIds[] = $tripId;
