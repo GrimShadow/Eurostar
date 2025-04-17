@@ -67,9 +67,6 @@ class DownloadAndProcessGtfs implements ShouldQueue
                     if (!mkdir($storagePath, 0775, true)) {
                         throw new \Exception('Failed to create storage directory. Check permissions.');
                     }
-                    // Set proper ownership (assuming www-data is the web server user)
-                    chown($storagePath, 'www-data');
-                    chgrp($storagePath, 'www-data');
                 }
 
                 // Ensure the directory is writable
@@ -90,8 +87,6 @@ class DownloadAndProcessGtfs implements ShouldQueue
                 
                 // Set proper permissions on the ZIP file
                 chmod($zipPath, 0664);
-                chown($zipPath, 'www-data');
-                chgrp($zipPath, 'www-data');
                 
                 Log::info('ZIP file size: ' . filesize($zipPath) . ' bytes');
 
@@ -205,16 +200,20 @@ class DownloadAndProcessGtfs implements ShouldQueue
         }
 
         Log::info('Starting GTFS trips sync');
+        Log::info('Trips file path: ' . $tripsFile);
+        Log::info('File permissions: ' . substr(sprintf('%o', fileperms($tripsFile)), -4));
 
         $file = fopen($tripsFile, 'r');
         if (!$file) {
-            throw new \Exception('Unable to open trips.txt');
+            throw new \Exception('Unable to open trips.txt. Error: ' . error_get_last()['message']);
         }
 
         $headers = fgetcsv($file);
         if (!$headers) {
-            throw new \Exception('Unable to read trips.txt headers');
+            throw new \Exception('Unable to read trips.txt headers. Error: ' . error_get_last()['message']);
         }
+
+        Log::info('Trips headers: ' . implode(', ', $headers));
 
         // Get total lines for progress calculation
         $totalLines = 0;
@@ -230,6 +229,8 @@ class DownloadAndProcessGtfs implements ShouldQueue
             $batchSize = 1000;
             $batch = [];
             $currentLine = 0;
+            $created = 0;
+            $updated = 0;
 
             while (($data = fgetcsv($file)) !== FALSE) {
                 $currentLine++;
@@ -237,40 +238,62 @@ class DownloadAndProcessGtfs implements ShouldQueue
                 $settings = GtfsSetting::first();
                 $this->updateProgress($settings, $progress, "Processing trips: {$currentLine}/{$totalLines}");
 
-                $tripData = array_combine($headers, $data);
-                $tripId = $tripData['trip_id'];
-                $processedTripIds[] = $tripId;
+                try {
+                    $tripData = array_combine($headers, $data);
+                    $tripId = $tripData['trip_id'];
+                    $processedTripIds[] = $tripId;
 
-                $formattedData = [
-                    'route_id' => $tripData['route_id'],
-                    'service_id' => $tripData['service_id'],
-                    'trip_id' => $tripId,
-                    'trip_headsign' => $tripData['trip_headsign'],
-                    'trip_short_name' => $tripData['trip_short_name'],
-                    'direction_id' => (int)$tripData['direction_id'],
-                    'shape_id' => $tripData['shape_id'],
-                    'wheelchair_accessible' => (bool)$tripData['wheelchair_accessible'],
-                    'updated_at' => now()
-                ];
+                    $formattedData = [
+                        'route_id' => $tripData['route_id'],
+                        'service_id' => $tripData['service_id'],
+                        'trip_id' => $tripId,
+                        'trip_headsign' => $tripData['trip_headsign'],
+                        'trip_short_name' => $tripData['trip_short_name'],
+                        'direction_id' => (int)$tripData['direction_id'],
+                        'shape_id' => $tripData['shape_id'],
+                        'wheelchair_accessible' => (bool)$tripData['wheelchair_accessible'],
+                        'updated_at' => now()
+                    ];
 
-                $batch[] = $formattedData;
+                    $batch[] = $formattedData;
 
-                if (count($batch) >= $batchSize) {
-                    $this->processBatch($batch, 'trips');
-                    $batch = [];
+                    if (count($batch) >= $batchSize) {
+                        $this->processBatch($batch, 'trips');
+                        $created += count($batch);
+                        $batch = [];
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error processing trip line ' . $currentLine, [
+                        'error' => $e->getMessage(),
+                        'data' => $data,
+                        'headers' => $headers
+                    ]);
+                    throw $e;
                 }
             }
 
             if (!empty($batch)) {
                 $this->processBatch($batch, 'trips');
+                $created += count($batch);
             }
 
             GtfsTrip::whereNotIn('trip_id', $processedTripIds)->delete();
             DB::commit();
-            Log::info('GTFS trips sync completed');
+            
+            Log::info('GTFS trips sync completed', [
+                'total_lines' => $totalLines,
+                'created' => $created,
+                'updated' => $updated
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('GTFS trips sync failed', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         } finally {
             fclose($file);
@@ -285,17 +308,21 @@ class DownloadAndProcessGtfs implements ShouldQueue
         }
 
         Log::info('Starting GTFS calendar dates sync');
+        Log::info('Calendar dates file path: ' . $calendarDatesFile);
+        Log::info('File permissions: ' . substr(sprintf('%o', fileperms($calendarDatesFile)), -4));
         
         $file = fopen($calendarDatesFile, 'r');
         if (!$file) {
-            throw new \Exception('Unable to open calendar_dates.txt');
+            throw new \Exception('Unable to open calendar_dates.txt. Error: ' . error_get_last()['message']);
         }
 
         try {
             $headers = fgetcsv($file);
             if (!$headers) {
-                throw new \Exception('Unable to read calendar_dates.txt headers');
+                throw new \Exception('Unable to read calendar_dates.txt headers. Error: ' . error_get_last()['message']);
             }
+
+            Log::info('Calendar dates headers: ' . implode(', ', $headers));
 
             DB::beginTransaction();
             
@@ -307,28 +334,37 @@ class DownloadAndProcessGtfs implements ShouldQueue
             $batchSize = 1000;
 
             while (($data = fgetcsv($file)) !== FALSE) {
-                $calendarData = array_combine($headers, $data);
-                
-                // Convert YYYYMMDD to Y-m-d format
-                $dateString = $calendarData['date'];
-                $year = substr($dateString, 0, 4);
-                $month = substr($dateString, 4, 2);
-                $day = substr($dateString, 6, 2);
-                $formattedDate = "{$year}-{$month}-{$day}";
+                try {
+                    $calendarData = array_combine($headers, $data);
+                    
+                    // Convert YYYYMMDD to Y-m-d format
+                    $dateString = $calendarData['date'];
+                    $year = substr($dateString, 0, 4);
+                    $month = substr($dateString, 4, 2);
+                    $day = substr($dateString, 6, 2);
+                    $formattedDate = "{$year}-{$month}-{$day}";
 
-                $batch[] = [
-                    'service_id' => $calendarData['service_id'],
-                    'date' => $formattedDate,
-                    'exception_type' => (int)$calendarData['exception_type'],
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ];
-                
-                $created++;
+                    $batch[] = [
+                        'service_id' => $calendarData['service_id'],
+                        'date' => $formattedDate,
+                        'exception_type' => (int)$calendarData['exception_type'],
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ];
+                    
+                    $created++;
 
-                if (count($batch) >= $batchSize) {
-                    GtfsCalendarDate::insert($batch);
-                    $batch = [];
+                    if (count($batch) >= $batchSize) {
+                        GtfsCalendarDate::insert($batch);
+                        $batch = [];
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error processing calendar date line', [
+                        'error' => $e->getMessage(),
+                        'data' => $data,
+                        'headers' => $headers
+                    ]);
+                    throw $e;
                 }
             }
 
@@ -347,6 +383,12 @@ class DownloadAndProcessGtfs implements ShouldQueue
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();
             }
+            Log::error('GTFS calendar dates sync failed', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         } finally {
             fclose($file);
@@ -361,57 +403,84 @@ class DownloadAndProcessGtfs implements ShouldQueue
         }
 
         Log::info('Starting GTFS routes sync');
+        Log::info('Routes file path: ' . $routesFile);
+        Log::info('File permissions: ' . substr(sprintf('%o', fileperms($routesFile)), -4));
 
         $file = fopen($routesFile, 'r');
         if (!$file) {
-            throw new \Exception('Unable to open routes.txt');
+            throw new \Exception('Unable to open routes.txt. Error: ' . error_get_last()['message']);
         }
 
         $headers = fgetcsv($file);
         if (!$headers) {
-            throw new \Exception('Unable to read routes.txt headers');
+            throw new \Exception('Unable to read routes.txt headers. Error: ' . error_get_last()['message']);
         }
+
+        Log::info('Routes headers: ' . implode(', ', $headers));
 
         DB::beginTransaction();
         try {
             $processedRouteIds = [];
             $batchSize = 1000;
             $batch = [];
+            $created = 0;
+            $updated = 0;
 
             while (($data = fgetcsv($file)) !== FALSE) {
-                $routeData = array_combine($headers, $data);
-                $routeId = $routeData['route_id'];
-                $processedRouteIds[] = $routeId;
+                try {
+                    $routeData = array_combine($headers, $data);
+                    $routeId = $routeData['route_id'];
+                    $processedRouteIds[] = $routeId;
 
-                $formattedData = [
-                    'route_id' => $routeId,
-                    'agency_id' => $routeData['agency_id'],
-                    'route_short_name' => $routeData['route_short_name'],
-                    'route_long_name' => $routeData['route_long_name'],
-                    'route_type' => (int)$routeData['route_type'],
-                    'route_color' => $routeData['route_color'] ?? null,
-                    'route_text_color' => $routeData['route_text_color'] ?? null,
-                    'updated_at' => now()
-                ];
+                    $formattedData = [
+                        'route_id' => $routeId,
+                        'agency_id' => $routeData['agency_id'],
+                        'route_short_name' => $routeData['route_short_name'],
+                        'route_long_name' => $routeData['route_long_name'],
+                        'route_type' => (int)$routeData['route_type'],
+                        'route_color' => $routeData['route_color'] ?? null,
+                        'route_text_color' => $routeData['route_text_color'] ?? null,
+                        'updated_at' => now()
+                    ];
 
-                $batch[] = $formattedData;
+                    $batch[] = $formattedData;
 
-                if (count($batch) >= $batchSize) {
-                    $this->processBatch($batch, 'routes');
-                    $batch = [];
+                    if (count($batch) >= $batchSize) {
+                        $this->processBatch($batch, 'routes');
+                        $created += count($batch);
+                        $batch = [];
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error processing route line', [
+                        'error' => $e->getMessage(),
+                        'data' => $data,
+                        'headers' => $headers
+                    ]);
+                    throw $e;
                 }
             }
 
             if (!empty($batch)) {
                 $this->processBatch($batch, 'routes');
+                $created += count($batch);
             }
 
             GtfsRoute::whereNotIn('route_id', $processedRouteIds)->delete();
             DB::commit();
-            Log::info('GTFS routes sync completed');
+            
+            Log::info('GTFS routes sync completed', [
+                'created' => $created,
+                'updated' => $updated
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('GTFS routes sync failed', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         } finally {
             fclose($file);
@@ -593,37 +662,46 @@ class DownloadAndProcessGtfs implements ShouldQueue
 
     private function processBatch($batch, $type)
     {
-        switch ($type) {
-            case 'trips':
-                foreach ($batch as $data) {
-                    $existingTrip = GtfsTrip::where('trip_id', $data['trip_id'])->first();
-                    if (!$existingTrip) {
-                        GtfsTrip::create($data);
-                    } else {
-                        $existingTrip->update($data);
+        try {
+            switch ($type) {
+                case 'trips':
+                    foreach ($batch as $data) {
+                        $existingTrip = GtfsTrip::where('trip_id', $data['trip_id'])->first();
+                        if (!$existingTrip) {
+                            GtfsTrip::create($data);
+                        } else {
+                            $existingTrip->update($data);
+                        }
                     }
-                }
-                break;
-            case 'routes':
-                foreach ($batch as $data) {
-                    $existingRoute = GtfsRoute::where('route_id', $data['route_id'])->first();
-                    if (!$existingRoute) {
-                        GtfsRoute::create($data);
-                    } else {
-                        $existingRoute->update($data);
+                    break;
+                case 'routes':
+                    foreach ($batch as $data) {
+                        $existingRoute = GtfsRoute::where('route_id', $data['route_id'])->first();
+                        if (!$existingRoute) {
+                            GtfsRoute::create($data);
+                        } else {
+                            $existingRoute->update($data);
+                        }
                     }
-                }
-                break;
-            case 'stops':
-                foreach ($batch as $data) {
-                    $existingStop = GtfsStop::where('stop_id', $data['stop_id'])->first();
-                    if (!$existingStop) {
-                        GtfsStop::create($data);
-                    } else {
-                        $existingStop->update($data);
+                    break;
+                case 'stops':
+                    foreach ($batch as $data) {
+                        $existingStop = GtfsStop::where('stop_id', $data['stop_id'])->first();
+                        if (!$existingStop) {
+                            GtfsStop::create($data);
+                        } else {
+                            $existingStop->update($data);
+                        }
                     }
-                }
-                break;
+                    break;
+            }
+        } catch (\Exception $e) {
+            Log::error('Error processing batch for ' . $type, [
+                'error' => $e->getMessage(),
+                'batch_size' => count($batch),
+                'first_item' => $batch[0] ?? null
+            ]);
+            throw $e;
         }
     }
 } 
