@@ -78,7 +78,7 @@
                                 <select wire:model.live="selectedTemplate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                                     <option value="">Select Template</option>
                                     @foreach($availableTemplates as $template)
-                                        <option value="{{ $template->id }}">{{ $template->name }}</option>
+                                        <option value="{{ $template->id }}">{{ $template->friendly_name }}</option>
                                     @endforeach
                                 </select>
                                 @error('selectedTemplate') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
@@ -165,7 +165,7 @@
                                         $template = \App\Models\AviavoxTemplate::find($announcementData['template_id']);
                                         $zone = $announcementData['zone'] ?? 'unknown';
                                     @endphp
-                                    Make announcement: {{ $template->name }} 
+                                    Make announcement: {{ $template->friendly_name }} 
                                     <span class="text-gray-500">({{ $zone }})</span>
                                     @if(count($announcementData['variables'] ?? []) > 0)
                                         <div class="text-xs text-gray-500 mt-1">
