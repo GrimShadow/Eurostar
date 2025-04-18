@@ -125,11 +125,11 @@ class CreateAnnouncement extends Component
                 return $train ? $train->trip_headsign : '';
             case 'datetime':
                 if ($this->scheduledTime) {
-                    // Parse the time in the local timezone
-                    $localTime = Carbon::parse($this->scheduledTime, 'Europe/London');
-                    // Convert to UTC for Aviavox
-                    $utcTime = $localTime->setTimezone('UTC');
-                    return $utcTime->format('Y-m-d\TH:i:s\Z');
+                    // Parse the time in Amsterdam timezone (CET/CEST)
+                    $localTime = Carbon::parse($this->scheduledTime, 'Europe/Amsterdam');
+                    // Get the current timezone offset (UTC+1 or UTC+2)
+                    $offset = $localTime->format('P'); // This will give us +01:00 or +02:00
+                    return $localTime->format('Y-m-d\TH:i:s') . $offset;
                 }
                 return '';
             case 'route':
