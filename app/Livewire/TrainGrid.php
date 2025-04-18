@@ -104,7 +104,7 @@ class TrainGrid extends Component
                 'gtfs_trips.trip_headsign as destination',
                 'train_statuses.status as train_status',
                 'statuses.status as status_text',
-                'statuses.color',
+                'statuses.color_rgb',
                 'departure_station.platform_code as departure_platform',
                 'arrival_station.platform_code as arrival_platform'
             ])
@@ -120,7 +120,7 @@ class TrainGrid extends Component
                     'route_name' => $train->route_long_name,
                     'destination' => $train->destination,
                     'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
-                    'status_color' => $train->color ?? 'gray',
+                    'status_color' => $train->color_rgb ?? '156,163,175',
                     'departure_platform' => $train->departure_platform ?? 'TBD',
                     'arrival_platform' => $train->arrival_platform ?? 'TBD'
                 ];

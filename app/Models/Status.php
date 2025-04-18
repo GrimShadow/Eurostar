@@ -11,6 +11,11 @@ class Status extends Model
 
     protected $fillable = [
         'status',
-        'color'
+        'color_name',
+        'color_rgb'
+    ];
+
+    protected $casts = [
+        'color_rgb' => 'string'
     ];
 }

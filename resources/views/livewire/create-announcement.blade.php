@@ -5,6 +5,11 @@
             <select wire:model.live="selectedAnnouncement"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
                 <option value="">Select announcement type</option>
+                @php
+                    uasort($templates, function($a, $b) {
+                        return strcmp($a['friendly_name'], $b['friendly_name']);
+                    });
+                @endphp
                 @foreach($templates as $type => $template)
                     <option value="{{ $type }}">{{ $template['friendly_name'] }}</option>
                 @endforeach
@@ -35,7 +40,7 @@
             </select>
             @break
             @case('datetime')
-            <input type="datetime-local" wire:model="scheduledTime"
+            <input type="time" wire:model="scheduledTime"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
             @break
             @case('route')
@@ -58,9 +63,9 @@
             @break
             
             @case('text')
-            <input type="text" wire:model="textInput"
+            <input type="number" wire:model="textInput" min="1" max="999"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500"
-                placeholder="Enter text">
+                placeholder="Enter delay in minutes">
             @break
             @endswitch
         </div>

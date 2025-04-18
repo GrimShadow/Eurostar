@@ -413,7 +413,7 @@
                     <option value="train">Train Number (from trips)</option>
                     <option value="datetime">Date/Time Input</option>
                     <option value="route">Route Selection</option>
-                    <option value="text">Text Input</option>
+                    <option value="text">Delay in minutes</option>
                     <option value="reason">Reason Selection</option>
                 </select>
             `;

@@ -55,12 +55,7 @@
                         <div class="mt-4">
                             <div class="text-sm text-gray-500 mb-1">Status</div>
                             <div class="flex items-center">
-                                <span class="text-lg font-semibold {{ 
-                                    $train['status_color'] === 'red' ? 'text-red-600' : 
-                                    ($train['status_color'] === 'green' ? 'text-green-600' : 
-                                    ($train['status_color'] === 'yellow' ? 'text-yellow-600' : 
-                                    'text-gray-900')) 
-                                }}">
+                                <span class="text-lg font-semibold" style="color: rgb({{ $train['status_color'] }});">
                                     @php
                                         $status = $train['status'] ?? 'on-time';
                                         if (is_numeric($status)) {

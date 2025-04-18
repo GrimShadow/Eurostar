@@ -14,7 +14,8 @@ return new class extends Migration
         Schema::create('statuses', function (Blueprint $table) {
             $table->id();
             $table->string('status')->unique();
-            $table->string('color');
+            $table->string('color_name')->nullable(); // For backward compatibility
+            $table->string('color_rgb')->nullable(); // Store RGB value as string (e.g., "255,0,0")
             $table->timestamps();
         });
     }

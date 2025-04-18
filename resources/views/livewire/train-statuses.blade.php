@@ -3,7 +3,7 @@
     <div class="p-6">
         <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Add New Train Status</h3>
         <form wire:submit="save" class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Status Name</label>
                     <input type="text" wire:model="newStatus" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
@@ -11,14 +11,15 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Color</label>
-                    <select wire:model="newColor" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
-                        <option value="gray">Gray</option>
-                        <option value="red">Red</option>
-                        <option value="green">Green</option>
-                        <option value="yellow">Yellow</option>
-                    </select>
-                    @error('newColor') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    <label class="block text-sm font-medium text-gray-700">Color Name</label>
+                    <input type="text" wire:model="newColorName" placeholder="e.g., Red, Blue, Green" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                    @error('newColorName') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">RGB Value</label>
+                    <input type="text" wire:model="newColorRgb" placeholder="e.g., 255,0,0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                    @error('newColorRgb') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                 </div>
             </div>
 
@@ -38,7 +39,9 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">RGB Value</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preview</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
@@ -48,13 +51,17 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {{ $status->status }}
                             </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ $status->color_name ?? 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ $status->color_rgb ?? 'N/A' }}
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                    {{ $status->color === 'red' ? 'bg-red-100 text-red-800' : 
-                                       ($status->color === 'green' ? 'bg-green-100 text-green-800' : 
-                                       ($status->color === 'yellow' ? 'bg-yellow-100 text-yellow-800' : 
-                                       'bg-gray-100 text-gray-800')) }}">
-                                    {{ ucfirst($status->color) }}
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                                    style="background-color: rgb({{ $status->color_rgb }}); 
+                                    color: white;">
+                                    Preview
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

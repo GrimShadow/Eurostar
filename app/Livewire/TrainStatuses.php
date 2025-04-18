@@ -11,11 +11,13 @@ class TrainStatuses extends Component
     use WithPagination;
 
     public $newStatus = '';
-    public $newColor = 'gray';
+    public $newColorName = '';
+    public $newColorRgb = '';
 
     protected $rules = [
         'newStatus' => 'required|string|max:255|unique:statuses,status',
-        'newColor' => 'required|in:gray,red,green,yellow'
+        'newColorName' => 'required|string|max:255',
+        'newColorRgb' => 'required|regex:/^\d{1,3},\d{1,3},\d{1,3}$/'
     ];
 
     public function save()
@@ -24,10 +26,11 @@ class TrainStatuses extends Component
 
         Status::create([
             'status' => $this->newStatus,
-            'color' => $this->newColor
+            'color_name' => $this->newColorName,
+            'color_rgb' => $this->newColorRgb
         ]);
 
-        $this->reset(['newStatus', 'newColor']);
+        $this->reset(['newStatus', 'newColorName', 'newColorRgb']);
         session()->flash('success', 'Status created successfully.');
     }
 
