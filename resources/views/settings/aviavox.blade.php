@@ -362,7 +362,7 @@
                 input = `<input type="datetime-local" name="parameters[${param}]" 
                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">`;
                 break;
-            case 'Quantity':
+            case 'Delay in minutes':
                 input = `<input type="number" name="parameters[${param}]" min="1" max="99"
                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">`;
                 break;

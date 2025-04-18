@@ -106,12 +106,18 @@ class CreateAnnouncement extends Component
         foreach ($template['variables'] as $id => $type) {
             $value = $this->getVariableValue($id, $type);
             $xml .= "\t\t\t<Item ID=\"{$id}\" Value=\"{$value}\"/>\n";
+            Log::info('Announcement Variable', [
+                'id' => $id,
+                'type' => $type,
+                'value' => $value
+            ]);
         }
 
         $xml .= "\t\t</AnnouncementData>\n";
         $xml .= "\t</MessageData>\n";
         $xml .= "</AIP>";
 
+        Log::info('Generated XML for Aviavox', ['xml' => $xml]);
         return $xml;
     }
 
