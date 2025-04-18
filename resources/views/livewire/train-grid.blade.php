@@ -4,6 +4,7 @@
             selectedTrain: null,
             status: 'on-time',
             newTime: null,
+            platform: null,
             init() {
                 this.$watch('selectedTrain', value => {
                     if (value) {
@@ -39,7 +40,7 @@
                                     <div>
                                         <div class="text-sm text-gray-500 mb-1">Departure</div>
                                         <div class="text-2xl font-bold">{{ $train['departure'] }}</div>
-                                        <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] }}</div>
+                                        <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] ?? 'TBD' }}</div>
                                     </div>
                                     <div class="text-right">
                                         <div class="text-sm text-gray-500 mb-1">Arrival</div>
@@ -108,6 +109,13 @@
                                     class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                 <p class="mt-1 text-sm text-gray-500">Update the departure time if needed</p>
                             </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+                                <input type="text" x-model="platform"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    placeholder="Enter platform number">
+                            </div>
                         </div>
 
                         <div class="flex justify-end space-x-3 mt-6">
@@ -119,7 +127,8 @@
                                 wire:click="updateTrainStatus(
                                     JSON.parse(selectedTrain).number,
                                     status,
-                                    newTime
+                                    newTime,
+                                    platform
                                 )"
                                 @click="modalOpen = false"
                                 type="button" 

@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\GtfsRoute;
 use App\Models\Setting;
 use Livewire\Component;
+use Illuminate\Support\Facades\DB;
 
 class TrainTableSelector extends Component
 {
@@ -18,18 +19,21 @@ class TrainTableSelector extends Component
         $this->selectedRoutes = $setting ? $setting->value : [];
     }
 
-    public function toggleRoute($routeId)
+    public function toggleTableRoute($routeId)
     {
         if (in_array($routeId, $this->selectedRoutes)) {
             $this->selectedRoutes = array_diff($this->selectedRoutes, [$routeId]);
+            DB::table('train_table_routes')
+                ->where('route_id', $routeId)
+                ->update(['is_active' => false]);
         } else {
             $this->selectedRoutes[] = $routeId;
+            DB::table('train_table_routes')
+                ->updateOrInsert(
+                    ['route_id' => $routeId],
+                    ['is_active' => true, 'created_at' => now(), 'updated_at' => now()]
+                );
         }
-        
-        Setting::updateOrCreate(
-            ['key' => 'train_table_routes'],
-            ['value' => $this->selectedRoutes]
-        );
     }
 
     public function render()

@@ -10,7 +10,7 @@
                     @foreach($routes as $route)
                         <div class="flex items-center space-x-3 p-4 border rounded-lg {{ in_array($route->route_id, $selectedRoutes) ? 'border-neutral-500 bg-neutral-50' : 'border-gray-200' }}">
                             <input type="checkbox" 
-                                wire:click="toggleRoute('{{ $route->route_id }}')"
+                                wire:click="toggleTableRoute('{{ $route->route_id }}')"
                                 {{ in_array($route->route_id, $selectedRoutes) ? 'checked' : '' }}
                                 class="h-4 w-4 text-neutral-600 focus:ring-neutral-500 border-gray-300 rounded">
                             <label class="flex-1">

@@ -44,12 +44,9 @@
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
             @break
             @case('route')
-            <select wire:model="selectedRoute"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500">
+            <select wire:model="selectedRoute" disabled
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-neutral-500 focus:ring-neutral-500 bg-gray-100">
                 <option value="GBR_LON">London</option>
-                <option value="FRA_PAR">Paris</option>
-                <option value="BEL_BRU">Brussels</option>
-                <option value="NLD_AMS">Amsterdam</option>
             </select>
             @break
             @case('reason')

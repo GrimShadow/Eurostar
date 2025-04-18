@@ -124,7 +124,14 @@ class CreateAnnouncement extends Component
                 $train = GtfsTrip::where('trip_headsign', $this->selectedTrain)->first();
                 return $train ? $train->trip_headsign : '';
             case 'datetime':
-                return $this->scheduledTime ? date('Y-m-d\TH:i:s\Z', strtotime($this->scheduledTime)) : '';
+                if ($this->scheduledTime) {
+                    // Parse the time in the local timezone
+                    $localTime = Carbon::parse($this->scheduledTime, 'Europe/London');
+                    // Convert to UTC for Aviavox
+                    $utcTime = $localTime->setTimezone('UTC');
+                    return $utcTime->format('Y-m-d\TH:i:s\Z');
+                }
+                return '';
             case 'route':
                 return $this->selectedRoute ?? 'GBR_LON'; // Default to London
             case 'text':
