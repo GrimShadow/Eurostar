@@ -1,5 +1,7 @@
 <div>
-    <form wire:submit.prevent="save" class="space-y-4">
+    <form x-data="{ submitting: false }" 
+          @submit.prevent="submitting = true; $wire.save().then(() => { submitting = false })"
+          class="space-y-4">
         <div>
             <label class="block text-sm font-medium text-gray-700">Announcement Type</label>
             <select wire:model.live="selectedAnnouncement"
@@ -71,17 +73,10 @@
 
         <div class="flex justify-end space-x-2">
             <button type="submit"
-                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
+                :disabled="submitting"
+                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500 disabled:opacity-50">
                 Send Announcement
             </button>
         </div>
     </form>
-
-    <!-- Spinner Modal Overlay -->
-    <div wire:loading wire:target="save" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-        <div class="bg-white p-8 rounded-lg shadow-xl text-center">
-            <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-neutral-600 border-t-transparent"></div>
-            <p class="mt-4 text-lg font-medium text-neutral-600">Announcement in progress...</p>
-        </div>
-    </div>
 </div>

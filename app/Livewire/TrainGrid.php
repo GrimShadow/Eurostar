@@ -41,22 +41,31 @@ class TrainGrid extends Component
 
     public function loadTrains()
     {
-        $now = now();
-        $startTime = $now->copy()->subHours(2);
-        $endTime = $now->copy()->addHours(2);
-
         $selectedRoutes = DB::table('selected_routes')
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
 
-        Log::info('Selected Routes', ['routes' => $selectedRoutes]);
+        Log::info('TrainGrid - Debug Info', [
+            'selected_routes' => $selectedRoutes,
+            'total_routes' => DB::table('gtfs_routes')->count(),
+            'total_trips' => DB::table('gtfs_trips')->count(),
+            'total_stop_times' => DB::table('gtfs_stop_times')->count()
+        ]);
 
         if (empty($selectedRoutes)) {
-            Log::info('No routes selected, returning empty trains array');
+            Log::info('TrainGrid - No routes selected, returning empty trains array');
             $this->trains = [];
             return;
         }
+
+        $now = Carbon::now();
+        $twentyMinutesAgo = $now->copy()->subMinutes(20);
+
+        Log::info('Time Filtering', [
+            'current_time' => $now->format('H:i:s'),
+            'twenty_minutes_ago' => $twentyMinutesAgo->format('H:i:s')
+        ]);
 
         $trains = GtfsTrip::query()
             ->distinct()
@@ -115,8 +124,6 @@ class TrainGrid extends Component
             ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
             ->leftJoin('statuses', 'train_statuses.status', '=', 'statuses.status')
             ->whereIn('gtfs_trips.route_id', $selectedRoutes)
-            ->where('departure_stop.departure_time', '>=', $startTime->format('H:i:s'))
-            ->where('departure_stop.departure_time', '<=', $endTime->format('H:i:s'))
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('gtfs_calendar_dates')
@@ -124,12 +131,22 @@ class TrainGrid extends Component
                     ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
                     ->where('gtfs_calendar_dates.exception_type', 1);
             })
+            ->where(function($query) use ($now, $twentyMinutesAgo) {
+                // Show trains that departed in the last 20 minutes
+                $query->whereRaw('TIME(departure_stop.departure_time) BETWEEN TIME(?) AND TIME(?)', [
+                    $twentyMinutesAgo->format('H:i:s'),
+                    $now->format('H:i:s')
+                ])
+                // OR show future trains
+                ->orWhereRaw('TIME(departure_stop.departure_time) > TIME(?)', [$now->format('H:i:s')]);
+            })
             ->orderBy('departure_stop.departure_time')
             ->get();
 
         Log::info('Found Trains', [
             'count' => $trains->count(),
-            'routes' => $trains->pluck('route_id')->unique()->values()->toArray()
+            'routes' => $trains->pluck('route_id')->unique()->values()->toArray(),
+            'departure_times' => $trains->pluck('departure_time')->toArray()
         ]);
 
         $this->trains = $trains->map(function ($train) {

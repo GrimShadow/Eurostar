@@ -263,10 +263,19 @@ class CreateAnnouncement extends Component
                 'recurrence' => null, // No recurrence for immediate announcements
             ]);
 
+            // Close the modal immediately
+            $this->dispatch('close-modal');
+
+            // Trigger the announcement banner
+            $this->dispatch('showAnnouncementBanner');
+
+            // Dispatch the announcement-sent event
+            $this->dispatch('announcement-sent');
+
             session()->flash('success', 'Announcement sent successfully');
             
-            // Refresh the page immediately
-            $this->js('window.location.reload()');
+            // Schedule the page refresh to happen after a short delay
+            $this->js('setTimeout(() => window.location.reload(), 100)');
 
         } catch (\Exception $e) {
             Log::error('Failed to send announcement: ' . $e->getMessage());

@@ -4,42 +4,65 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Carbon\Carbon;
 
 class TrainRule extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'name',
-        'condition_type',
-        'operator',
-        'value',
         'action',
         'action_value',
-        'is_active',
-        'announcement_text'
+        'is_active'
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'value' => 'string'
+        'action_value' => 'array'
     ];
+
+    public function conditions()
+    {
+        return $this->hasMany(RuleCondition::class)->orderBy('order');
+    }
 
     public function status()
     {
         return $this->belongsTo(Status::class, 'action_value');
     }
 
-    public function conditionStatus()
+    public function shouldTrigger($train)
     {
-        return $this->belongsTo(Status::class, 'value');
+        $conditions = $this->conditions;
+        
+        if ($conditions->isEmpty()) {
+            return false;
+        }
+
+        $result = $conditions->first()->evaluate($train);
+        
+        foreach ($conditions->skip(1) as $condition) {
+            if ($condition->logical_operator === 'and') {
+                $result = $result && $condition->evaluate($train);
+            } else {
+                $result = $result || $condition->evaluate($train);
+            }
+        }
+
+        return $result;
     }
 
-    public function getValueAttribute($value)
+    private function compare($value1, $value2)
     {
-        if ($this->condition_type === 'current_status') {
-            return $value;
+        switch ($this->operator) {
+            case '>':
+                return $value1 > $value2;
+            case '<':
+                return $value1 < $value2;
+            case '=':
+                return $value1 == $value2;
+            default:
+                return false;
         }
-        return (int)$value;
     }
 }

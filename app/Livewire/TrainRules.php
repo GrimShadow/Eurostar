@@ -6,8 +6,10 @@ use App\Models\TrainRule;
 use App\Models\Status;
 use App\Models\AviavoxTemplate;
 use App\Models\Zone;
+use App\Models\RuleCondition;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Illuminate\Support\Facades\Log;
 
 class TrainRules extends Component
 {
@@ -27,68 +29,32 @@ class TrainRules extends Component
     public $templateVariables = [];
     public $availableTemplates;
     public $zones;
+    public $valueField = [];
+    public $conditions = [];
+    public $logicalOperators = ['and' => 'AND', 'or' => 'OR'];
 
     protected function rules()
     {
         $rules = [
-            'conditionType' => 'required|in:time_until_departure,time_since_arrival,platform_change,delay_duration,current_status,time_of_day',
-            'operator' => [
-                'required',
-                function ($attribute, $value, $fail) {
-                    $validOperators = match ($this->conditionType) {
-                        'platform_change' => ['='],
-                        'current_status' => ['='],
-                        default => ['>', '<', '=']
-                    };
-                    
-                    if (!in_array($value, $validOperators)) {
-                        $fail('The selected operator is invalid for this condition type.');
-                    }
-                }
-            ],
-            'value' => [
-                'required',
-                function ($attribute, $value, $fail) {
-                    switch ($this->conditionType) {
-                        case 'time_until_departure':
-                        case 'time_since_arrival':
-                        case 'delay_duration':
-                            if (!is_numeric($value) || $value < 0) {
-                                $fail('The value must be a positive number of minutes.');
-                            }
-                            break;
-                        case 'time_of_day':
-                            if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $value)) {
-                                $fail('The value must be a valid time in 24-hour format (HH:MM).');
-                            }
-                            break;
-                        case 'current_status':
-                            if (!Status::where('id', $value)->exists()) {
-                                $fail('The selected status is invalid.');
-                            }
-                            break;
-                    }
-                }
-            ],
+            'conditions' => 'required|array|min:1',
+            'conditions.*.condition_type' => 'required|in:time_until_departure,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number',
+            'conditions.*.operator' => 'required',
+            'conditions.*.value' => 'required',
             'action' => 'required|in:set_status,make_announcement',
-            'actionValue' => [
-                'required_if:action,set_status',
-                'exists:statuses,id'
-            ],
-            'isActive' => 'boolean',
         ];
 
-        // Add announcement-specific rules only when make_announcement is selected
-        if ($this->action === 'make_announcement') {
+        // Add action-specific validation
+        if ($this->action === 'set_status') {
+            $rules['actionValue'] = 'required|exists:statuses,id';
+        } elseif ($this->action === 'make_announcement') {
             $rules['selectedTemplate'] = 'required|exists:aviavox_templates,id';
             $rules['announcementZone'] = 'required';
 
-            // Add validation rules for template variables dynamically
             if ($this->selectedTemplate) {
                 $template = AviavoxTemplate::find($this->selectedTemplate);
                 if ($template && !empty($template->variables)) {
                     foreach ($template->variables as $variable) {
-                        if ($variable !== 'zone') { // Skip zone as it's handled separately
+                        if ($variable !== 'zone') {
                             $rules["templateVariables.$variable"] = 'required';
                         }
                     }
@@ -104,6 +70,54 @@ class TrainRules extends Component
         $this->statuses = Status::orderBy('status')->get();
         $this->availableTemplates = AviavoxTemplate::all();
         $this->zones = Zone::orderBy('value')->get();
+        $this->valueField = [
+            'type' => 'text',
+            'label' => 'Value'
+        ];
+        $this->actionValue = '';
+        $this->addCondition();
+    }
+
+    public function addCondition()
+    {
+        $this->conditions[] = [
+            'condition_type' => '',
+            'operator' => '',
+            'value' => '',
+            'logical_operator' => 'and'
+        ];
+    }
+
+    public function removeCondition($index)
+    {
+        unset($this->conditions[$index]);
+        $this->conditions = array_values($this->conditions);
+    }
+
+    public function updatedConditions($value, $key)
+    {
+        $parts = explode('.', $key);
+        $index = $parts[0];
+        $field = $parts[1];
+
+        if ($field === 'condition_type') {
+            $this->conditions[$index]['operator'] = '';
+            $this->conditions[$index]['value'] = '';
+            
+            // Update the value field based on the new condition type
+            switch ($value) {
+                case 'time_until_departure':
+                case 'time_since_arrival':
+                case 'delay_duration':
+                    $this->conditions[$index]['value'] = '0';
+                    break;
+                case 'time_of_day':
+                    $this->conditions[$index]['value'] = now()->format('H:i');
+                    break;
+                default:
+                    $this->conditions[$index]['value'] = '';
+            }
+        }
     }
 
     public function updatedSelectedTemplate($value)
@@ -122,37 +136,100 @@ class TrainRules extends Component
         }
     }
 
+    public function updatedConditionType($value)
+    {
+        $this->reset(['operator', 'value', 'action', 'actionValue', 'selectedTemplate', 'templateVariables']);
+        
+        switch ($value) {
+            case 'time_until_departure':
+            case 'time_since_arrival':
+            case 'delay_duration':
+                $this->valueField = [
+                    'type' => 'number',
+                    'label' => 'Minutes',
+                    'min' => 0,
+                    'step' => 1
+                ];
+                break;
+            case 'platform_change':
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Platform',
+                    'placeholder' => 'Enter platform number'
+                ];
+                break;
+            case 'current_status':
+                $this->valueField = [
+                    'type' => 'select',
+                    'label' => 'Status',
+                    'options' => Status::pluck('status', 'id')->toArray()
+                ];
+                break;
+            case 'time_of_day':
+                $this->valueField = [
+                    'type' => 'time',
+                    'label' => 'Time'
+                ];
+                break;
+            case 'train_number':
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Train Number',
+                    'placeholder' => 'Enter train number'
+                ];
+                break;
+            default:
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Value'
+                ];
+        }
+    }
+
+    public function updatedAction($value)
+    {
+        Log::info('Action updated:', [
+            'action' => $value,
+            'statuses' => $this->statuses->toArray()
+        ]);
+        
+        // Reset the action-specific fields
+        $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables']);
+        
+        // Force a re-render
+        $this->dispatch('action-updated', action: $value);
+    }
+
     public function save()
     {
-        $validatedData = $this->validate();
+        $this->validate();
 
-        if ($this->action === 'make_announcement') {
-            $announcementData = [
+        // Create the rule
+        $rule = TrainRule::create([
+            'action' => $this->action,
+            'action_value' => $this->action === 'set_status' ? $this->actionValue : json_encode([
                 'template_id' => $this->selectedTemplate,
                 'zone' => $this->announcementZone,
                 'variables' => $this->templateVariables
-            ];
-            $actionValue = json_encode($announcementData);
-        } else {
-            $actionValue = $this->actionValue;
-        }
+            ]),
+            'is_active' => true
+        ]);
 
-        try {
-            TrainRule::create([
-                'condition_type' => $this->conditionType,
-                'operator' => $this->operator,
-                'value' => $this->value,
-                'action' => $this->action,
-                'action_value' => $actionValue,
-                'is_active' => $this->isActive,
+        // Save each condition
+        foreach ($this->conditions as $index => $condition) {
+            $ruleCondition = new RuleCondition([
+                'condition_type' => $condition['condition_type'],
+                'operator' => $condition['operator'],
+                'value' => $condition['value'],
+                'logical_operator' => $index > 0 ? $condition['logical_operator'] : null,
+                'order' => $index
             ]);
-
-            $this->reset(['conditionType', 'operator', 'value', 'action', 'actionValue', 
-                         'selectedTemplate', 'announcementZone', 'templateVariables']);
-            session()->flash('success', 'Rule created successfully.');
-        } catch (\Exception $e) {
-            session()->flash('error', 'Failed to create rule: ' . $e->getMessage());
+            $rule->conditions()->save($ruleCondition);
         }
+
+        $this->reset();
+        $this->addCondition();
+        session()->flash('message', 'Rule created successfully.');
     }
 
     public function toggleRule($ruleId)
@@ -167,41 +244,14 @@ class TrainRules extends Component
         session()->flash('success', 'Rule deleted successfully.');
     }
 
-    public function updatedConditionType()
-    {
-        // Reset operator and value when condition type changes
-        $this->operator = '';
-        $this->value = '';
-    }
-
     public function render()
     {
-        $valueField = [
-            'type' => 'number',
-            'label' => 'Value (minutes)'
-        ];
-
-        if ($this->conditionType) {
-            $valueField = match ($this->conditionType) {
-                'current_status' => [
-                    'type' => 'select',
-                    'options' => Status::pluck('status', 'id'),
-                    'label' => 'Status'
-                ],
-                'time_of_day' => [
-                    'type' => 'time',
-                    'label' => 'Time (24h)'
-                ],
-                default => [
-                    'type' => 'number',
-                    'label' => 'Value (minutes)'
-                ],
-            };
-        }
-
+        $rules = TrainRule::with(['conditions', 'status'])->orderBy('created_at', 'desc')->paginate(10);
         return view('livewire.train-rules', [
-            'rules' => TrainRule::with(['status', 'conditionStatus'])->orderBy('created_at', 'desc')->paginate(10),
-            'valueField' => $valueField
+            'rules' => $rules,
+            'statuses' => $this->statuses,
+            'availableTemplates' => $this->availableTemplates,
+            'zones' => $this->zones
         ]);
     }
 }

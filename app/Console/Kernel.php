@@ -39,5 +39,6 @@ class Kernel extends ConsoleKernel
 
     protected $commands = [
         Commands\ProcessTrainRules::class,
+        Commands\ImportPlatformAssignments::class,
     ];
 } 
