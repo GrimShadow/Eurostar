@@ -35,7 +35,8 @@ class TrainController extends Controller
             ]);
         }
 
-        $trains = GtfsTrip::query()
+        // First, get all the trips with their basic information
+        $trips = GtfsTrip::query()
             ->distinct()
             ->select([
                 'gtfs_trips.trip_id',
@@ -102,20 +103,49 @@ class TrainController extends Controller
             ->where('departure_stop.departure_time', '>=', $startTime)
             ->where('departure_stop.departure_time', '<=', $endTime)
             ->orderBy('departure_stop.departure_time')
+            ->get();
+
+        // Get all stops for each trip
+        $tripIds = $trips->pluck('trip_id');
+        $stops = DB::table('gtfs_stop_times')
+            ->join('gtfs_stops', 'gtfs_stop_times.stop_id', '=', 'gtfs_stops.stop_id')
+            ->whereIn('gtfs_stop_times.trip_id', $tripIds)
+            ->select([
+                'gtfs_stop_times.trip_id',
+                'gtfs_stop_times.stop_sequence',
+                'gtfs_stop_times.arrival_time',
+                'gtfs_stop_times.departure_time',
+                'gtfs_stops.stop_name'
+            ])
+            ->orderBy('gtfs_stop_times.trip_id')
+            ->orderBy('gtfs_stop_times.stop_sequence')
             ->get()
-            ->map(function ($train) {
+            ->groupBy('trip_id');
+
+        // Map the trips with their stops
+        $trains = $trips->map(function ($train) use ($stops) {
+            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop, $index) {
                 return [
-                    'number' => $train->number,
-                    'trip_id' => $train->trip_id,
-                    'departure' => substr($train->departure_time, 0, 5),
-                    'route_name' => $train->route_long_name,
-                    'destination' => $train->trip_headsign,
-                    'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
-                    'status_color' => $train->status_color ?? '156,163,175',
-                    'departure_platform' => $train->departure_platform ?? 'TBD',
-                    'arrival_platform' => $train->arrival_platform ?? 'TBD'
+                    'stop_name' => $stop->stop_name,
+                    'arrival_time' => substr($stop->arrival_time, 0, 5),
+                    'departure_time' => substr($stop->departure_time, 0, 5),
+                    'stop_sequence' => $stop->stop_sequence
                 ];
-            });
+            })->values();
+
+            return [
+                'number' => $train->number,
+                'trip_id' => $train->trip_id,
+                'departure' => substr($train->departure_time, 0, 5),
+                'route_name' => $train->route_long_name,
+                'train_id' => $train->trip_headsign,
+                'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
+                'status_color' => $train->status_color ?? '156,163,175',
+                'departure_platform' => $train->departure_platform ?? 'TBD',
+                'arrival_platform' => $train->arrival_platform ?? 'TBD',
+                'stops' => $trainStops
+            ];
+        });
 
         return response()->json([
             'data' => $trains,
