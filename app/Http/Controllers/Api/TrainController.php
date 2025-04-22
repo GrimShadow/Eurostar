@@ -139,7 +139,7 @@ class TrainController extends Controller
                 'departure' => substr($train->departure_time, 0, 5),
                 'route_name' => $train->route_long_name,
                 'train_id' => $train->trip_headsign,
-                'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
+                'status' => ucfirst($train->status_text ?? $train->train_status ?? 'On time'),
                 'status_color' => $train->status_color ?? '156,163,175',
                 'departure_platform' => $train->departure_platform ?? 'TBD',
                 'arrival_platform' => $train->arrival_platform ?? 'TBD',

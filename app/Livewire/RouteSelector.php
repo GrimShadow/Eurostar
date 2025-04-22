@@ -5,6 +5,7 @@ namespace App\Livewire;
 use Livewire\Component;
 use App\Models\GtfsRoute;
 use App\Models\SelectedRoute;
+use Illuminate\Support\Facades\DB;
 
 class RouteSelector extends Component
 {
@@ -19,13 +20,28 @@ class RouteSelector extends Component
 
     public function toggleRoute($routeId)
     {
-        if (in_array($routeId, $this->selectedRoutes)) {
-            SelectedRoute::where('route_id', $routeId)->delete();
-            $this->selectedRoutes = array_diff($this->selectedRoutes, [$routeId]);
+        $route = DB::table('selected_routes')
+            ->where('route_id', $routeId)
+            ->first();
+
+        if ($route) {
+            $newStatus = !$route->is_active;
+            DB::table('selected_routes')
+                ->where('route_id', $routeId)
+                ->update(['is_active' => $newStatus]);
         } else {
-            SelectedRoute::create(['route_id' => $routeId]);
-            $this->selectedRoutes[] = $routeId;
+            DB::table('selected_routes')
+                ->insert([
+                    'route_id' => $routeId,
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
         }
+
+        $this->selectedRoutes = SelectedRoute::where('is_active', true)
+            ->pluck('route_id')
+            ->toArray();
     }
 
     public function render()

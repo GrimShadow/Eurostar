@@ -60,7 +60,7 @@
                                     @php
                                         $status = $train['status'] ?? 'on-time';
                                         if (is_numeric($status)) {
-                                            $status = 'On-time';
+                                            $status = 'On time';
                                         }
                                         echo ucfirst($status);
                                     @endphp

@@ -8,16 +8,16 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::create('train_statuses', function (Blueprint $table) {
+        Schema::create('train_table_selector_routes', function (Blueprint $table) {
             $table->id();
-            $table->string('trip_id');
-            $table->string('status')->default('On time');
+            $table->string('route_id');
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }
 
     public function down()
     {
-        Schema::dropIfExists('train_statuses');
+        Schema::dropIfExists('train_table_selector_routes');
     }
-};
+}; 

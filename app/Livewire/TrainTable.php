@@ -223,18 +223,18 @@ class TrainTable extends Component
     {
         Log::info('TrainTable - Toggling Route', ['route_id' => $routeId]);
         
-        $route = DB::table('train_table_routes')
+        $route = DB::table('selected_routes')
             ->where('route_id', $routeId)
             ->first();
 
         if ($route) {
             $newStatus = !$route->is_active;
-            DB::table('train_table_routes')
+            DB::table('selected_routes')
                 ->where('route_id', $routeId)
                 ->update(['is_active' => $newStatus]);
             Log::info('TrainTable - Updated Route Status', ['route_id' => $routeId, 'new_status' => $newStatus]);
         } else {
-            DB::table('train_table_routes')
+            DB::table('selected_routes')
                 ->insert([
                     'route_id' => $routeId,
                     'is_active' => true,

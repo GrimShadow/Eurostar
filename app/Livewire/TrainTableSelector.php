@@ -15,25 +15,39 @@ class TrainTableSelector extends Component
     public function mount()
     {
         $this->routes = GtfsRoute::all();
-        $setting = Setting::where('key', 'train_table_routes')->first();
-        $this->selectedRoutes = $setting ? $setting->value : [];
+        $this->loadSelectedRoutes();
+    }
+
+    public function loadSelectedRoutes()
+    {
+        $this->selectedRoutes = DB::table('train_table_routes')
+            ->where('is_active', true)
+            ->pluck('route_id')
+            ->toArray();
     }
 
     public function toggleTableRoute($routeId)
     {
-        if (in_array($routeId, $this->selectedRoutes)) {
-            $this->selectedRoutes = array_diff($this->selectedRoutes, [$routeId]);
+        $route = DB::table('train_table_routes')
+            ->where('route_id', $routeId)
+            ->first();
+
+        if ($route) {
+            $newStatus = !$route->is_active;
             DB::table('train_table_routes')
                 ->where('route_id', $routeId)
-                ->update(['is_active' => false]);
+                ->update(['is_active' => $newStatus]);
         } else {
-            $this->selectedRoutes[] = $routeId;
             DB::table('train_table_routes')
-                ->updateOrInsert(
-                    ['route_id' => $routeId],
-                    ['is_active' => true, 'created_at' => now(), 'updated_at' => now()]
-                );
+                ->insert([
+                    'route_id' => $routeId,
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
         }
+
+        $this->loadSelectedRoutes();
     }
 
     public function render()
