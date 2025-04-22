@@ -21,6 +21,7 @@ class TrainTable extends Component
     public $page = 1;
     public $perPage = 8;
     public $total = 0;
+    public $group;
 
     protected $listeners = [
         'echo:train-statuses,TrainStatusUpdated' => 'handleTrainStatusUpdated'
@@ -31,8 +32,9 @@ class TrainTable extends Component
         $this->loadTrains();
     }
 
-    public function mount()
+    public function mount($group)
     {
+        $this->group = $group;
         $this->date = Carbon::now()->format('Y-m-d');
         $this->time = Carbon::now()->format('H:i');
         $this->loadSelectedRoutes();
@@ -41,21 +43,19 @@ class TrainTable extends Component
 
     public function loadSelectedRoutes()
     {
-        $user = Auth::user();
-        $group = $user->groups()->first();
-        if (!$group) {
-            Log::info('TrainTable - No group found for user', ['user_id' => $user->id]);
+        if (!$this->group) {
+            Log::info('TrainTable - No group provided');
             $this->selectedRoutes = [];
             return;
         }
 
-        $this->selectedRoutes = $group->trainTableSelections()
+        $this->selectedRoutes = $this->group->trainTableSelections()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
         
         Log::info('TrainTable - Loaded Selected Routes', [
-            'group_id' => $group->id,
+            'group_id' => $this->group->id,
             'routes' => $this->selectedRoutes
         ]);
     }
@@ -109,20 +109,18 @@ class TrainTable extends Component
         $currentTime = Carbon::now()->format('H:i:s');
         $endTime = Carbon::now()->addHours(4)->format('H:i:s');
 
-        $user = Auth::user();
-        $group = $user->groups()->first();
-        if (!$group) {
-            Log::info('TrainTable - No group found for user', ['user_id' => $user->id]);
+        if (!$this->group) {
+            Log::info('TrainTable - No group provided');
             return GtfsTrip::query()->whereRaw('1 = 0');
         }
 
-        $selectedRoutes = $group->trainTableSelections()
+        $selectedRoutes = $this->group->trainTableSelections()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
 
         Log::info('TrainTable - Debug Info', [
-            'group_id' => $group->id,
+            'group_id' => $this->group->id,
             'selected_routes' => $selectedRoutes,
             'current_time' => $currentTime,
             'end_time' => $endTime,

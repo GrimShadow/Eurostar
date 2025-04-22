@@ -18,4 +18,9 @@ class Announcement extends Model
         'area',
         'status'
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

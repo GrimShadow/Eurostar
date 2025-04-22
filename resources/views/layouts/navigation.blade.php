@@ -12,12 +12,21 @@
 
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
-                    </x-nav-link>
-                    <x-nav-link :href="route('announcements')" :active="request()->routeIs('announcements')">
-                        {{ __('Announcements') }}
-                    </x-nav-link>
+                    @if(request()->routeIs('group.*'))
+                        <x-nav-link :href="route('group.dashboard', request()->route('group'))" :active="request()->routeIs('group.dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('group.announcements', request()->route('group'))" :active="request()->routeIs('group.announcements')">
+                            {{ __('Announcements') }}
+                        </x-nav-link>
+                    @else
+                        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('announcements')" :active="request()->routeIs('announcements')">
+                            {{ __('Announcements') }}
+                        </x-nav-link>
+                    @endif
                 </div>
             </div>
 

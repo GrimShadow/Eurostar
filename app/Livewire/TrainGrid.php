@@ -22,6 +22,7 @@ class TrainGrid extends Component
     public $status = 'on-time';
     public $statuses = [];
     public $routeStops = [];
+    public $group;
 
     protected $listeners = [
         'refreshTrains' => 'loadTrains',
@@ -34,29 +35,28 @@ class TrainGrid extends Component
         $this->loadTrains();
     }
 
-    public function mount()
+    public function mount($group)
     {
+        $this->group = $group;
         $this->loadTrains();
         $this->statuses = Status::orderBy('status')->get();
     }
 
     public function loadTrains()
     {
-        $user = Auth::user();
-        $group = $user->groups()->first();
-        if (!$group) {
-            Log::info('TrainGrid - No group found for user', ['user_id' => $user->id]);
+        if (!$this->group) {
+            Log::info('TrainGrid - No group provided');
             $this->trains = [];
             return;
         }
 
-        $selectedRoutes = $group->selectedRoutes()
+        $selectedRoutes = $this->group->selectedRoutes()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
 
         Log::info('TrainGrid - Debug Info', [
-            'group_id' => $group->id,
+            'group_id' => $this->group->id,
             'selected_routes' => $selectedRoutes,
             'total_routes' => DB::table('gtfs_routes')->count(),
             'total_trips' => DB::table('gtfs_trips')->count(),
