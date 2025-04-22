@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GtfsSetting;
+use App\Models\Group;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -21,105 +22,78 @@ use App\Jobs\DownloadAndProcessGtfs;
 class GtfsController extends Controller
 {
 
-    public function viewGtfs()
+    public function index()
     {
         $gtfsSettings = GtfsSetting::first();
-        return view('settings.gtfs', compact('gtfsSettings'));
+        $groups = Group::all();
+
+        return view('settings.gtfs', compact('gtfsSettings', 'groups'));
     }
 
-    public function updateGtfsUrl(Request $request)
+    public function update(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'url' => 'required|url'
         ]);
 
-        Log::info('GTFS URL being saved: ' . $request->url);
+        $gtfsSettings = GtfsSetting::firstOrNew();
+        $gtfsSettings->url = $validated['url'];
+        $gtfsSettings->save();
 
-        GtfsSetting::updateOrCreate(
-            ['id' => 1],
-            [
-                'url' => $request->url,
-                'is_active' => true,
-                'next_download' => now()->addDay()
-            ]
-        );
-
-        return redirect()->route('settings.gtfs')->with('success', 'GTFS URL updated successfully');
+        return redirect()->route('settings.gtfs')->with('success', 'GTFS URL updated successfully.');
     }
 
-    public function downloadGtfs()
+    public function download()
     {
-        $settings = GtfsSetting::first();
+        $gtfsSettings = GtfsSetting::first();
         
-        if (!$settings) {
-            return response()->json([
-                'success' => false,
-                'message' => 'GTFS URL not configured'
-            ], 400);
+        if (!$gtfsSettings) {
+            return response()->json(['error' => 'GTFS settings not found'], 404);
         }
 
-        try {
-            // Check if a download is already in progress
-            if ($settings->is_downloading) {
-                $elapsed = now()->diffInSeconds($settings->download_started_at);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'A download is already in progress. Please wait for it to complete.',
-                    'status' => 'in_progress',
-                    'elapsed_time' => $elapsed,
-                    'progress' => $settings->download_progress ?? 0
-                ], 400);
-            }
-
-            // Check storage permissions
-            $storagePath = storage_path('app/gtfs');
-            if (!is_writable(dirname($storagePath))) {
-                throw new \Exception('Storage directory is not writable. Please check permissions on ' . dirname($storagePath));
-            }
-
-            // Update settings to indicate download is starting
-            $settings->update([
-                'is_downloading' => true,
-                'download_started_at' => now(),
-                'download_status' => 'Starting download...',
-                'download_progress' => 0
-            ]);
-
-            // Dispatch the job to handle the download and processing
-            DownloadAndProcessGtfs::dispatch();
-
+        if ($gtfsSettings->is_downloading) {
             return response()->json([
-                'success' => true,
-                'message' => 'GTFS data download started. The page will refresh when complete.',
-                'status' => 'started',
-                'progress' => 0
+                'status' => 'in_progress',
+                'elapsed_time' => $gtfsSettings->download_started_at->diffInSeconds(now()),
+                'progress' => $gtfsSettings->download_progress ?? 0
             ]);
-        } catch (\Exception $e) {
-            // Reset the downloading flag if something went wrong
-            if ($settings) {
-                $settings->update([
-                    'is_downloading' => false,
-                    'download_status' => 'Error: ' . $e->getMessage(),
-                    'download_progress' => 0
-                ]);
-            }
-
-            Log::error('Failed to start GTFS download', [
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-                'storage_path' => storage_path('app/gtfs'),
-                'storage_permissions' => is_writable(storage_path('app/gtfs')) ? 'writable' : 'not writable'
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
-                'status' => 'error',
-                'progress' => 0
-            ], 500);
         }
+
+        $gtfsSettings->is_downloading = true;
+        $gtfsSettings->download_started_at = now();
+        $gtfsSettings->download_progress = 0;
+        $gtfsSettings->save();
+
+        // Dispatch the download job
+        dispatch(new \App\Jobs\DownloadGtfs($gtfsSettings));
+
+        return response()->json(['status' => 'started']);
+    }
+
+    public function clear()
+    {
+        $gtfsSettings = GtfsSetting::first();
+        
+        if (!$gtfsSettings) {
+            return redirect()->route('settings.gtfs')->with('error', 'GTFS settings not found.');
+        }
+
+        // Clear all GTFS data
+        \App\Models\GtfsRoute::truncate();
+        \App\Models\GtfsTrip::truncate();
+        \App\Models\GtfsStop::truncate();
+        \App\Models\GtfsStopTime::truncate();
+        \App\Models\GtfsCalendar::truncate();
+        \App\Models\GtfsCalendarDate::truncate();
+
+        $gtfsSettings->last_download = null;
+        $gtfsSettings->next_download = null;
+        $gtfsSettings->is_downloading = false;
+        $gtfsSettings->download_progress = null;
+        $gtfsSettings->download_started_at = null;
+        $gtfsSettings->save();
+
+        return redirect()->route('settings.gtfs')->with('success', 'GTFS data cleared successfully.');
     }
 
     private function removeDirectory($path) {
@@ -589,47 +563,6 @@ class GtfsController extends Controller
         }
         
         return $time;
-    }
-
-    public function clearGtfsData()
-    {
-        try {
-            // Disable foreign key checks for MySQL
-            DB::statement('SET FOREIGN_KEY_CHECKS = 0');
-            
-            // Clear all GTFS-related tables
-            DB::table('gtfs_trips')->truncate();
-            DB::table('gtfs_calendar_dates')->truncate();
-            DB::table('gtfs_routes')->truncate();
-            DB::table('gtfs_stop_times')->truncate();
-            DB::table('gtfs_stops')->truncate();
-            DB::table('gtfs_heartbeats')->truncate();
-            
-            // Re-enable foreign key checks
-            DB::statement('SET FOREIGN_KEY_CHECKS = 1');
-            
-            // Update the last_download timestamp to null
-            if ($settings = GtfsSetting::first()) {
-                $settings->update([
-                    'last_download' => null,
-                    'next_download' => null
-                ]);
-            }
-
-            return redirect()->route('settings.gtfs')
-                ->with('success', 'All GTFS data has been cleared successfully.');
-        } catch (\Exception $e) {
-            // Re-enable foreign key checks even if there's an error
-            DB::statement('SET FOREIGN_KEY_CHECKS = 1');
-            
-            Log::error('Failed to clear GTFS data', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return redirect()->route('settings.gtfs')
-                ->with('error', 'Failed to clear GTFS data: ' . $e->getMessage());
-        }
     }
 
 }

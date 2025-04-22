@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class TrainTable extends Component
 {
@@ -40,12 +41,23 @@ class TrainTable extends Component
 
     public function loadSelectedRoutes()
     {
-        $this->selectedRoutes = DB::table('train_table_routes')
+        $user = Auth::user();
+        $group = $user->groups()->first();
+        if (!$group) {
+            Log::info('TrainTable - No group found for user', ['user_id' => $user->id]);
+            $this->selectedRoutes = [];
+            return;
+        }
+
+        $this->selectedRoutes = $group->trainTableSelections()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
         
-        Log::info('TrainTable - Loaded Selected Routes', ['routes' => $this->selectedRoutes]);
+        Log::info('TrainTable - Loaded Selected Routes', [
+            'group_id' => $group->id,
+            'routes' => $this->selectedRoutes
+        ]);
     }
 
     public function loadTrains()
@@ -97,12 +109,20 @@ class TrainTable extends Component
         $currentTime = Carbon::now()->format('H:i:s');
         $endTime = Carbon::now()->addHours(4)->format('H:i:s');
 
-        $selectedRoutes = DB::table('train_table_routes')
+        $user = Auth::user();
+        $group = $user->groups()->first();
+        if (!$group) {
+            Log::info('TrainTable - No group found for user', ['user_id' => $user->id]);
+            return GtfsTrip::query()->whereRaw('1 = 0');
+        }
+
+        $selectedRoutes = $group->trainTableSelections()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
 
         Log::info('TrainTable - Debug Info', [
+            'group_id' => $group->id,
             'selected_routes' => $selectedRoutes,
             'current_time' => $currentTime,
             'end_time' => $endTime,

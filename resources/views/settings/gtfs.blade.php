@@ -169,8 +169,63 @@
                         
                         <livewire:train-table-selector />
                     </div>
+
+                    <!-- Groups Section -->
+                    <div class="mt-8 border-t border-gray-200 pt-8">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Group Settings</h3>
+                        <p class="text-sm text-gray-600 mb-4">Configure train grid and table data for each group.</p>
+
+                        <div class="space-y-4">
+                            @foreach($groups as $group)
+                                <div class="bg-gray-50 p-4 rounded-lg">
+                                    <div class="flex justify-between items-center">
+                                        <h4 class="text-md font-medium text-gray-900">{{ $group->name }}</h4>
+                                        <div class="flex space-x-2">
+                                            <button 
+                                                type="button"
+                                                x-data=""
+                                                x-on:click="$dispatch('open-modal', 'group-train-grid-selector-{{ $group->id }}')"
+                                                class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500"
+                                            >
+                                                Configure Train Grid
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                x-data=""
+                                                x-on:click="$dispatch('open-modal', 'group-train-table-selector-{{ $group->id }}')"
+                                                class="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500"
+                                            >
+                                                Configure Train Table
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Group Train Grid Selector Modal -->
+    @foreach($groups as $group)
+        <x-modal name="group-train-grid-selector-{{ $group->id }}" :show="false">
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    Configure Train Grid for {{ $group->name }}
+                </h2>
+                <livewire:group-train-grid-selector :group="$group" />
+            </div>
+        </x-modal>
+
+        <x-modal name="group-train-table-selector-{{ $group->id }}" :show="false">
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">
+                    Configure Train Table for {{ $group->name }}
+                </h2>
+                <livewire:group-train-table-selector :group="$group" />
+            </div>
+        </x-modal>
+    @endforeach
 </x-admin-layout>

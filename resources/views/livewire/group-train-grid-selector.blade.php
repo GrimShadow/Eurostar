@@ -13,21 +13,11 @@
                     <div class="w-4 h-4 rounded-full" style="background-color: #{{ $route->route_color ?? '9CA3AF' }}"></div>
                     <span class="text-sm font-medium text-gray-900">{{ $route->route_long_name }}</span>
                 </div>
-                <button wire:click="toggleTableRoute('{{ $route->route_id }}')"
+                <button wire:click="toggleRoute('{{ $route->route_id }}')"
                         class="px-3 py-1 text-sm font-medium rounded-md {{ in_array($route->route_id, $selectedRoutes) ? 'bg-neutral-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
                     {{ in_array($route->route_id, $selectedRoutes) ? 'Selected' : 'Select' }}
                 </button>
             </div>
         @endforeach
     </div>
-
-    @if(count($selectedRoutes) > 0)
-        <div class="mt-4 text-sm text-gray-600">
-            {{ count($selectedRoutes) }} route(s) selected for train table
-        </div>
-    @else
-        <div class="mt-4 text-sm text-gray-600">
-            No routes selected for train table
-        </div>
-    @endif
 </div> 

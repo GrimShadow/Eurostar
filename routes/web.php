@@ -52,7 +52,7 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::post('/settings/aviavox/template', [AviavoxController::class, 'storeTemplate'])->name('settings.aviavox.storeTemplate');
 
     // GTFS settings
-    Route::get('/settings/gtfs', [GtfsController::class, 'viewGtfs'])->name('settings.gtfs');
+    Route::get('/settings/gtfs', [GtfsController::class, 'index'])->name('settings.gtfs');
     Route::post('/settings/gtfs', [GtfsController::class, 'updateGtfsUrl'])->name('settings.gtfs.update');
     Route::get('/settings/gtfs/download', [GtfsController::class, 'downloadGtfs'])->name('settings.gtfs.download');
 
@@ -94,7 +94,7 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
         ->name('settings.aviavox.deleteAnnouncement');
 
     // GTFS settings
-    Route::get('/settings/gtfs', [GtfsController::class, 'viewGtfs'])->name('settings.gtfs');
+    Route::get('/settings/gtfs', [GtfsController::class, 'index'])->name('settings.gtfs');
     Route::post('/settings/gtfs', [GtfsController::class, 'updateGtfsUrl'])->name('settings.gtfs.update');
     Route::get('/settings/gtfs/download', [GtfsController::class, 'downloadGtfs'])->name('settings.gtfs.download');
     Route::post('/settings/gtfs/clear', [GtfsController::class, 'clearGtfsData'])->name('settings.gtfs.clear');

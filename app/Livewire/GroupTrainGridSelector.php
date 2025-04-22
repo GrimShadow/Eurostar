@@ -6,7 +6,7 @@ use App\Models\Group;
 use App\Models\GtfsRoute;
 use Livewire\Component;
 
-class GroupTrainTableSelector extends Component
+class GroupTrainGridSelector extends Component
 {
     public Group $group;
     public $selectedRoutes = [];
@@ -20,20 +20,20 @@ class GroupTrainTableSelector extends Component
 
     public function loadSelectedRoutes()
     {
-        $this->selectedRoutes = $this->group->trainTableSelections()
+        $this->selectedRoutes = $this->group->selectedRoutes()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
     }
 
-    public function toggleTableRoute($routeId)
+    public function toggleRoute($routeId)
     {
-        $route = $this->group->trainTableSelections()->where('route_id', $routeId)->first();
+        $route = $this->group->selectedRoutes()->where('route_id', $routeId)->first();
 
         if ($route) {
             $route->update(['is_active' => !$route->is_active]);
         } else {
-            $this->group->trainTableSelections()->create([
+            $this->group->selectedRoutes()->create([
                 'route_id' => $routeId,
                 'is_active' => true
             ]);
@@ -52,7 +52,7 @@ class GroupTrainTableSelector extends Component
             ->orderBy('route_long_name')
             ->get();
 
-        return view('livewire.group-train-table-selector', [
+        return view('livewire.group-train-grid-selector', [
             'routes' => $routes
         ]);
     }

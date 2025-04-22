@@ -12,6 +12,7 @@ use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class TrainGrid extends Component
 {
@@ -41,12 +42,21 @@ class TrainGrid extends Component
 
     public function loadTrains()
     {
-        $selectedRoutes = DB::table('selected_routes')
+        $user = Auth::user();
+        $group = $user->groups()->first();
+        if (!$group) {
+            Log::info('TrainGrid - No group found for user', ['user_id' => $user->id]);
+            $this->trains = [];
+            return;
+        }
+
+        $selectedRoutes = $group->selectedRoutes()
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
 
         Log::info('TrainGrid - Debug Info', [
+            'group_id' => $group->id,
             'selected_routes' => $selectedRoutes,
             'total_routes' => DB::table('gtfs_routes')->count(),
             'total_trips' => DB::table('gtfs_trips')->count(),
