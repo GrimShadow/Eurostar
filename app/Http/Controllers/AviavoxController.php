@@ -439,4 +439,37 @@ class AviavoxController extends Controller
         $template->delete();
         return redirect()->back()->with('success', 'Template deleted successfully');
     }
+
+    public function getResponses(Request $request)
+    {
+        $query = AviavoxResponse::query();
+
+        // Add filters if provided
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->has('message_name')) {
+            $query->where('message_name', $request->message_name);
+        }
+        if ($request->has('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+        if ($request->has('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        // Paginate results
+        $responses = $query->orderBy('created_at', 'desc')
+                         ->paginate($request->per_page ?? 10);
+
+        return response()->json([
+            'data' => $responses->items(),
+            'meta' => [
+                'current_page' => $responses->currentPage(),
+                'last_page' => $responses->lastPage(),
+                'per_page' => $responses->perPage(),
+                'total' => $responses->total(),
+            ]
+        ]);
+    }
 }

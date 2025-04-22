@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/pending-announcements', [BrokerController::class, 'getPendingAnnouncements']);
         Route::post('/announcement/{id}/status', [BrokerController::class, 'updateAnnouncementStatus']);
     });
+    Route::get('/aviavox/responses', [AviavoxController::class, 'getResponses']);
 });
 
 Route::post('/sanctum/token', [AuthController::class, 'token']);
