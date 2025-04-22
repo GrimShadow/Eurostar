@@ -12,6 +12,9 @@ use App\Http\Controllers\TokenController;
 use App\Http\Controllers\SelectorController;
 use App\Http\Controllers\AdminSettingsController;
 use App\Http\Controllers\VariablesController;
+use App\Http\Controllers\GroupDashboardController;
+use App\Http\Controllers\GroupAnnouncementsController;
+use App\Http\Controllers\GroupRouteSelectionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -146,6 +149,13 @@ Route::get('/debug-db', function() {
         ->get();
     
     return response()->json($stops);
+});
+
+// Group routes
+Route::middleware(['auth', \App\Http\Middleware\GroupAccess::class])->group(function () {
+    Route::get('/{group}/dashboard', [GroupDashboardController::class, 'index'])->name('group.dashboard');
+    Route::get('/{group}/announcements', [GroupAnnouncementsController::class, 'index'])->name('group.announcements');
+    Route::get('/{group}/routes', [GroupRouteSelectionController::class, 'index'])->name('group.routes');
 });
 
 require __DIR__.'/auth.php';

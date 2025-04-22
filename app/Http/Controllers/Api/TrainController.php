@@ -10,6 +10,24 @@ use Illuminate\Support\Facades\DB;
 
 class TrainController extends Controller
 {
+    private function rgbToHex($rgb)
+    {
+        if (empty($rgb)) {
+            return '#9CA3AF'; // Default gray color
+        }
+
+        $rgbArray = explode(',', $rgb);
+        if (count($rgbArray) !== 3) {
+            return '#9CA3AF'; // Default gray color if invalid format
+        }
+
+        $hex = '#';
+        foreach ($rgbArray as $component) {
+            $hex .= str_pad(dechex(trim($component)), 2, '0', STR_PAD_LEFT);
+        }
+        return strtoupper($hex);
+    }
+
     public function today()
     {
         $today = Carbon::now()->format('Y-m-d');
@@ -141,6 +159,7 @@ class TrainController extends Controller
                 'train_id' => $train->trip_headsign,
                 'status' => ucfirst($train->status_text ?? $train->train_status ?? 'On time'),
                 'status_color' => $train->status_color ?? '156,163,175',
+                'status_color_hex' => $this->rgbToHex($train->status_color ?? '156,163,175'),
                 'departure_platform' => $train->departure_platform ?? 'TBD',
                 'arrival_platform' => $train->arrival_platform ?? 'TBD',
                 'stops' => $trainStops
