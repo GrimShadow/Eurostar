@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AviavoxResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -18,10 +19,24 @@ class AviavoxApiController extends Controller
             // Store or process the announcement status
             if (isset($xml->Announcement)) {
                 $announcement = $xml->Announcement;
+                
+                // Store the response in the database
+                AviavoxResponse::create([
+                    'announcement_id' => (string)$announcement->ID,
+                    'status' => (string)$announcement->Status,
+                    'message_name' => (string)$announcement->MessageName,
+                    'raw_response' => $request->getContent()
+                ]);
+
                 Log::info('Announcement status update', [
                     'id' => (string)$announcement->ID,
                     'status' => (string)$announcement->Status,
                     'message_name' => (string)$announcement->MessageName
+                ]);
+            } else {
+                // Store the raw response even if it's not an announcement
+                AviavoxResponse::create([
+                    'raw_response' => $request->getContent()
                 ]);
             }
         }

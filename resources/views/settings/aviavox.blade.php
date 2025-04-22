@@ -274,6 +274,80 @@
                 </div>
             </div>
 
+            <!-- Aviavox Responses Table -->
+            <div class="bg-white shadow-sm sm:rounded-xl p-6 mt-6">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Aviavox Responses</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Announcement ID
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Message Name
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Received At
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            @foreach($responses as $response)
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {{ $response->announcement_id ?? '-' }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                        {{ $response->status === 'Success' ? 'bg-green-100 text-green-800' : 
+                                           ($response->status === 'Error' ? 'bg-red-100 text-red-800' : 
+                                           'bg-gray-100 text-gray-800') }}">
+                                        {{ $response->status ?? 'Unknown' }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {{ $response->message_name ?? '-' }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {{ $response->created_at->format('Y-m-d H:i:s') }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <button onclick="showResponse('{{ addslashes($response->raw_response) }}')" 
+                                        class="text-blue-600 hover:text-blue-900">View Response</button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-4">
+                    {{ $responses->links() }}
+                </div>
+            </div>
+
+            <!-- Response Preview Modal -->
+            <div id="responseModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+                <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium">Raw Response</h3>
+                        <button onclick="hideResponse()" class="text-gray-400 hover:text-gray-500">
+                            <span class="sr-only">Close</span>
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <pre id="responseContent" class="bg-gray-50 p-4 rounded-lg overflow-x-auto text-sm"></pre>
+                </div>
+            </div>
+
             <!-- XML Preview Modal -->
             <div id="xmlModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
                 <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
@@ -428,6 +502,15 @@
 
     function hideXml() {
         document.getElementById('xmlModal').classList.add('hidden');
+    }
+
+    function showResponse(response) {
+        document.getElementById('responseContent').textContent = response;
+        document.getElementById('responseModal').classList.remove('hidden');
+    }
+
+    function hideResponse() {
+        document.getElementById('responseModal').classList.add('hidden');
     }
 
 </script>

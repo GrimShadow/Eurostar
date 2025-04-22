@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Response;
 use App\Models\AviavoxTemplate;
+use App\Models\AviavoxResponse;
 
 class AviavoxController extends Controller
 {
@@ -19,6 +20,7 @@ class AviavoxController extends Controller
         $aviavoxSettings = AviavoxSetting::first();
         $announcements = AviavoxAnnouncement::all();
         $templates = AviavoxTemplate::orderBy('created_at', 'desc')->get();
+        $responses = AviavoxResponse::orderBy('created_at', 'desc')->paginate(10);
         
         // Load predefined messages from the text file
         $messagesFile = storage_path('app/aviavox/Eurostar - AviaVox AIP Message Triggers.txt');
@@ -37,7 +39,7 @@ class AviavoxController extends Controller
             }
         }
         
-        return view('settings.aviavox', compact('aviavoxSettings', 'announcements', 'predefinedMessages', 'availableMessageNames', 'templates'));
+        return view('settings.aviavox', compact('aviavoxSettings', 'announcements', 'predefinedMessages', 'availableMessageNames', 'templates', 'responses'));
     }
 
     public function updateAviavox(Request $request)
