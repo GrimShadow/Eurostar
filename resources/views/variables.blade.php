@@ -9,6 +9,14 @@
                 </div>
             </div>
 
+            <!-- Check-in Time Settings Section -->
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Check-in Time Settings</h3>
+                    <livewire:check-in-time-settings />
+                </div>
+            </div>
+
             <!-- Reasons Section -->
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6">
