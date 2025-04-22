@@ -3,7 +3,7 @@
         <div class="w-[800px] mx-auto">
             <div class="flex flex-wrap justify-center gap-8">
                 @foreach($groups as $group)
-                    <a href="{{ route('dashboard') }}" class="group w-[240px] h-[240px] relative overflow-hidden shadow-sm sm:rounded-lg hover:shadow-xl transition-all duration-500 flex flex-col text-2xl font-bold text-gray-900">
+                    <a href="{{ $group->getDashboardUrl() }}" class="group w-[240px] h-[240px] relative overflow-hidden shadow-sm sm:rounded-lg hover:shadow-xl transition-all duration-500 flex flex-col text-2xl font-bold text-gray-900">
                         @if($group->image)
                             <div class="absolute inset-0 bg-cover bg-center transition-all duration-500 group-hover:scale-110 group-hover:brightness-110" style="background-image: url('{{ asset('storage/' . $group->image) }}')"></div>
                             <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/50 to-transparent transition-all duration-500 group-hover:from-black/80 group-hover:via-black/40"></div>
