@@ -145,10 +145,34 @@
                     </form>
 
                     <div class="mt-8 border-t border-gray-200 pt-8">
-                        <h3 class="text-lg font-medium text-gray-900 mb-4">Route Selection</h3>
-                        <p class="text-sm text-gray-600 mb-4">Select which routes should appear in the dashboard.</p>
-
-                        <livewire:route-selector />
+                        <div x-data="{ open: false }" class="space-y-4">
+                            <button @click="open = !open" 
+                                class="flex justify-between items-center w-full px-4 py-2 text-left text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg focus:outline-none focus-visible:ring focus-visible:ring-neutral-500 focus-visible:ring-opacity-75">
+                                <span>API Route Selection</span>
+                                <svg class="w-5 h-5 transform transition-transform duration-200" 
+                                     :class="{ 'rotate-180': open }" 
+                                     fill="none" 
+                                     stroke="currentColor" 
+                                     viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" 
+                                          stroke-linejoin="round" 
+                                          stroke-width="2" 
+                                          d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            
+                            <div x-show="open" 
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 transform -translate-y-2"
+                                 x-transition:enter-end="opacity-100 transform translate-y-0"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 transform translate-y-0"
+                                 x-transition:leave-end="opacity-0 transform -translate-y-2"
+                                 class="p-4 bg-white rounded-lg shadow-sm">
+                                <p class="text-sm text-gray-600 mb-4">Select which routes should appear in the dashboard.</p>
+                                <livewire:route-selector />
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mt-8 border-t border-gray-200 pt-8">
