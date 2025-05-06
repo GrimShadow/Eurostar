@@ -65,7 +65,7 @@ class GtfsController extends Controller
         $gtfsSettings->save();
 
         // Dispatch the download job
-        dispatch(new \App\Jobs\DownloadGtfs($gtfsSettings));
+        dispatch(new \App\Jobs\DownloadAndProcessGtfs());
 
         return response()->json(['status' => 'started']);
     }
