@@ -13,6 +13,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Group;
+use App\Models\GroupRouteStation;
 
 class TrainGrid extends Component
 {
@@ -23,6 +25,7 @@ class TrainGrid extends Component
     public $statuses = [];
     public $routeStops = [];
     public $group;
+    public $selectedStations = [];
 
     protected $listeners = [
         'refreshTrains' => 'loadTrains',
@@ -35,11 +38,24 @@ class TrainGrid extends Component
         $this->loadTrains();
     }
 
-    public function mount($group)
+    public function mount(Group $group)
     {
         $this->group = $group;
+        $this->loadSelectedStations();
         $this->loadTrains();
         $this->statuses = Status::orderBy('status')->get();
+    }
+
+    public function loadSelectedStations()
+    {
+        $this->selectedStations = $this->group->routeStations()
+            ->where('is_active', true)
+            ->get()
+            ->groupBy('route_id')
+            ->map(function ($stations) {
+                return $stations->pluck('stop_id')->toArray();
+            })
+            ->toArray();
     }
 
     public function loadTrains()
@@ -262,8 +278,70 @@ class TrainGrid extends Component
         $this->dispatch('refresh');
     }
 
+    public function getTrains()
+    {
+        $this->trains = [];
+
+        // Get all active routes for this group
+        $activeRoutes = $this->group->selectedRoutes()
+            ->where('is_active', true)
+            ->pluck('route_id')
+            ->toArray();
+
+        if (empty($activeRoutes)) {
+            return;
+        }
+
+        $currentTime = now()->format('H:i:s');
+
+        // Get all trips for the active routes
+        $trips = GtfsTrip::whereIn('route_id', $activeRoutes)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('gtfs_calendar_dates')
+                    ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
+                    ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
+                    ->where('gtfs_calendar_dates.exception_type', 1);
+            })
+            ->get();
+
+        foreach ($trips as $trip) {
+            // Get stop times for this trip at the selected stations
+            $stopTimes = GtfsStopTime::where('trip_id', $trip->trip_id)
+                ->whereIn('stop_id', $this->selectedStations[$trip->route_id] ?? [])
+                ->where('departure_time', '>=', $currentTime)
+                ->orderBy('stop_sequence')
+                ->get();
+
+            if ($stopTimes->isEmpty()) {
+                continue;
+            }
+
+            foreach ($stopTimes as $stopTime) {
+                $this->trains[] = [
+                    'trip_id' => $trip->trip_id,
+                    'route_id' => $trip->route_id,
+                    'route_short_name' => $trip->route->route_short_name,
+                    'route_long_name' => $trip->route->route_long_name,
+                    'route_color' => $trip->route->route_color,
+                    'stop_id' => $stopTime->stop_id,
+                    'stop_name' => $stopTime->stop->stop_name,
+                    'arrival_time' => $stopTime->arrival_time,
+                    'departure_time' => $stopTime->departure_time,
+                    'platform_code' => $stopTime->stop->platform_code,
+                ];
+            }
+        }
+
+        // Sort trains by departure time
+        usort($this->trains, function ($a, $b) {
+            return strtotime($a['departure_time']) - strtotime($b['departure_time']);
+        });
+    }
+
     public function render()
     {
+        $this->getTrains();
         return view('livewire.train-grid');
     }
 }

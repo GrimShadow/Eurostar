@@ -56,6 +56,11 @@ class Group extends Model
         return $this->hasMany(GroupRouteSelection::class);
     }
 
+    public function routeStations()
+    {
+        return $this->hasMany(GroupRouteStation::class);
+    }
+
     public function getRouteKeyName()
     {
         return 'slug';

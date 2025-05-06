@@ -6,14 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class GtfsStop extends Model
 {
+    protected $table = 'gtfs_stops';
+    protected $primaryKey = 'stop_id';
+    public $incrementing = false;
+
     protected $fillable = [
         'stop_id',
-        'stop_code',
         'stop_name',
-        'stop_lon',
         'stop_lat',
-        'stop_timezone',
+        'stop_lon',
         'location_type',
+        'parent_station',
         'platform_code'
     ];
 
@@ -22,4 +25,9 @@ class GtfsStop extends Model
         'stop_lat' => 'decimal:6',
         'location_type' => 'integer'
     ];
+
+    public function stopTimes()
+    {
+        return $this->hasMany(GtfsStopTime::class, 'stop_id', 'stop_id');
+    }
 }

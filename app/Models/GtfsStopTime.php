@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class GtfsStopTime extends Model
 {
+    protected $table = 'gtfs_stop_times';
+    protected $primaryKey = ['trip_id', 'stop_sequence'];
+    public $incrementing = false;
+
     protected $fillable = [
         'trip_id',
         'arrival_time',
@@ -21,4 +25,14 @@ class GtfsStopTime extends Model
         'drop_off_type' => 'integer',
         'pickup_type' => 'integer'
     ];
+
+    public function stop()
+    {
+        return $this->belongsTo(GtfsStop::class, 'stop_id', 'stop_id');
+    }
+
+    public function trip()
+    {
+        return $this->belongsTo(GtfsTrip::class, 'trip_id', 'trip_id');
+    }
 }

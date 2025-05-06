@@ -8,7 +8,7 @@
             init() {
                 this.$watch('selectedTrain', value => {
                     if (value) {
-                        this.newTime = JSON.parse(value).departure;
+                        this.newTime = JSON.parse(value).departure_time;
                     }
                 })
             }
@@ -23,7 +23,8 @@
                     <div class="flex flex-col h-full">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-2">
-                                <h3 class="text-lg font-semibold">{{ $train['number'] }}</h3>
+                                <h3 class="text-lg font-semibold">{{ $train['route_long_name'] }}</h3>
+                                <p class="text-sm text-gray-500">{{ $train['stop_name'] }}</p>
                                 <!-- View Route Button -->
                                 <button wire:click="loadRouteStops('{{ $train['trip_id'] }}')" 
                                         class="ml-auto text-gray-500 hover:text-gray-700">
@@ -33,20 +34,18 @@
                                 </button>
                             </div>
 
-                            <div class="text-sm text-gray-500">{{ explode(' - ', $train['route_name'])[0] ?? '' }}</div>
+                            <div class="text-sm text-gray-500">{{ $train['route_short_name'] }}</div>
 
                             <div class="space-y-4">
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <div class="text-sm text-gray-500 mb-1">Departure</div>
-                                        <div class="text-2xl font-bold">{{ $train['departure'] }}</div>
-                                        <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] ?? 'TBD' }}</div>
+                                        <div class="text-sm text-gray-500 mb-1">Arrival</div>
+                                        <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['arrival_time'])->format('H:i') }}</div>
+                                        <div class="text-sm text-gray-500">Platform {{ $train['platform_code'] ?? 'TBD' }}</div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="text-sm text-gray-500 mb-1">Arrival</div>
-                                        <div class="text-2xl font-bold">{{ $train['arrival'] }}</div>
-                                        <div class="text-sm text-gray-500">{{ $train['destination'] }}</div>
-                                        <div class="text-sm text-gray-500">Platform {{ $train['arrival_platform'] }}</div>
+                                        <div class="text-sm text-gray-500 mb-1">Departure</div>
+                                        <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -56,14 +55,8 @@
                         <div class="mt-4">
                             <div class="text-sm text-gray-500 mb-1">Status</div>
                             <div class="flex items-center">
-                                <span class="text-lg font-semibold" style="color: rgb({{ $train['status_color'] }});">
-                                    @php
-                                        $status = $train['status'] ?? 'on-time';
-                                        if (is_numeric($status)) {
-                                            $status = 'On time';
-                                        }
-                                        echo ucfirst($status);
-                                    @endphp
+                                <span class="text-lg font-semibold" style="color: rgb({{ $train['status_color'] ?? '156,163,175' }});">
+                                    {{ $train['status'] ?? 'On time' }}
                                 </span>
                             </div>
                         </div>
@@ -125,7 +118,7 @@
                             </button>
                             <button 
                                 wire:click="updateTrainStatus(
-                                    JSON.parse(selectedTrain).number,
+                                    JSON.parse(selectedTrain).trip_id,
                                     status,
                                     newTime,
                                     platform
