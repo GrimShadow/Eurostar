@@ -17,10 +17,32 @@ use App\Models\GtfsCalendarDate;
 use App\Models\GtfsRoute;
 use App\Models\GtfsStopTime;
 use App\Models\GtfsStop;
+use Illuminate\Support\Facades\Storage;
 
 class DownloadAndProcessGtfs implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /**
+     * The number of times the job may be attempted.
+     *
+     * @var int
+     */
+    public $tries = 5;
+
+    /**
+     * The number of seconds the job can run before timing out.
+     *
+     * @var int
+     */
+    public $timeout = 3600; // 1 hour
+
+    /**
+     * The number of seconds to wait before retrying the job.
+     *
+     * @var int
+     */
+    public $backoff = 60; // 1 minute
 
     private function updateProgress($settings, $progress, $status)
     {
@@ -32,146 +54,86 @@ class DownloadAndProcessGtfs implements ShouldQueue
 
     public function handle()
     {
-        $settings = GtfsSetting::first();
-        
-        if (!$settings) {
-            Log::error('GTFS settings not configured');
-            return;
-        }
-
         try {
-            // Update settings to show download in progress
-            $settings->update([
-                'is_downloading' => true,
-                'download_started_at' => now(),
-                'download_progress' => 0,
-                'download_status' => 'Starting download...'
-            ]);
-
-            // Download the ZIP file with increased timeout
-            Log::info('Downloading GTFS file from: ' . $settings->url);
-            $this->updateProgress($settings, 5, 'Downloading GTFS file...');
-            $response = Http::timeout(300)->get($settings->url);
+            $gtfsSettings = GtfsSetting::first();
             
-            if ($response->successful()) {
-                // Ensure storage directories exist with proper permissions
-                $storagePath = storage_path('app/gtfs');
-                Log::info('Storage path: ' . $storagePath);
-                $zipPath = $storagePath . '/latest.zip';
-                Log::info('ZIP path: ' . $zipPath);
-                $extractPath = $storagePath . '/current';
-                Log::info('Extract path: ' . $extractPath);
-                
-                // Create directories if they don't exist with proper permissions
-                if (!file_exists($storagePath)) {
-                    if (!mkdir($storagePath, 0775, true)) {
-                        throw new \Exception('Failed to create storage directory. Check permissions.');
-                    }
-                }
-
-                // Ensure the directory is writable
-                if (!is_writable($storagePath)) {
-                    throw new \Exception('Storage directory is not writable. Current permissions: ' . substr(sprintf('%o', fileperms($storagePath)), -4));
-                }
-                
-                // Save the ZIP content to a file
-                Log::info('Saving ZIP file to: ' . $zipPath);
-                if (!file_put_contents($zipPath, $response->body())) {
-                    throw new \Exception('Failed to save ZIP file. Check permissions.');
-                }
-                
-                // Verify the ZIP file exists and is readable
-                if (!file_exists($zipPath)) {
-                    throw new \Exception('ZIP file was not saved properly');
-                }
-                
-                // Set proper permissions on the ZIP file
-                chmod($zipPath, 0664);
-                
-                Log::info('ZIP file size: ' . filesize($zipPath) . ' bytes');
-
-                // Check if it's a valid ZIP file
-                if (!class_exists('ZipArchive')) {
-                    throw new \Exception('ZipArchive class is not available. Please install php-zip extension');
-                }
-
-                $zip = new ZipArchive();
-                $openResult = $zip->open($zipPath);
-                
-                if ($openResult !== TRUE) {
-                    throw new \Exception('Failed to open ZIP file. Error code: ' . $openResult);
-                }
-
-                // Clear existing directory
-                if (file_exists($extractPath)) {
-                    Log::info('Removing existing directory: ' . $extractPath);
-                    $this->removeDirectory($extractPath);
-                }
-
-                // Create fresh directory
-                Log::info('Creating extraction directory: ' . $extractPath);
-                if (!mkdir($extractPath, 0755, true)) {
-                    throw new \Exception('Failed to create extraction directory');
-                }
-
-                // Extract files
-                Log::info('Extracting ZIP file to: ' . $extractPath);
-                if (!$zip->extractTo($extractPath)) {
-                    throw new \Exception('Failed to extract files. ZIP error: ' . $zip->getStatusString());
-                }
-
-                if ($zip->close()) {
-                    // List extracted files
-                    $files = scandir($extractPath);
-                    Log::info('Extracted files:', array_diff($files, ['.', '..']));
-
-                    // Process each file with progress updates
-                    $this->updateProgress($settings, 20, 'Processing trips...');
-                    $this->syncTripsData($extractPath);
-
-                    $this->updateProgress($settings, 40, 'Processing calendar dates...');
-                    $this->syncCalendarDatesData($extractPath);
-
-                    $this->updateProgress($settings, 60, 'Processing routes...');
-                    $this->syncRoutesData($extractPath);
-
-                    $this->updateProgress($settings, 80, 'Processing stop times...');
-                    $this->syncStopTimesData($extractPath);
-
-                    $this->updateProgress($settings, 90, 'Processing stops...');
-                    $this->syncStopsData($extractPath);
-
-                    // Update settings
-                    $settings->update([
-                        'last_download' => now(),
-                        'next_download' => now()->addDay(),
-                        'is_downloading' => false,
-                        'download_started_at' => null,
-                        'download_progress' => 100,
-                        'download_status' => 'Completed successfully'
-                    ]);
-
-                    Log::info('GTFS data processing completed successfully');
-                }
-            } else {
-                throw new \Exception('Failed to download file. Status: ' . $response->status());
+            if (!$gtfsSettings) {
+                throw new \Exception('GTFS settings not found');
             }
+
+            // Download the file
+            $response = Http::timeout(300)->get($gtfsSettings->url);
+            if (!$response->successful()) {
+                throw new \Exception('Failed to download GTFS data: ' . $response->status());
+            }
+
+            // Save the file
+            $zipPath = storage_path('app/gtfs.zip');
+            file_put_contents($zipPath, $response->body());
+
+            // Extract the file
+            $extractPath = storage_path('app/gtfs');
+            if (!file_exists($extractPath)) {
+                mkdir($extractPath, 0755, true);
+            }
+
+            $zip = new ZipArchive;
+            if ($zip->open($zipPath) !== TRUE) {
+                throw new \Exception('Failed to open GTFS zip file');
+            }
+
+            $zip->extractTo($extractPath);
+            $zip->close();
+
+            // Process each file
+            $this->processFile($extractPath, 'stops.txt', 'syncStopsData');
+            $this->processFile($extractPath, 'routes.txt', 'syncRoutesData');
+            $this->processFile($extractPath, 'trips.txt', 'syncTripsData');
+            $this->processFile($extractPath, 'stop_times.txt', 'syncStopTimesData');
+            $this->processFile($extractPath, 'calendar_dates.txt', 'syncCalendarDatesData');
+
+            // Update settings
+            $gtfsSettings->last_download = now();
+            $gtfsSettings->is_downloading = false;
+            $gtfsSettings->download_progress = 100;
+            $gtfsSettings->save();
+
+            // Clean up
+            unlink($zipPath);
+            $this->removeDirectory($extractPath);
+
         } catch (\Exception $e) {
-            Log::error('GTFS download/extract failed', [
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
+            Log::error('GTFS download failed: ' . $e->getMessage(), [
+                'exception' => $e,
                 'trace' => $e->getTraceAsString()
             ]);
 
-            // Update settings to show error state
-            $settings->update([
-                'is_downloading' => false,
-                'download_started_at' => null,
-                'download_progress' => 0,
-                'download_status' => 'Error: ' . $e->getMessage()
-            ]);
+            // Update settings to reflect failure
+            if (isset($gtfsSettings)) {
+                $gtfsSettings->is_downloading = false;
+                $gtfsSettings->download_progress = 0;
+                $gtfsSettings->save();
+            }
 
+            // Rethrow the exception to trigger a retry
+            throw $e;
+        }
+    }
+
+    private function processFile($extractPath, $filename, $method)
+    {
+        try {
+            $gtfsSettings = GtfsSetting::first();
+            $gtfsSettings->download_progress = 0;
+            $gtfsSettings->save();
+
+            $controller = new \App\Http\Controllers\GtfsController();
+            $controller->$method($extractPath);
+
+            $gtfsSettings->download_progress = 100;
+            $gtfsSettings->save();
+        } catch (\Exception $e) {
+            Log::error("Failed to process {$filename}: " . $e->getMessage());
             throw $e;
         }
     }
