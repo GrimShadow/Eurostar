@@ -53,8 +53,9 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
 
     // GTFS settings
     Route::get('/settings/gtfs', [GtfsController::class, 'index'])->name('settings.gtfs');
-    Route::post('/settings/gtfs', [GtfsController::class, 'updateGtfsUrl'])->name('settings.gtfs.update');
-    Route::get('/settings/gtfs/download', [GtfsController::class, 'downloadGtfs'])->name('settings.gtfs.download');
+    Route::post('/settings/gtfs', [GtfsController::class, 'update'])->name('settings.gtfs.update');
+    Route::get('/settings/gtfs/download', [GtfsController::class, 'download'])->name('settings.gtfs.download');
+    Route::post('/settings/gtfs/clear', [GtfsController::class, 'clear'])->name('settings.gtfs.clear');
 
     // Rules and triggers
     Route::get('/settings/rules', [RulesAndTriggersController::class, 'viewRulesAndTriggers'])->name('settings.rules');
@@ -95,9 +96,9 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
 
     // GTFS settings
     Route::get('/settings/gtfs', [GtfsController::class, 'index'])->name('settings.gtfs');
-    Route::post('/settings/gtfs', [GtfsController::class, 'updateGtfsUrl'])->name('settings.gtfs.update');
-    Route::get('/settings/gtfs/download', [GtfsController::class, 'downloadGtfs'])->name('settings.gtfs.download');
-    Route::post('/settings/gtfs/clear', [GtfsController::class, 'clearGtfsData'])->name('settings.gtfs.clear');
+    Route::post('/settings/gtfs', [GtfsController::class, 'update'])->name('settings.gtfs.update');
+    Route::get('/settings/gtfs/download', [GtfsController::class, 'download'])->name('settings.gtfs.download');
+    Route::post('/settings/gtfs/clear', [GtfsController::class, 'clear'])->name('settings.gtfs.clear');
 
     // Rules and triggers
     Route::get('/settings/rules', [RulesAndTriggersController::class, 'viewRulesAndTriggers'])->name('settings.rules');

@@ -19,7 +19,7 @@
                         </div>
                     @endif
 
-                    <form action="{{ route('settings.gtfs.update') }}" method="POST" class="space-y-4">
+                    <form action="{{ route('settings.gtfs') }}" method="POST" class="space-y-4">
                         @csrf
                         <div>
                             <label for="url" class="block text-sm font-medium text-gray-700">GTFS URL</label>
