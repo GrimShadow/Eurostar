@@ -18,6 +18,8 @@ use App\Models\GtfsStop;
 use App\Models\GtfsHeartbeat;
 use Illuminate\Support\Facades\Auth;
 use App\Jobs\DownloadAndProcessGtfs;
+use App\Models\StopStatus;
+use App\Models\TrainStatus;
 
 class GtfsController extends Controller
 {
@@ -377,80 +379,126 @@ class GtfsController extends Controller
         }
     }
 
-    private function syncStopTimesData($extractPath) 
+    public function syncStopTimesData($extractPath)
     {
-        $stopTimesFile = $extractPath . '/stop_times.txt';
-        if (!file_exists($stopTimesFile)) {
-            throw new \Exception('stop_times.txt not found in GTFS data');
+        $filePath = $extractPath . '/stop_times.txt';
+        if (!file_exists($filePath)) {
+            return;
         }
 
-        Log::info('Starting GTFS stop times sync');
-
-        // Read stop_times.txt file
-        $file = fopen($stopTimesFile, 'r');
-        if (!$file) {
-            throw new \Exception('Unable to open stop_times.txt');
+        $handle = fopen($filePath, 'r');
+        if (!$handle) {
+            return;
         }
 
-        // Read headers
-        $headers = fgetcsv($file);
-        if (!$headers) {
-            throw new \Exception('Unable to read stop_times.txt headers');
+        // Read header
+        $header = fgetcsv($handle);
+        if (!$header) {
+            fclose($handle);
+            return;
         }
 
-        // Start transaction
-        DB::beginTransaction();
-        try {
-            // Clear all existing records first (more efficient for stop times)
-            GtfsStopTime::query()->delete();
-            $created = 0;
-            $batchSize = 1000;
-            $batch = [];
+        // Map header columns
+        $columns = array_flip($header);
 
-            // Process each line
-            while (($data = fgetcsv($file)) !== FALSE) {
-                $stopTimeData = array_combine($headers, $data);
-                
-                // Format data for database
-                $formattedData = [
-                    'trip_id' => $stopTimeData['trip_id'],
-                    'arrival_time' => $this->formatTime($stopTimeData['arrival_time']),
-                    'departure_time' => $this->formatTime($stopTimeData['departure_time']),
-                    'stop_id' => $stopTimeData['stop_id'],
-                    'stop_sequence' => (int)$stopTimeData['stop_sequence'],
-                    'drop_off_type' => (int)($stopTimeData['drop_off_type'] ?? 0),
-                    'pickup_type' => (int)($stopTimeData['pickup_type'] ?? 0),
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ];
+        // Prepare batch insert
+        $batch = [];
+        $stopStatuses = [];
 
-                $batch[] = $formattedData;
-                $created++;
+        while (($data = fgetcsv($handle)) !== FALSE) {
+            $stopTime = [
+                'trip_id' => $data[$columns['trip_id']],
+                'arrival_time' => $data[$columns['arrival_time']],
+                'departure_time' => $data[$columns['departure_time']],
+                'stop_id' => $data[$columns['stop_id']],
+                'stop_sequence' => $data[$columns['stop_sequence']],
+                'pickup_type' => $data[$columns['pickup_type']] ?? 0,
+                'drop_off_type' => $data[$columns['drop_off_type']] ?? 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
 
-                // Insert in batches for better performance
-                if (count($batch) >= $batchSize) {
-                    GtfsStopTime::insert($batch);
-                    $batch = [];
-                }
-            }
+            $batch[] = $stopTime;
 
-            // Insert any remaining records
-            if (!empty($batch)) {
+            // Create initial stop status
+            $stopStatuses[] = [
+                'trip_id' => $data[$columns['trip_id']],
+                'stop_id' => $data[$columns['stop_id']],
+                'status' => 'on-time',
+                'status_color' => '156,163,175',
+                'status_color_hex' => '#9CA3AF',
+                'scheduled_arrival_time' => $data[$columns['arrival_time']],
+                'scheduled_departure_time' => $data[$columns['departure_time']],
+                'departure_platform' => 'TBD',
+                'arrival_platform' => 'TBD',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            if (count($batch) >= 1000) {
                 GtfsStopTime::insert($batch);
+                StopStatus::insert($stopStatuses);
+                $batch = [];
+                $stopStatuses = [];
             }
-
-            DB::commit();
-
-            Log::info('GTFS stop times sync completed', [
-                'created' => $created
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        } finally {
-            fclose($file);
         }
+
+        if (!empty($batch)) {
+            GtfsStopTime::insert($batch);
+        }
+
+        if (!empty($stopStatuses)) {
+            StopStatus::insert($stopStatuses);
+        }
+
+        fclose($handle);
+    }
+
+    public function updateStopStatus(Request $request)
+    {
+        $request->validate([
+            'trip_id' => 'required|string',
+            'stop_id' => 'required|string',
+            'status' => 'required|string|in:on-time,delayed,cancelled,completed',
+            'actual_arrival_time' => 'nullable|date_format:H:i:s',
+            'actual_departure_time' => 'nullable|date_format:H:i:s',
+            'platform_code' => 'nullable|string',
+            'departure_platform' => 'nullable|string',
+            'arrival_platform' => 'nullable|string'
+        ]);
+
+        $stopStatus = StopStatus::updateOrCreate(
+            [
+                'trip_id' => $request->trip_id,
+                'stop_id' => $request->stop_id,
+            ],
+            [
+                'status' => $request->status,
+                'actual_arrival_time' => $request->actual_arrival_time,
+                'actual_departure_time' => $request->actual_departure_time,
+                'platform_code' => $request->platform_code,
+                'departure_platform' => $request->departure_platform,
+                'arrival_platform' => $request->arrival_platform,
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $stopStatus
+        ]);
+    }
+
+    public function getStopStatuses($tripId)
+    {
+        $stopStatuses = StopStatus::with(['stop'])
+            ->where('trip_id', $tripId)
+            ->orderBy('scheduled_arrival_time')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $stopStatuses
+        ]);
     }
 
     private function syncStopsData($extractPath) 
@@ -563,6 +611,34 @@ class GtfsController extends Controller
         }
         
         return $time;
+    }
+
+    public function updateTrainStatus(Request $request)
+    {
+        $request->validate([
+            'trip_id' => 'required|string',
+            'status' => 'required|string'
+        ]);
+
+        $trainStatus = TrainStatus::updateOrCreate(
+            ['trip_id' => $request->trip_id],
+            ['status' => $request->status]
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $trainStatus
+        ]);
+    }
+
+    public function getTrainStatus($tripId)
+    {
+        $trainStatus = TrainStatus::where('trip_id', $tripId)->first();
+
+        return response()->json([
+            'success' => true,
+            'data' => $trainStatus
+        ]);
     }
 
 }

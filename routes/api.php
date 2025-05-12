@@ -28,6 +28,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/announcement/{id}/status', [BrokerController::class, 'updateAnnouncementStatus']);
     });
     Route::get('/aviavox/responses', [AviavoxController::class, 'getResponses']);
+    Route::post('/gtfs/stop-status', [GtfsController::class, 'updateStopStatus']);
+    Route::get('/gtfs/stop-statuses/{tripId}', [GtfsController::class, 'getStopStatuses']);
+    Route::post('/gtfs/train-status', [GtfsController::class, 'updateTrainStatus']);
+    Route::get('/gtfs/train-status/{tripId}', [GtfsController::class, 'getTrainStatus']);
 });
 
 Route::post('/sanctum/token', [AuthController::class, 'token']);

@@ -28,7 +28,7 @@
                         {{ __('Rules and Triggers') }}
                     </x-nav-link>
                     <x-nav-link :href="route('settings.users')" :active="request()->routeIs('settings.users')">
-                        {{ __('User Management') }}
+                        {{ __('Users & Groups') }}
                     </x-nav-link>
                     <x-nav-link :href="route('settings.logs')" :active="request()->routeIs('settings.logs')">
                         {{ __('Logs') }}

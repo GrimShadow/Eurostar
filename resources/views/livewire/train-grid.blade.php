@@ -1,4 +1,4 @@
-<div wire:init="loadTrains">
+<div wire:init="loadTrains" wire:poll.10s="loadTrains">
     <div x-data="{ 
             modalOpen: false, 
             selectedTrain: null,
@@ -56,7 +56,7 @@
                             <div class="text-sm text-gray-500 mb-1">Status</div>
                             <div class="flex items-center">
                                 <span class="text-lg font-semibold" style="color: rgb({{ $train['status_color'] ?? '156,163,175' }});">
-                                    {{ $train['status'] ?? 'On time' }}
+                                    {{ isset($train['status']) && !empty($train['status']) ? ucfirst($train['status']) : 'On time' }}
                                 </span>
                             </div>
                         </div>

@@ -462,8 +462,33 @@ class AviavoxController extends Controller
         $responses = $query->orderBy('created_at', 'desc')
                          ->paginate($request->per_page ?? 10);
 
+        // Transform the responses to include extracted text content
+        $transformedResponses = $responses->getCollection()->map(function ($response) {
+            $textContent = null;
+            try {
+                $xml = simplexml_load_string($response->raw_response);
+                if ($xml && isset($xml->Announcement->Text)) {
+                    $textContent = (string)$xml->Announcement->Text;
+                    // Remove newlines and trim the text content
+                    $textContent = str_replace(["\n", "\r"], ' ', trim($textContent));
+                }
+            } catch (\Exception $e) {
+                // If XML parsing fails, textContent will remain null
+            }
+
+            return [
+                'id' => $response->getKey(),
+                'announcement_id' => $response->announcement_id,
+                'status' => $response->status,
+                'message_name' => $response->message_name,
+                'text_content' => $textContent,
+                'created_at' => $response->created_at,
+                'raw_response' => $response->raw_response
+            ];
+        });
+
         return response()->json([
-            'data' => $responses->items(),
+            'data' => $transformedResponses,
             'meta' => [
                 'current_page' => $responses->currentPage(),
                 'last_page' => $responses->lastPage(),

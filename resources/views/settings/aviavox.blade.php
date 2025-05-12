@@ -259,7 +259,7 @@
                                     {{ $template->created_at->format('Y-m-d H:i') }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <button onclick="showXml('{{ addslashes($template->xml_template) }}')" 
+                                    <button onclick="showXml({{ json_encode($template->xml_template) }})" 
                                         class="text-blue-600 hover:text-blue-900">View XML</button>
                                     <form action="{{ route('settings.aviavox.deleteTemplate', $template) }}" method="POST" class="inline ml-3">
                                         @csrf
@@ -319,7 +319,7 @@
                                     {{ $response->created_at->format('Y-m-d H:i:s') }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <button onclick="showResponse('{{ addslashes($response->raw_response) }}')" 
+                                    <button onclick="showResponse({{ json_encode($response->raw_response) }})" 
                                         class="text-blue-600 hover:text-blue-900">View Response</button>
                                 </td>
                             </tr>
@@ -333,34 +333,48 @@
             </div>
 
             <!-- Response Preview Modal -->
-            <div id="responseModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
-                <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-medium">Raw Response</h3>
-                        <button onclick="hideResponse()" class="text-gray-400 hover:text-gray-500">
+            <div id="responseModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+                <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4 transform transition-all">
+                    <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-xl font-semibold text-gray-900">Response</h3>
+                        <button onclick="hideResponse()" class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-full p-1">
                             <span class="sr-only">Close</span>
                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
-                    <pre id="responseContent" class="bg-gray-50 p-4 rounded-lg overflow-x-auto text-sm"></pre>
+                    <div class="px-6 py-4">
+                        <pre id="responseContent" class="bg-gray-50 p-6 rounded-lg overflow-x-auto text-sm font-mono text-gray-800 leading-relaxed whitespace-pre-wrap break-words"></pre>
+                    </div>
+                    <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end">
+                        <button onclick="hideResponse()" class="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                            Close
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- XML Preview Modal -->
-            <div id="xmlModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
-                <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-medium">XML Template</h3>
-                        <button onclick="hideXml()" class="text-gray-400 hover:text-gray-500">
+            <div id="xmlModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+                <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4 transform transition-all">
+                    <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-xl font-semibold text-gray-900">XML Template</h3>
+                        <button onclick="hideXml()" class="text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-full p-1">
                             <span class="sr-only">Close</span>
                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
-                    <pre id="xmlContent" class="bg-gray-50 p-4 rounded-lg overflow-x-auto text-sm"></pre>
+                    <div class="px-6 py-4">
+                        <pre id="xmlContent" class="bg-gray-50 p-6 rounded-lg overflow-x-auto text-sm font-mono text-gray-800 leading-relaxed whitespace-pre-wrap break-words"></pre>
+                    </div>
+                    <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl flex justify-end">
+                        <button onclick="hideXml()" class="px-4 py-2 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                            Close
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -505,8 +519,17 @@
     }
 
     function showResponse(response) {
-        document.getElementById('responseContent').textContent = response;
-        document.getElementById('responseModal').classList.remove('hidden');
+        try {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(response, "text/xml");
+            const textContent = xmlDoc.getElementsByTagName("Text")[0]?.textContent || response;
+            document.getElementById('responseContent').textContent = textContent;
+            document.getElementById('responseModal').classList.remove('hidden');
+        } catch (e) {
+            // If parsing fails, show the raw response
+            document.getElementById('responseContent').textContent = response;
+            document.getElementById('responseModal').classList.remove('hidden');
+        }
     }
 
     function hideResponse() {

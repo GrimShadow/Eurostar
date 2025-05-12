@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\GtfsTrip;
 use App\Models\TrainStatus;
+use App\Models\StopStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -130,6 +131,7 @@ class TrainController extends Controller
             ->whereIn('gtfs_stop_times.trip_id', $tripIds)
             ->select([
                 'gtfs_stop_times.trip_id',
+                'gtfs_stop_times.stop_id',
                 'gtfs_stop_times.stop_sequence',
                 'gtfs_stop_times.arrival_time',
                 'gtfs_stop_times.departure_time',
@@ -140,14 +142,30 @@ class TrainController extends Controller
             ->get()
             ->groupBy('trip_id');
 
+        // Get all stop statuses
+        $stopStatuses = StopStatus::whereIn('trip_id', $tripIds)
+            ->get()
+            ->groupBy('trip_id')
+            ->map(function ($statuses) {
+                return $statuses->keyBy('stop_id');
+            });
+
         // Map the trips with their stops
-        $trains = $trips->map(function ($train) use ($stops) {
-            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop, $index) {
+        $trains = $trips->map(function ($train) use ($stops, $stopStatuses) {
+            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train) {
+                $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
+                
                 return [
+                    'stop_id' => $stop->stop_id,
                     'stop_name' => $stop->stop_name,
                     'arrival_time' => substr($stop->arrival_time, 0, 5),
                     'departure_time' => substr($stop->departure_time, 0, 5),
-                    'stop_sequence' => $stop->stop_sequence
+                    'stop_sequence' => $stop->stop_sequence,
+                    'status' => $stopStatus ? $stopStatus->status : 'on-time',
+                    'status_color' => $stopStatus ? $stopStatus->status_color : '156,163,175',
+                    'status_color_hex' => $stopStatus ? $stopStatus->status_color_hex : '#9CA3AF',
+                    'departure_platform' => $stopStatus ? $stopStatus->departure_platform : 'TBD',
+                    'arrival_platform' => $stopStatus ? $stopStatus->arrival_platform : 'TBD'
                 ];
             })->values();
 
