@@ -261,6 +261,8 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     <button onclick="showXml({{ json_encode($template->xml_template) }})" 
                                         class="text-blue-600 hover:text-blue-900">View XML</button>
+                                    <a href="{{ route('settings.aviavox.editTemplate', $template) }}" 
+                                        class="text-blue-600 hover:text-blue-900 ml-3">Edit</a>
                                     <form action="{{ route('settings.aviavox.deleteTemplate', $template) }}" method="POST" class="inline ml-3">
                                         @csrf
                                         @method('DELETE')

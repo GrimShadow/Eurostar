@@ -113,6 +113,8 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
 });
 
 Route::delete('/settings/aviavox/template/{template}', [AviavoxController::class, 'deleteTemplate'])->name('settings.aviavox.deleteTemplate');
+Route::get('/settings/aviavox/template/{template}/edit', [AviavoxController::class, 'editTemplate'])->name('settings.aviavox.editTemplate');
+Route::put('/settings/aviavox/template/{template}', [AviavoxController::class, 'updateTemplate'])->name('settings.aviavox.updateTemplate');
 
 Route::get('/test-platforms', function() {
     $stops = \App\Models\GtfsStop::whereNotNull('platform_code')

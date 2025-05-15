@@ -437,7 +437,31 @@ class AviavoxController extends Controller
     public function deleteTemplate(AviavoxTemplate $template)
     {
         $template->delete();
-        return redirect()->back()->with('success', 'Template deleted successfully');
+        return redirect()->route('settings.aviavox')->with('success', 'Template deleted successfully.');
+    }
+
+    public function editTemplate(AviavoxTemplate $template)
+    {
+        return view('settings.aviavox-edit', compact('template'));
+    }
+
+    public function updateTemplate(Request $request, AviavoxTemplate $template)
+    {
+        $validated = $request->validate([
+            'friendly_name' => 'required|string|max:255',
+            'name' => 'required|string|max:255',
+            'xml_template' => 'required|string',
+            'variables' => 'array'
+        ]);
+
+        $template->update([
+            'friendly_name' => $validated['friendly_name'],
+            'name' => $validated['name'],
+            'xml_template' => $validated['xml_template'],
+            'variables' => $validated['variables'] ?? []
+        ]);
+
+        return redirect()->route('settings.aviavox')->with('success', 'Template updated successfully.');
     }
 
     public function getResponses(Request $request)
