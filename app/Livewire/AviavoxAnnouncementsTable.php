@@ -5,11 +5,26 @@ namespace App\Livewire;
 use App\Models\Announcement;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Carbon\Carbon;
+use Livewire\Attributes\Url;
 
-class AnnouncementsTable extends Component
+class AviavoxAnnouncementsTable extends Component
 {
     use WithPagination;
+
+    // Add unique pagination theme
+    protected $paginationTheme = 'tailwind';
+
+    // Add property to maintain scroll
+    public bool $keepScrollOnPaginate = true;
+
+    // Add pagination query string key
+    protected function paginationQueryString(): array
+    {
+        return ['page' => ['as' => 'announcements-page']];
+    }
+
+    #[Url]
+    public $page = 1;
 
     protected $listeners = [
         'announcement-created' => '$refresh',
@@ -35,12 +50,9 @@ class AnnouncementsTable extends Component
 
     public function render()
     {
-        $announcements = Announcement::whereDate('created_at', Carbon::today())
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
-
         return view('livewire.announcements-table', [
-            'announcements' => $announcements
+            'announcements' => Announcement::orderBy('created_at', 'desc')
+                ->paginate(10)
         ]);
     }
-}
+} 

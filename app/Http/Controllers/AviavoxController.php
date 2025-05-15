@@ -20,7 +20,8 @@ class AviavoxController extends Controller
         $aviavoxSettings = AviavoxSetting::first();
         $announcements = AviavoxAnnouncement::all();
         $templates = AviavoxTemplate::orderBy('created_at', 'desc')->get();
-        $responses = AviavoxResponse::orderBy('created_at', 'desc')->paginate(10);
+        $responses = AviavoxResponse::orderBy('created_at', 'desc')
+            ->paginate(10, ['*'], 'responses-page');
         
         // Load predefined messages from the text file
         $messagesFile = storage_path('app/aviavox/Eurostar - AviaVox AIP Message Triggers.txt');

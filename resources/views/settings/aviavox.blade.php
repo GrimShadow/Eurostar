@@ -164,6 +164,48 @@
 
             <livewire:zones-table />
 
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div x-data="{ open: true }" class="border-b border-gray-200">
+                    <button 
+                        @click="open = !open" 
+                        class="w-full px-4 py-6 text-left focus:outline-none"
+                    >
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-lg font-medium leading-6 text-gray-900">Announcement History</h3>
+                                <p class="mt-1 text-sm text-gray-500">View all announcements made today</p>
+                            </div>
+                            <svg 
+                                class="h-6 w-6 text-gray-400 transition-transform" 
+                                :class="{ 'rotate-180': open }"
+                                xmlns="http://www.w3.org/2000/svg" 
+                                fill="none" 
+                                viewBox="0 0 24 24" 
+                                stroke="currentColor"
+                            >
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </button>
+
+                    <!-- Accordion Content -->
+                    <div 
+                        x-show="open"
+                        x-cloak 
+                        x-transition:enter="transition ease-out duration-200"
+                        x-transition:enter-start="opacity-0 transform -translate-y-2"
+                        x-transition:enter-end="opacity-100 transform translate-y-0"
+                        x-transition:leave="transition ease-in duration-150"
+                        x-transition:leave-start="opacity-100 transform translate-y-0"
+                        x-transition:leave-end="opacity-0 transform -translate-y-2"
+                        class="px-4 pb-6"
+                        id="announcements-section"
+                        wire:ignore.self
+                    >
+                        <livewire:aviavox-announcements-table />
+                    </div>
+                </div>
+            </div>
 
             <form action="{{ route('settings.aviavox.checkin-aware-fault') }}" method="POST" class="inline">
                 @csrf
@@ -329,8 +371,8 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="mt-4">
-                    {{ $responses->links() }}
+                <div class="mt-4" id="responses-pagination">
+                    {{ $responses->fragment('responses-pagination')->links() }}
                 </div>
             </div>
 
@@ -405,6 +447,79 @@
             </div>
         </div>
     </div>
+
+    <!-- Add pagination styles -->
+    <style>
+        /* Force light theme for pagination */
+        .relative.z-0.inline-flex {
+            background-color: white !important;
+        }
+        .relative.inline-flex.items-center {
+            background-color: white !important;
+            color: #374151 !important; /* text-gray-700 */
+            border-color: #D1D5DB !important; /* border-gray-300 */
+        }
+        .relative.inline-flex.items-center:hover {
+            background-color: #F9FAFB !important; /* bg-gray-50 */
+            color: #6B7280 !important; /* text-gray-500 */
+        }
+        .relative.inline-flex.items-center[aria-current="page"] {
+            background-color: #EFF6FF !important; /* bg-blue-50 */
+            color: #2563EB !important; /* text-blue-600 */
+            border-color: #3B82F6 !important; /* border-blue-500 */
+        }
+        .relative.inline-flex.items-center[aria-disabled="true"] {
+            background-color: white !important;
+            color: #6B7280 !important; /* text-gray-500 */
+        }
+        /* SVG icons */
+        .w-5.h-5 {
+            color: #6B7280 !important; /* text-gray-500 */
+        }
+        /* Focus states */
+        .focus\:ring-gray-300:focus {
+            --tw-ring-color: #D1D5DB !important; /* ring-gray-300 */
+        }
+        .focus\:border-blue-300:focus {
+            border-color: #93C5FD !important; /* border-blue-300 */
+        }
+        /* Active states */
+        .active\:bg-gray-100:active {
+            background-color: #F3F4F6 !important; /* bg-gray-100 */
+        }
+        .active\:text-gray-700:active {
+            color: #374151 !important; /* text-gray-700 */
+        }
+        /* Override dark mode classes */
+        .dark .relative.z-0.inline-flex,
+        .dark .relative.inline-flex.items-center,
+        .dark .relative.inline-flex.items-center[aria-disabled="true"] {
+            background-color: white !important;
+            color: #374151 !important;
+            border-color: #D1D5DB !important;
+        }
+        .dark .relative.inline-flex.items-center[aria-current="page"] {
+            background-color: #EFF6FF !important;
+            color: #2563EB !important;
+            border-color: #3B82F6 !important;
+        }
+        .dark .w-5.h-5 {
+            color: #6B7280 !important;
+        }
+        /* Override dark mode hover states */
+        .dark .dark\:hover\:text-gray-300:hover {
+            color: #6B7280 !important;
+        }
+        .dark .dark\:bg-gray-800 {
+            background-color: white !important;
+        }
+        .dark .dark\:border-gray-600 {
+            border-color: #D1D5DB !important;
+        }
+        .dark .dark\:text-gray-400 {
+            color: #374151 !important;
+        }
+    </style>
 </x-admin-layout>
 
 <!-- Add Alpine.js script for dynamic form handling -->
