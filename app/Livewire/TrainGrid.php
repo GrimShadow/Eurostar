@@ -79,7 +79,7 @@ class TrainGrid extends Component
             }
 
             $currentTime = now()->format('H:i:s');
-            $endTime = now()->addHours(4)->format('H:i:s');
+            $endTime = '23:59:59';  // Show all trains for the day
 
             Log::info('TrainGrid - Time Window:', [
                 'current_time' => $currentTime,
@@ -135,14 +135,37 @@ class TrainGrid extends Component
                 foreach ($stopTimes as $stopTime) {
                     // Get the train status
                     $trainStatus = TrainStatus::where('trip_id', $uniqueTrip->trip_id)->first();
+                    
+                    // Get the stop status
+                    $stopStatus = StopStatus::where('trip_id', $uniqueTrip->trip_id)
+                        ->where('stop_id', $stopTime->stop_id)
+                        ->first();
 
-                    Log::info('TrainGrid - Train Status:', [
+                    Log::info('TrainGrid - Status Check:', [
                         'trip_id' => $uniqueTrip->trip_id,
-                        'status' => $trainStatus?->status
+                        'stop_id' => $stopTime->stop_id,
+                        'train_status' => $trainStatus?->status,
+                        'stop_status' => $stopStatus?->status,
+                        'stop_status_query' => StopStatus::where('trip_id', $uniqueTrip->trip_id)
+                            ->where('stop_id', $stopTime->stop_id)
+                            ->toSql(),
+                        'stop_status_bindings' => StopStatus::where('trip_id', $uniqueTrip->trip_id)
+                            ->where('stop_id', $stopTime->stop_id)
+                            ->getBindings()
                     ]);
 
+                    // Use stop status if available, otherwise use train status
+                    $currentStatus = $stopStatus?->status ?? $trainStatus?->status ?? 'on-time';
+
                     // Get the status color
-                    $status = Status::where('status', $trainStatus?->status)->first();
+                    $status = Status::where('status', $currentStatus)->first();
+
+                    Log::info('TrainGrid - Final Status:', [
+                        'trip_id' => $uniqueTrip->trip_id,
+                        'stop_id' => $stopTime->stop_id,
+                        'current_status' => $currentStatus,
+                        'status_color' => $status?->color_rgb
+                    ]);
 
                     $this->trains[] = [
                         'trip_id' => $uniqueTrip->trip_id,
@@ -155,11 +178,11 @@ class TrainGrid extends Component
                         'arrival_time' => $stopTime->arrival_time,
                         'departure_time' => $stopTime->departure_time,
                         'platform_code' => $stopTime->stop->platform_code,
-                        'status' => $trainStatus?->status,
+                        'status' => $currentStatus,
                         'status_color' => $status?->color_rgb ?? '156,163,175',
                         'status_color_hex' => $this->rgbToHex($status?->color_rgb ?? '156,163,175'),
-                        'departure_platform' => $trainStatus?->platform_code ?? 'TBD',
-                        'arrival_platform' => $trainStatus?->platform_code ?? 'TBD'
+                        'departure_platform' => $stopStatus?->departure_platform ?? $trainStatus?->platform_code ?? 'TBD',
+                        'arrival_platform' => $stopStatus?->arrival_platform ?? $trainStatus?->platform_code ?? 'TBD'
                     ];
                 }
             }
@@ -379,7 +402,6 @@ class TrainGrid extends Component
 
     public function render()
     {
-        $this->getTrains();
         return view('livewire.train-grid');
     }
 }

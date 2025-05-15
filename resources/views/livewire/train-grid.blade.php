@@ -48,7 +48,7 @@
                                         <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</div>
                                     </div>
                                 </div>
-                            </div>
+                            < /div>
                         </div>
 
                         <!-- Status Badge -->
