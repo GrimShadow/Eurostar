@@ -71,7 +71,6 @@ class TrainGrid extends Component
                 ->pluck('route_id')
                 ->toArray();
 
-            Log::info('TrainGrid - Active Routes:', ['routes' => $activeRoutes]);
 
             if (empty($activeRoutes)) {
                 $this->trains = [];
@@ -81,10 +80,6 @@ class TrainGrid extends Component
             $currentTime = now()->format('H:i:s');
             $endTime = '23:59:59';  // Show all trains for the day
 
-            Log::info('TrainGrid - Time Window:', [
-                'current_time' => $currentTime,
-                'end_time' => $endTime
-            ]);
 
             // Get unique trips using a subquery
             $uniqueTrips = DB::table('gtfs_trips')
@@ -111,13 +106,8 @@ class TrainGrid extends Component
                 ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.route_id')
                 ->orderBy('departure_time', 'asc');
 
-            Log::info('TrainGrid - Unique Trips Query:', [
-                'sql' => $uniqueTrips->toSql(),
-                'bindings' => $uniqueTrips->getBindings()
-            ]);
 
             $uniqueTrips = $uniqueTrips->get();
-            Log::info('TrainGrid - Unique Trips Found:', ['count' => $uniqueTrips->count()]);
 
             $this->trains = [];
 
@@ -141,18 +131,6 @@ class TrainGrid extends Component
                         ->where('stop_id', $stopTime->stop_id)
                         ->first();
 
-                    Log::info('TrainGrid - Status Check:', [
-                        'trip_id' => $uniqueTrip->trip_id,
-                        'stop_id' => $stopTime->stop_id,
-                        'train_status' => $trainStatus?->status,
-                        'stop_status' => $stopStatus?->status,
-                        'stop_status_query' => StopStatus::where('trip_id', $uniqueTrip->trip_id)
-                            ->where('stop_id', $stopTime->stop_id)
-                            ->toSql(),
-                        'stop_status_bindings' => StopStatus::where('trip_id', $uniqueTrip->trip_id)
-                            ->where('stop_id', $stopTime->stop_id)
-                            ->getBindings()
-                    ]);
 
                     // Use stop status if available, otherwise use train status
                     $currentStatus = $stopStatus?->status ?? $trainStatus?->status ?? 'on-time';
@@ -160,12 +138,6 @@ class TrainGrid extends Component
                     // Get the status color
                     $status = Status::where('status', $currentStatus)->first();
 
-                    Log::info('TrainGrid - Final Status:', [
-                        'trip_id' => $uniqueTrip->trip_id,
-                        'stop_id' => $stopTime->stop_id,
-                        'current_status' => $currentStatus,
-                        'status_color' => $status?->color_rgb
-                    ]);
 
                     $this->trains[] = [
                         'trip_id' => $uniqueTrip->trip_id,
@@ -192,7 +164,6 @@ class TrainGrid extends Component
                 return strtotime($a['departure_time']) - strtotime($b['departure_time']);
             });
 
-            Log::info('TrainGrid - Final Trains Data:', ['trains' => $this->trains]);
 
         } catch (\Exception $e) {
             Log::error('TrainGrid - Error loading trains:', [

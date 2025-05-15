@@ -54,10 +54,6 @@ class TrainTable extends Component
             ->pluck('route_id')
             ->toArray();
         
-        Log::info('TrainTable - Loaded Selected Routes', [
-            'group_id' => $this->group->id,
-            'routes' => $this->selectedRoutes
-        ]);
     }
 
     public function loadTrains()
@@ -65,16 +61,9 @@ class TrainTable extends Component
         $query = $this->getTrainsQuery();
         $this->total = $query->count();
         
-        Log::info('TrainTable - Total Trains Found', ['count' => $this->total]);
-
         $trains = $query->skip(($this->page - 1) * $this->perPage)
             ->take($this->perPage)
             ->get();
-
-        Log::info('TrainTable - Trains Found', [
-            'count' => $trains->count(),
-            'routes' => $trains->pluck('route_id')->unique()->values()->toArray()
-        ]);
 
         $this->trains = $trains->map(function ($train) {
             return [
@@ -91,15 +80,6 @@ class TrainTable extends Component
         // Debug the first train's data
         if ($trains->isNotEmpty()) {
             $firstTrain = $trains->first();
-            Log::info('TrainTable - First Train Data', [
-                'number' => $firstTrain->number,
-                'route_id' => $firstTrain->route_id,
-                'departure' => $firstTrain->departure,
-                'departure_platform' => $firstTrain->departure_platform,
-                'arrival_platform' => $firstTrain->arrival_platform,
-                'route_long_name' => $firstTrain->route_long_name,
-                'status' => $firstTrain->status_text ?? $firstTrain->train_status ?? 'on-time'
-            ]);
         }
     }
 
@@ -119,15 +99,6 @@ class TrainTable extends Component
             ->pluck('route_id')
             ->toArray();
 
-        Log::info('TrainTable - Debug Info', [
-            'group_id' => $this->group->id,
-            'selected_routes' => $selectedRoutes,
-            'current_time' => $currentTime,
-            'end_time' => $endTime,
-            'total_routes' => DB::table('gtfs_routes')->count(),
-            'total_trips' => DB::table('gtfs_trips')->count(),
-            'total_stop_times' => DB::table('gtfs_stop_times')->count()
-        ]);
 
         if (empty($selectedRoutes)) {
             Log::info('TrainTable - No routes selected, returning empty query');
@@ -156,8 +127,6 @@ class TrainTable extends Component
         $uniqueTripsCount = DB::table(DB::raw("({$uniqueTrips->toSql()}) as temp"))
             ->mergeBindings($uniqueTrips)
             ->count();
-            
-        Log::info('TrainTable - Unique Trips Count', ['count' => $uniqueTripsCount]);
 
         // Then join with other tables to get the full information
         $query = DB::table(DB::raw("({$uniqueTrips->toSql()}) as unique_trips"))
@@ -212,12 +181,6 @@ class TrainTable extends Component
             ->leftJoin('statuses', 'train_statuses.status', '=', 'statuses.status')
             ->orderBy('unique_trips.departure_time');
 
-        // Log the SQL query for debugging
-        Log::info('TrainTable - Query', [
-            'sql' => $query->toSql(),
-            'bindings' => $query->getBindings()
-        ]);
-
         return $query;
     }
 
@@ -239,7 +202,6 @@ class TrainTable extends Component
 
     public function toggleTableRoute($routeId)
     {
-        Log::info('TrainTable - Toggling Route', ['route_id' => $routeId]);
         
         $route = DB::table('selected_routes')
             ->where('route_id', $routeId)
@@ -250,7 +212,6 @@ class TrainTable extends Component
             DB::table('selected_routes')
                 ->where('route_id', $routeId)
                 ->update(['is_active' => $newStatus]);
-            Log::info('TrainTable - Updated Route Status', ['route_id' => $routeId, 'new_status' => $newStatus]);
         } else {
             DB::table('selected_routes')
                 ->insert([
@@ -259,7 +220,6 @@ class TrainTable extends Component
                     'created_at' => now(),
                     'updated_at' => now()
                 ]);
-            Log::info('TrainTable - Added New Route', ['route_id' => $routeId]);
         }
 
         $this->loadSelectedRoutes();

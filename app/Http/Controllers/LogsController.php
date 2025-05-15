@@ -14,15 +14,6 @@ class LogsController extends Controller
     {
         try {
             $logFilePath = storage_path('logs/laravel.log');
-            
-            // Log the current user and file path for debugging
-            Log::info('Attempting to view logs', [
-                'user' => Auth::id() ?? 'unauthenticated',
-                'file_path' => $logFilePath,
-                'file_exists' => File::exists($logFilePath),
-                'is_readable' => File::isReadable($logFilePath),
-                'permissions' => File::exists($logFilePath) ? substr(sprintf('%o', fileperms($logFilePath)), -4) : 'N/A'
-            ]);
 
             if (!File::exists($logFilePath)) {
                 Log::warning('Log file not found at: ' . $logFilePath);

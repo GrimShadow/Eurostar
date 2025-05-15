@@ -79,10 +79,8 @@ class AviavoxController extends Controller
 
             // Step 2: Read AuthenticationChallengeResponse
             $response = fread($socket, 1024);
-            Log::info("Authentication Challenge Response: " . $response);
-
+            
             if (strpos($response, '<MessageID>AuthenticationChallengeResponse</MessageID>') === false) {
-                Log::error('Authentication challenge failed.');
                 return redirect()->route('settings.aviavox')->with('error', 'Authentication challenge failed.');
             }
 
@@ -90,7 +88,6 @@ class AviavoxController extends Controller
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
             if (!$challenge) {
-                Log::error('Invalid challenge received.');
                 return redirect()->route('settings.aviavox')->with('error', 'Invalid challenge received.');
             }
 
@@ -107,19 +104,15 @@ class AviavoxController extends Controller
 
             // Step 5: Read AuthenticationResponse
             $authResponse = fread($socket, 1024);
-            Log::info("Authentication Response: " . $authResponse);
 
             fclose($socket);
 
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') !== false) {
-                Log::info('Connection tested successfully.');
                 return redirect()->route('settings.aviavox')->with('success', 'Connection tested successfully.');
             } else {
-                Log::error('Authentication failed.');
                 return redirect()->route('settings.aviavox')->with('error', 'Authentication failed.');
             }
         } catch (Exception $e) {
-            Log::error('An error occurred: ' . $e->getMessage());
             return redirect()->route('settings.aviavox')->with('error', 'An error occurred: ' . $e->getMessage());
         }
     }
@@ -176,8 +169,7 @@ class AviavoxController extends Controller
 
     public function handleResponse(Request $request)
     {
-        Log::info('Received Aviavox response', ['response' => $request->getContent()]);
-        
+   
         // Parse the XML response
         $xml = simplexml_load_string($request->getContent());
         if ($xml) {
@@ -258,7 +250,6 @@ class AviavoxController extends Controller
 
             return redirect()->back()->with('success', 'Check-in aware fault announcement sent successfully');
         } catch (Exception $e) {
-            Log::error('Failed to send check-in aware fault announcement: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }
@@ -328,7 +319,6 @@ class AviavoxController extends Controller
 
             return redirect()->back()->with('success', 'Announcement sent and stored successfully');
         } catch (Exception $e) {
-            Log::error('Failed to send announcement: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }
@@ -342,9 +332,6 @@ class AviavoxController extends Controller
         $settings = AviavoxSetting::first();
 
         try {
-            // Log the incoming XML for debugging
-            Log::info('Attempting to send custom XML', ['xml' => $request->custom_xml]);
-            
             $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
             if (!$socket) {
                 throw new \Exception("Failed to connect: $errstr ($errno)");
@@ -356,13 +343,11 @@ class AviavoxController extends Controller
             // Authentication steps
             $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
             fwrite($socket, chr(2) . $challengeRequest . chr(3));
-            Log::info('Sent challenge request');
             
             $response = fread($socket, 1024);
             if (stream_get_meta_data($socket)['timed_out']) {
                 throw new \Exception('Stream timed out while waiting for challenge response');
             }
-            Log::info('Received challenge response', ['response' => $response]);
 
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
@@ -378,10 +363,8 @@ class AviavoxController extends Controller
             // Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
             fwrite($socket, chr(2) . $authRequest . chr(3));
-            Log::info('Sent auth request');
 
             $authResponse = fread($socket, 1024);
-            Log::info('Received auth response', ['response' => $authResponse]);
             
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
                 throw new \Exception('Authentication failed.');
@@ -389,20 +372,17 @@ class AviavoxController extends Controller
 
             // Clean up the XML - remove any extra whitespace and ensure proper formatting
             $cleanXml = preg_replace('/>\s+</', '><', trim($request->custom_xml));
-            Log::info('Sending cleaned XML', ['xml' => $cleanXml]);
 
             // Send the custom announcement with STX/ETX characters
             fwrite($socket, chr(2) . $cleanXml . chr(3));
             
             // Wait for response
             $finalResponse = fread($socket, 1024);
-            Log::info('Received final response', ['response' => $finalResponse]);
             
             fclose($socket);
 
             return redirect()->back()->with('success', 'Custom announcement sent successfully');
         } catch (Exception $e) {
-            Log::error('Failed to send custom announcement: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
         }
     }

@@ -14,11 +14,6 @@ class GroupAccess
     {
         $group = $request->route('group');
         
-        Log::info('GroupAccess middleware', [
-            'group' => $group->toArray(),
-            'route' => $request->route()->getName(),
-            'user_id' => Auth::id()
-        ]);
 
         if (!$group) {
             Log::error('Group not found');
