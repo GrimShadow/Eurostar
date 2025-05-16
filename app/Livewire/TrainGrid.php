@@ -71,6 +71,10 @@ class TrainGrid extends Component
                 ->pluck('route_id')
                 ->toArray();
 
+            // Set time range from now until end of day
+            $currentTime = now()->format('H:i:s');
+            $endTime = '23:59:59';
+
             // Get unique trips for today
             $uniqueTrips = GtfsTrip::query()
                 ->whereIn('route_id', $selectedRoutes)
@@ -81,6 +85,13 @@ class TrainGrid extends Component
                         ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
                         ->where('gtfs_calendar_dates.exception_type', 1);
                 })
+                ->whereExists(function ($query) use ($currentTime, $endTime) {
+                    $query->select(DB::raw(1))
+                        ->from('gtfs_stop_times')
+                        ->whereColumn('gtfs_stop_times.trip_id', 'gtfs_trips.trip_id')
+                        ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
+                        ->where('gtfs_stop_times.departure_time', '<=', $endTime);
+                })
                 ->get();
 
             $this->trains = [];
@@ -89,6 +100,8 @@ class TrainGrid extends Component
                 // Get the stop times for this trip at the selected stations
                 $stopTimes = GtfsStopTime::where('trip_id', $uniqueTrip->trip_id)
                     ->whereIn('stop_id', $this->selectedStations[$uniqueTrip->route_id] ?? [])
+                    ->where('departure_time', '>=', $currentTime)
+                    ->where('departure_time', '<=', $endTime)
                     ->orderBy('stop_sequence')
                     ->get();
 
