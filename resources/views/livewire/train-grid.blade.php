@@ -41,11 +41,12 @@
                                     <div>
                                         <div class="text-sm text-gray-500 mb-1">Arrival</div>
                                         <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['arrival_time'])->format('H:i') }}</div>
-                                        <div class="text-sm text-gray-500">Platform {{ $train['platform_code'] ?? 'TBD' }}</div>
+                                        <div class="text-sm text-gray-500">Platform {{ $train['arrival_platform'] }}</div>
                                     </div>
                                     <div class="text-right">
                                         <div class="text-sm text-gray-500 mb-1">Departure</div>
                                         <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</div>
+                                        <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] }}</div>
                                     </div>
                                 </div>
                             </div>

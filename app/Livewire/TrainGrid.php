@@ -65,37 +65,15 @@ class TrainGrid extends Component
     public function loadTrains()
     {
         try {
-            // Get all active routes for this group
-            $activeRoutes = $this->group->selectedRoutes()
+            // Get the selected routes
+            $selectedRoutes = DB::table('selected_routes')
                 ->where('is_active', true)
                 ->pluck('route_id')
                 ->toArray();
 
-
-            if (empty($activeRoutes)) {
-                $this->trains = [];
-                return;
-            }
-
-            $currentTime = now()->format('H:i:s');
-            $endTime = '23:59:59';  // Show all trains for the day
-
-
-            // Get unique trips using a subquery
-            $uniqueTrips = DB::table('gtfs_trips')
-                ->select([
-                    'gtfs_trips.trip_short_name',
-                    DB::raw('MIN(gtfs_trips.trip_id) as trip_id'),
-                    'gtfs_trips.route_id',
-                    DB::raw('MIN(first_stop.departure_time) as departure_time')
-                ])
-                ->join('gtfs_stop_times as first_stop', function($join) {
-                    $join->on('gtfs_trips.trip_id', '=', 'first_stop.trip_id')
-                        ->where('first_stop.stop_sequence', '=', 1);
-                })
-                ->whereIn('gtfs_trips.route_id', $activeRoutes)
-                ->where('first_stop.departure_time', '>=', $currentTime)
-                ->where('first_stop.departure_time', '<=', $endTime)
+            // Get unique trips for today
+            $uniqueTrips = GtfsTrip::query()
+                ->whereIn('route_id', $selectedRoutes)
                 ->whereExists(function ($query) {
                     $query->select(DB::raw(1))
                         ->from('gtfs_calendar_dates')
@@ -103,11 +81,7 @@ class TrainGrid extends Component
                         ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
                         ->where('gtfs_calendar_dates.exception_type', 1);
                 })
-                ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.route_id')
-                ->orderBy('departure_time', 'asc');
-
-
-            $uniqueTrips = $uniqueTrips->get();
+                ->get();
 
             $this->trains = [];
 
@@ -131,6 +105,11 @@ class TrainGrid extends Component
                         ->where('stop_id', $stopTime->stop_id)
                         ->first();
 
+                    // Get platform assignment
+                    $platformAssignment = DB::table('train_platform_assignments')
+                        ->where('trip_id', $uniqueTrip->trip_id)
+                        ->where('stop_id', $stopTime->stop_id)
+                        ->first();
 
                     // Use stop status if available, otherwise use train status
                     $currentStatus = $stopStatus?->status ?? $trainStatus?->status ?? 'on-time';
@@ -138,6 +117,11 @@ class TrainGrid extends Component
                     // Get the status color
                     $status = Status::where('status', $currentStatus)->first();
 
+                    // Determine platform - use platform assignment first, then stop status, then default to TBD
+                    $platform = $platformAssignment?->platform_code ?? 
+                               $stopStatus?->departure_platform ?? 
+                               $stopStatus?->arrival_platform ?? 
+                               'TBD';
 
                     $this->trains[] = [
                         'trip_id' => $uniqueTrip->trip_id,
@@ -149,12 +133,12 @@ class TrainGrid extends Component
                         'stop_name' => $stopTime->stop->stop_name,
                         'arrival_time' => $stopTime->arrival_time,
                         'departure_time' => $stopTime->departure_time,
-                        'platform_code' => $stopTime->stop->platform_code,
+                        'platform_code' => $platform,
                         'status' => $currentStatus,
                         'status_color' => $status?->color_rgb ?? '156,163,175',
                         'status_color_hex' => $this->rgbToHex($status?->color_rgb ?? '156,163,175'),
-                        'departure_platform' => $stopStatus?->departure_platform ?? $trainStatus?->platform_code ?? 'TBD',
-                        'arrival_platform' => $stopStatus?->arrival_platform ?? $trainStatus?->platform_code ?? 'TBD'
+                        'departure_platform' => $platform,
+                        'arrival_platform' => $platform
                     ];
                 }
             }
@@ -163,7 +147,6 @@ class TrainGrid extends Component
             usort($this->trains, function ($a, $b) {
                 return strtotime($a['departure_time']) - strtotime($b['departure_time']);
             });
-
 
         } catch (\Exception $e) {
             Log::error('TrainGrid - Error loading trains:', [
@@ -216,6 +199,38 @@ class TrainGrid extends Component
         })->toArray();
     }
 
+    private function updatePlatform($tripId, $stopId, $platform)
+    {
+        if (!$platform) {
+            return;
+        }
+
+        // Update train_platform_assignments table
+        DB::table('train_platform_assignments')->updateOrInsert(
+            [
+                'trip_id' => $tripId,
+                'stop_id' => $stopId,
+            ],
+            [
+                'platform_code' => $platform,
+                'updated_at' => now()
+            ]
+        );
+
+        // Update stop_statuses table
+        StopStatus::updateOrCreate(
+            [
+                'trip_id' => $tripId,
+                'stop_id' => $stopId
+            ],
+            [
+                'departure_platform' => $platform,
+                'arrival_platform' => $platform,
+                'updated_at' => now()
+            ]
+        );
+    }
+
     public function updateTrainStatus($tripId, $status, $newTime = null, $platform = null)
     {
         try {
@@ -229,6 +244,11 @@ class TrainGrid extends Component
                 return;
             }
 
+            // Update the platform if provided
+            if ($platform) {
+                $this->updatePlatform($tripId, $train['stop_id'], $platform);
+            }
+
             // Update the stop status
             $stopStatus = StopStatus::updateOrCreate(
                 [
@@ -237,8 +257,7 @@ class TrainGrid extends Component
                 ],
                 [
                     'status' => $status,
-                    'departure_platform' => $platform,
-                    'arrival_platform' => $platform
+                    'updated_at' => now()
                 ]
             );
 
