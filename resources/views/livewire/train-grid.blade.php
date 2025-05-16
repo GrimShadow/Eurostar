@@ -8,7 +8,10 @@
             init() {
                 this.$watch('selectedTrain', value => {
                     if (value) {
-                        this.newTime = JSON.parse(value).departure_time;
+                        const train = JSON.parse(value);
+                        this.newTime = train.departure_time;
+                        this.status = train.status;
+                        this.platform = train.departure_platform !== 'TBD' ? train.departure_platform : null;
                     }
                 })
             }
