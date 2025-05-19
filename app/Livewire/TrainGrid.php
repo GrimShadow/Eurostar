@@ -274,12 +274,12 @@ class TrainGrid extends Component
                 ]
             );
 
-            // Update the departure time if provided
+            // Update the new departure time if provided
             if ($newTime) {
                 DB::table('gtfs_stop_times')
                     ->where('trip_id', $tripId)
                     ->where('stop_id', $train['stop_id'])
-                    ->update(['departure_time' => $newTime]);
+                    ->update(['new_departure_time' => $newTime]);
             }
 
             // Reload the trains data

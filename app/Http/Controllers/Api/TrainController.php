@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GtfsTrip;
 use App\Models\TrainStatus;
 use App\Models\StopStatus;
+use App\Models\Setting;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +35,9 @@ class TrainController extends Controller
         $today = Carbon::now()->format('Y-m-d');
         $startTime = '00:00:00';
         $endTime = '23:59:59';
+
+        // Get the global check-in offset from settings
+        $globalCheckInOffset = Setting::where('key', 'global_check_in_offset')->value('value') ?? 90;
 
         $selectedRoutes = DB::table('selected_routes')
             ->where('is_active', true)
@@ -135,6 +139,7 @@ class TrainController extends Controller
                 'gtfs_stop_times.stop_sequence',
                 'gtfs_stop_times.arrival_time',
                 'gtfs_stop_times.departure_time',
+                'gtfs_stop_times.new_departure_time',
                 'gtfs_stops.stop_name'
             ])
             ->orderBy('gtfs_stop_times.trip_id')
@@ -151,8 +156,8 @@ class TrainController extends Controller
             });
 
         // Map the trips with their stops
-        $trains = $trips->map(function ($train) use ($stops, $stopStatuses) {
-            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train) {
+        $trains = $trips->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset) {
+            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
                 
                 return [
@@ -160,12 +165,14 @@ class TrainController extends Controller
                     'stop_name' => $stop->stop_name,
                     'arrival_time' => substr($stop->arrival_time, 0, 5),
                     'departure_time' => substr($stop->departure_time, 0, 5),
+                    'new_departure_time' => $stop->new_departure_time ? substr($stop->new_departure_time, 0, 5) : null,
                     'stop_sequence' => $stop->stop_sequence,
                     'status' => $stopStatus ? $stopStatus->status : 'on-time',
                     'status_color' => $stopStatus ? $stopStatus->status_color : '156,163,175',
                     'status_color_hex' => $stopStatus ? $stopStatus->status_color_hex : '#9CA3AF',
                     'departure_platform' => $stopStatus ? $stopStatus->departure_platform : 'TBD',
-                    'arrival_platform' => $stopStatus ? $stopStatus->arrival_platform : 'TBD'
+                    'arrival_platform' => $stopStatus ? $stopStatus->arrival_platform : 'TBD',
+                    'check_in_time' => $globalCheckInOffset
                 ];
             })->values();
 

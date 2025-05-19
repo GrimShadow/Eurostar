@@ -8,7 +8,6 @@
                     <p class="mt-2 text-sm text-gray-600">Configure variables for the application.</p>
                 </div>
             </div>
-            
         </div>
     </div>
 </x-admin-layout>
