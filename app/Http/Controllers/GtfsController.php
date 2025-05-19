@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Jobs\DownloadAndProcessGtfs;
 use App\Models\StopStatus;
 use App\Models\TrainStatus;
+use Illuminate\Support\Facades\Schema;
 
 class GtfsController extends Controller
 {
@@ -77,25 +78,76 @@ class GtfsController extends Controller
         $gtfsSettings = GtfsSetting::first();
         
         if (!$gtfsSettings) {
+            error_log('GTFS settings not found');
             return redirect()->route('settings.gtfs')->with('error', 'GTFS settings not found.');
         }
 
-        // Clear all GTFS data
-        \App\Models\GtfsRoute::truncate();
-        \App\Models\GtfsTrip::truncate();
-        \App\Models\GtfsStop::truncate();
-        \App\Models\GtfsStopTime::truncate();
-        \App\Models\GtfsCalendar::truncate();
-        \App\Models\GtfsCalendarDate::truncate();
+        try {
+            error_log('Starting GTFS data clear');
+            
+            // Disable foreign key checks
+            DB::statement('SET FOREIGN_KEY_CHECKS=0');
+            
+            // Clear tables using query builder
+            $tables = [
+                'gtfs_stop_times',
+                'gtfs_trips',
+                'gtfs_routes',
+                'gtfs_stops',
+                'gtfs_calendar_dates',
+                'stop_statuses',
+                'train_statuses'
+            ];
 
-        $gtfsSettings->last_download = null;
-        $gtfsSettings->next_download = null;
-        $gtfsSettings->is_downloading = false;
-        $gtfsSettings->download_progress = null;
-        $gtfsSettings->download_started_at = null;
-        $gtfsSettings->save();
+            foreach ($tables as $table) {
+                try {
+                    // First check if table exists
+                    if (Schema::hasTable($table)) {
+                        // Get count before clearing
+                        $count = DB::table($table)->count();
+                        error_log("Table {$table} has {$count} records before clearing");
+                        
+                        // Clear the table
+                        DB::table($table)->truncate();
+                        
+                        // Verify it's empty
+                        $newCount = DB::table($table)->count();
+                        error_log("Table {$table} has {$newCount} records after clearing");
+                        
+                        if ($newCount > 0) {
+                            throw new \Exception("Table {$table} still has {$newCount} records after truncate");
+                        }
+                    } else {
+                        throw new \Exception("Table {$table} does not exist");
+                    }
+                } catch (\Exception $e) {
+                    error_log("Error clearing table {$table}: " . $e->getMessage());
+                    throw $e;
+                }
+            }
 
-        return redirect()->route('settings.gtfs')->with('success', 'GTFS data cleared successfully.');
+            // Re-enable foreign key checks
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+            // Reset GTFS settings
+            $gtfsSettings->last_download = null;
+            $gtfsSettings->next_download = null;
+            $gtfsSettings->is_downloading = false;
+            $gtfsSettings->download_progress = null;
+            $gtfsSettings->download_started_at = null;
+            $gtfsSettings->download_status = null;
+            $gtfsSettings->save();
+
+            error_log('GTFS data cleared successfully');
+            return redirect()->route('settings.gtfs')->with('success', 'GTFS data cleared successfully.');
+        } catch (\Exception $e) {
+            // Re-enable foreign key checks in case of error
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+            
+            $error = 'Failed to clear GTFS data: ' . $e->getMessage();
+            error_log($error);
+            return redirect()->route('settings.gtfs')->with('error', $error);
+        }
     }
 
     private function removeDirectory($path) {
@@ -114,7 +166,7 @@ class GtfsController extends Controller
         rmdir($path);
     }
 
-    private function syncTripsData($extractPath) 
+    public function syncTripsData($extractPath) 
     {
         $tripsFile = $extractPath . '/trips.txt';
         if (!file_exists($tripsFile)) {
@@ -209,7 +261,7 @@ class GtfsController extends Controller
         }
     }
 
-    private function syncCalendarDatesData($extractPath) 
+    public function syncCalendarDatesData($extractPath) 
     {
         $calendarDatesFile = $extractPath . '/calendar_dates.txt';
         if (!file_exists($calendarDatesFile)) {
@@ -285,7 +337,7 @@ class GtfsController extends Controller
         }
     }
 
-    private function syncRoutesData($extractPath) 
+    public function syncRoutesData($extractPath) 
     {
         $routesFile = $extractPath . '/routes.txt';
         if (!file_exists($routesFile)) {
@@ -501,7 +553,7 @@ class GtfsController extends Controller
         ]);
     }
 
-    private function syncStopsData($extractPath) 
+    public function syncStopsData($extractPath) 
     {
         $stopsFile = $extractPath . '/stops.txt';
         if (!file_exists($stopsFile)) {

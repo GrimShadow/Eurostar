@@ -135,13 +135,21 @@ class TrainController extends Controller
             ->whereIn('gtfs_stop_times.trip_id', $tripIds)
             ->select([
                 'gtfs_stop_times.trip_id',
-                'gtfs_stop_times.stop_id',
+                DB::raw('MIN(gtfs_stop_times.stop_id) as stop_id'),
+                DB::raw('MIN(gtfs_stops.stop_name) as stop_name'),
+                DB::raw('MAX(gtfs_stops.platform_code) as platform_code'),
                 'gtfs_stop_times.stop_sequence',
                 'gtfs_stop_times.arrival_time',
                 'gtfs_stop_times.departure_time',
-                'gtfs_stop_times.new_departure_time',
-                'gtfs_stops.stop_name'
+                'gtfs_stop_times.new_departure_time'
             ])
+            ->groupBy(
+                'gtfs_stop_times.trip_id',
+                'gtfs_stop_times.stop_sequence',
+                'gtfs_stop_times.arrival_time',
+                'gtfs_stop_times.departure_time',
+                'gtfs_stop_times.new_departure_time'
+            )
             ->orderBy('gtfs_stop_times.trip_id')
             ->orderBy('gtfs_stop_times.stop_sequence')
             ->get()
@@ -156,7 +164,7 @@ class TrainController extends Controller
             });
 
         // Map the trips with their stops
-        $trains = $trips->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset) {
+        $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset) {
             $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
                 
@@ -170,8 +178,8 @@ class TrainController extends Controller
                     'status' => $stopStatus ? $stopStatus->status : 'on-time',
                     'status_color' => $stopStatus ? $stopStatus->status_color : '156,163,175',
                     'status_color_hex' => $stopStatus ? $stopStatus->status_color_hex : '#9CA3AF',
-                    'departure_platform' => $stopStatus ? $stopStatus->departure_platform : 'TBD',
-                    'arrival_platform' => $stopStatus ? $stopStatus->arrival_platform : 'TBD',
+                    'departure_platform' => $stop->platform_code ?? ($stopStatus ? $stopStatus->departure_platform : 'TBD'),
+                    'arrival_platform' => $stop->platform_code ?? ($stopStatus ? $stopStatus->arrival_platform : 'TBD'),
                     'check_in_time' => $globalCheckInOffset
                 ];
             })->values();
