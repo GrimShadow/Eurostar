@@ -49,11 +49,19 @@ class TrainTable extends Component
             return;
         }
 
-        $this->selectedRoutes = $this->group->trainTableSelections()
+        // Get both API routes and group-specific routes
+        $apiRoutes = DB::table('selected_routes')
             ->where('is_active', true)
             ->pluck('route_id')
             ->toArray();
-        
+
+        $groupRoutes = $this->group->trainTableSelections()
+            ->where('is_active', true)
+            ->pluck('route_id')
+            ->toArray();
+
+        // Combine both sets of routes
+        $this->selectedRoutes = array_unique(array_merge($apiRoutes, $groupRoutes));
     }
 
     public function loadTrains()
@@ -99,43 +107,18 @@ class TrainTable extends Component
             ->pluck('route_id')
             ->toArray();
 
-
         if (empty($selectedRoutes)) {
             Log::info('TrainTable - No routes selected, returning empty query');
             return GtfsTrip::query()->whereRaw('1 = 0');
         }
 
-        // First, get unique trips with their first stop times
-        $uniqueTrips = DB::table('gtfs_trips')
+        // Get unique trips with their first and last stops
+        $query = DB::table('gtfs_trips')
             ->select([
-                DB::raw('DISTINCT gtfs_trips.trip_short_name'),
-                DB::raw('MIN(gtfs_trips.trip_id) as trip_id'),
+                DB::raw('DISTINCT gtfs_trips.trip_short_name as number'),
+                'gtfs_trips.trip_id',
                 'gtfs_trips.route_id',
-                DB::raw('MIN(first_stop.departure_time) as departure_time')
-            ])
-            ->join('gtfs_stop_times as first_stop', function ($join) {
-                $join->on('gtfs_trips.trip_id', '=', 'first_stop.trip_id')
-                    ->where('first_stop.stop_sequence', '=', 1);
-            })
-            ->whereIn('gtfs_trips.route_id', $selectedRoutes)
-            ->where('first_stop.departure_time', '>=', $currentTime)
-            ->where('first_stop.departure_time', '<=', $endTime)
-            ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.route_id')
-            ->orderBy('departure_time');
-
-        // Log the intermediate query results
-        $uniqueTripsCount = DB::table(DB::raw("({$uniqueTrips->toSql()}) as temp"))
-            ->mergeBindings($uniqueTrips)
-            ->count();
-
-        // Then join with other tables to get the full information
-        $query = DB::table(DB::raw("({$uniqueTrips->toSql()}) as unique_trips"))
-            ->mergeBindings($uniqueTrips)
-            ->select([
-                'unique_trips.trip_short_name as number',
-                'unique_trips.trip_id',
-                'unique_trips.route_id',
-                'unique_trips.departure_time as departure',
+                'first_stop.departure_time as departure',
                 'last_stop.arrival_time as arrival',
                 'gtfs_routes.route_long_name',
                 'gtfs_trips.trip_headsign as destination',
@@ -145,7 +128,10 @@ class TrainTable extends Component
                 'departure_platform.platform_code as departure_platform',
                 'arrival_platform.platform_code as arrival_platform'
             ])
-            ->join('gtfs_trips', 'unique_trips.trip_id', '=', 'gtfs_trips.trip_id')
+            ->join('gtfs_stop_times as first_stop', function ($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'first_stop.trip_id')
+                    ->where('first_stop.stop_sequence', '=', 1);
+            })
             ->join('gtfs_stop_times as last_stop', function ($join) {
                 $join->on('gtfs_trips.trip_id', '=', 'last_stop.trip_id')
                     ->whereRaw('last_stop.stop_sequence = (
@@ -157,29 +143,29 @@ class TrainTable extends Component
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
             ->leftJoin('train_platform_assignments as departure_platform', function ($join) {
                 $join->on('gtfs_trips.trip_id', '=', 'departure_platform.trip_id')
-                    ->whereRaw('departure_platform.stop_id = (
-                        SELECT stop_id 
-                        FROM gtfs_stop_times 
-                        WHERE trip_id = gtfs_trips.trip_id 
-                        AND stop_sequence = 1
-                    )');
+                    ->whereRaw('departure_platform.stop_id = first_stop.stop_id');
             })
             ->leftJoin('train_platform_assignments as arrival_platform', function ($join) {
                 $join->on('gtfs_trips.trip_id', '=', 'arrival_platform.trip_id')
-                    ->whereRaw('arrival_platform.stop_id = (
-                        SELECT stop_id 
-                        FROM gtfs_stop_times 
-                        WHERE trip_id = gtfs_trips.trip_id 
-                        AND stop_sequence = (
-                            SELECT MAX(stop_sequence) 
-                            FROM gtfs_stop_times 
-                            WHERE trip_id = gtfs_trips.trip_id
-                        )
-                    )');
+                    ->whereRaw('arrival_platform.stop_id = last_stop.stop_id');
             })
             ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
             ->leftJoin('statuses', 'train_statuses.status', '=', 'statuses.status')
-            ->orderBy('unique_trips.departure_time');
+            ->whereIn('gtfs_trips.route_id', $selectedRoutes)
+            ->where('first_stop.departure_time', '>=', $currentTime)
+            ->where('first_stop.departure_time', '<=', $endTime)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('gtfs_calendar_dates')
+                    ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
+                    ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
+                    ->where('gtfs_calendar_dates.exception_type', 1);
+            })
+            ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.trip_id', 'gtfs_trips.route_id', 
+                     'first_stop.departure_time', 'last_stop.arrival_time', 'gtfs_routes.route_long_name',
+                     'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
+                     'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code')
+            ->orderBy('first_stop.departure_time');
 
         return $query;
     }

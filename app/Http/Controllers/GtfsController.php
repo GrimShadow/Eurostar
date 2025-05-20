@@ -455,7 +455,7 @@ class GtfsController extends Controller
 
         // Prepare batch insert
         $batch = [];
-        $stopStatuses = [];
+        $processedStopStatuses = [];
 
         while (($data = fgetcsv($handle)) !== FALSE) {
             $stopTime = [
@@ -472,35 +472,36 @@ class GtfsController extends Controller
 
             $batch[] = $stopTime;
 
-            // Create initial stop status
-            $stopStatuses[] = [
-                'trip_id' => $data[$columns['trip_id']],
-                'stop_id' => $data[$columns['stop_id']],
-                'status' => 'on-time',
-                'status_color' => '156,163,175',
-                'status_color_hex' => '#9CA3AF',
-                'scheduled_arrival_time' => $data[$columns['arrival_time']],
-                'scheduled_departure_time' => $data[$columns['departure_time']],
-                'departure_platform' => 'TBD',
-                'arrival_platform' => 'TBD',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+            // Create or update stop status
+            $stopStatusKey = $data[$columns['trip_id']] . '-' . $data[$columns['stop_id']];
+            if (!in_array($stopStatusKey, $processedStopStatuses)) {
+                StopStatus::updateOrCreate(
+                    [
+                        'trip_id' => $data[$columns['trip_id']],
+                        'stop_id' => $data[$columns['stop_id']],
+                    ],
+                    [
+                        'status' => 'on-time',
+                        'status_color' => '156,163,175',
+                        'status_color_hex' => '#9CA3AF',
+                        'scheduled_arrival_time' => $data[$columns['arrival_time']],
+                        'scheduled_departure_time' => $data[$columns['departure_time']],
+                        'departure_platform' => 'TBD',
+                        'arrival_platform' => 'TBD',
+                        'updated_at' => now(),
+                    ]
+                );
+                $processedStopStatuses[] = $stopStatusKey;
+            }
 
             if (count($batch) >= 1000) {
                 GtfsStopTime::insert($batch);
-                StopStatus::insert($stopStatuses);
                 $batch = [];
-                $stopStatuses = [];
             }
         }
 
         if (!empty($batch)) {
             GtfsStopTime::insert($batch);
-        }
-
-        if (!empty($stopStatuses)) {
-            StopStatus::insert($stopStatuses);
         }
 
         fclose($handle);
