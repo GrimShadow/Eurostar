@@ -7,8 +7,10 @@ use App\Models\GtfsTrip;
 use App\Models\TrainStatus;
 use App\Models\StopStatus;
 use App\Models\Setting;
+use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TrainController extends Controller
 {
@@ -55,7 +57,7 @@ class TrainController extends Controller
                         'end' => $endTime
                     ]
                 ]
-            ]);
+            ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
         }
 
         // First, get all the trips with their basic information
@@ -79,10 +81,7 @@ class TrainController extends Controller
                 'arrival_stop.stop_id as arrival_stop_id',
                 'arrival_stop.arrival_time',
                 'train_platform_assignments.platform_code as departure_platform',
-                'arrival_platform_assignments.platform_code as arrival_platform',
-                'train_statuses.status as train_status',
-                'statuses.status as status_text',
-                'statuses.color_rgb as status_color'
+                'arrival_platform_assignments.platform_code as arrival_platform'
             ])
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
             ->join('gtfs_stop_times as departure_stop', function ($join) {
@@ -113,8 +112,6 @@ class TrainController extends Controller
                 $join->on('gtfs_trips.trip_id', '=', 'arrival_platform_assignments.trip_id')
                     ->on('arrival_stop.stop_id', '=', 'arrival_platform_assignments.stop_id');
             })
-            ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
-            ->leftJoin('statuses', 'train_statuses.status', '=', 'statuses.status')
             ->whereIn('gtfs_trips.route_id', $selectedRoutes)
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
@@ -166,26 +163,77 @@ class TrainController extends Controller
                 return $statuses->keyBy('stop_id');
             });
 
+        Log::info('API - Stop statuses retrieved', [
+            'stop_statuses' => $stopStatuses->toArray()
+        ]);
+
         // Map the trips with their stops
         $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset) {
             $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
                 
+                Log::info('API - Processing stop', [
+                    'trip_id' => $train->trip_id,
+                    'stop_id' => $stop->stop_id,
+                    'stop_status' => $stopStatus?->toArray()
+                ]);
+
+                // Calculate check-in start time by subtracting check-in time from departure time
+                $departureTime = Carbon::createFromFormat('H:i:s', $stop->departure_time);
+                $checkInStarts = $departureTime->copy()->subMinutes($globalCheckInOffset)->format('H:i');
+
+                // Calculate minutes difference if there's a new departure time
+                $newDepartMin = null;
+                if ($stop->new_departure_time) {
+                    $newDepartureTime = Carbon::createFromFormat('H:i:s', $stop->new_departure_time);
+                    $newDepartMin = $departureTime->diffInMinutes($newDepartureTime, false);
+                }
+
+                // Format the status updated timestamp in local timezone
+                $statusUpdatedAt = null;
+                if ($stopStatus?->updated_at) {
+                    $statusUpdatedAt = Carbon::parse($stopStatus->updated_at)
+                        ->setTimezone('Europe/Amsterdam')
+                        ->format('Y-m-d H:i:s');
+                }
+
                 return [
                     'stop_id' => $stop->stop_id,
                     'stop_name' => $stop->stop_name,
                     'arrival_time' => substr($stop->arrival_time, 0, 5),
                     'departure_time' => substr($stop->departure_time, 0, 5),
                     'new_departure_time' => $stop->new_departure_time ? substr($stop->new_departure_time, 0, 5) : null,
+                    'new_depart_min' => $newDepartMin,
                     'stop_sequence' => $stop->stop_sequence,
-                    'status' => $stopStatus ? $stopStatus->status : 'on-time',
-                    'status_color' => $stopStatus ? $stopStatus->status_color : '156,163,175',
-                    'status_color_hex' => $stopStatus ? $stopStatus->status_color_hex : '#9CA3AF',
-                    'departure_platform' => $stop->platform_code ?? ($stopStatus ? $stopStatus->departure_platform : 'TBD'),
-                    'arrival_platform' => $stop->platform_code ?? ($stopStatus ? $stopStatus->arrival_platform : 'TBD'),
-                    'check_in_time' => $globalCheckInOffset
+                    'status' => $stopStatus?->status ?? 'on-time',
+                    'status_color' => $stopStatus?->status_color ?? '156,163,175',
+                    'status_color_hex' => $stopStatus?->status_color_hex ?? '#9CA3AF',
+                    'status_updated_at' => $statusUpdatedAt,
+                    'departure_platform' => $stop->platform_code ?? ($stopStatus?->departure_platform ?? 'TBD'),
+                    'arrival_platform' => $stop->platform_code ?? ($stopStatus?->arrival_platform ?? 'TBD'),
+                    'check_in_time' => $globalCheckInOffset,
+                    'check_in_starts' => $checkInStarts
                 ];
             })->values();
+
+            // Get the first stop
+            $firstStop = $trainStops->first();
+            $firstStopStatus = null;
+
+            // If the first stop is amsterdam_centraal_15, check if we have a status for amsterdam_centraal
+            if (str_ends_with($firstStop['stop_id'], '_15')) {
+                $baseStopId = str_replace('_15', '', $firstStop['stop_id']);
+                $baseStopStatus = $stopStatuses->get($train->trip_id)?->get($baseStopId);
+                $firstStopStatus = $baseStopStatus ?? $stopStatuses->get($train->trip_id)?->get($firstStop['stop_id']);
+            } else {
+                $firstStopStatus = $stopStatuses->get($train->trip_id)?->get($firstStop['stop_id']);
+            }
+
+            Log::info('API - First stop status', [
+                'trip_id' => $train->trip_id,
+                'first_stop_id' => $firstStop['stop_id'],
+                'first_stop_status' => $firstStopStatus?->toArray()
+            ]);
 
             return [
                 'number' => $train->number,
@@ -193,11 +241,11 @@ class TrainController extends Controller
                 'departure' => substr($train->departure_time, 0, 5),
                 'route_name' => $train->route_long_name,
                 'train_id' => $train->trip_headsign,
-                'status' => ucfirst($train->status_text ?? $train->train_status ?? 'On time'),
-                'status_color' => $train->status_color ?? '156,163,175',
-                'status_color_hex' => $this->rgbToHex($train->status_color ?? '156,163,175'),
-                'departure_platform' => $train->departure_platform ?? 'TBD',
-                'arrival_platform' => $train->arrival_platform ?? 'TBD',
+                'status' => ucfirst($firstStopStatus?->status ?? 'on-time'),
+                'status_color' => $firstStopStatus?->status_color ?? '156,163,175',
+                'status_color_hex' => $firstStopStatus?->status_color_hex ?? '#9CA3AF',
+                'departure_platform' => $firstStop['departure_platform'] ?? 'TBD',
+                'arrival_platform' => $trainStops->last()['arrival_platform'] ?? 'TBD',
                 'stops' => $trainStops
             ];
         })->values();
@@ -214,6 +262,6 @@ class TrainController extends Controller
                     'end' => $endTime
                 ]
             ]
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 }

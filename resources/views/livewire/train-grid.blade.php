@@ -9,7 +9,7 @@
                 this.$watch('selectedTrain', value => {
                     if (value) {
                         const train = JSON.parse(value);
-                        this.newTime = train.departure_time;
+                        this.newTime = train.new_departure_time || train.departure_time;
                         this.status = train.status;
                         this.platform = train.departure_platform !== 'TBD' ? train.departure_platform : null;
                     }
@@ -26,7 +26,7 @@
                     <div class="flex flex-col h-full">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-2">
-                                <h3 class="text-lg font-semibold">{{ $train['route_long_name'] }}</h3>
+                                <h3 class="text-lg font-semibold">{{ $train['route_name'] }}</h3>
                                 <p class="text-sm text-gray-500">{{ $train['stop_name'] }}</p>
                                 <!-- View Route Button -->
                                 <button wire:click="loadRouteStops('{{ $train['trip_id'] }}')" 
@@ -48,7 +48,14 @@
                                     </div>
                                     <div class="text-right">
                                         <div class="text-sm text-gray-500 mb-1">Departure</div>
-                                        <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</div>
+                                        <div class="text-2xl font-bold">
+                                            @if($train['new_departure_time'])
+                                                <span class="line-through text-gray-400">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</span>
+                                                <span class="ml-2">{{ \Carbon\Carbon::parse($train['new_departure_time'])->format('H:i') }}</span>
+                                            @else
+                                                {{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}
+                                            @endif
+                                        </div>
                                         <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] }}</div>
                                     </div>
                                 </div>
