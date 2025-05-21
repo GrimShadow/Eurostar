@@ -200,7 +200,7 @@ class TrainController extends Controller
                 'arrival_platform' => $train->arrival_platform ?? 'TBD',
                 'stops' => $trainStops
             ];
-        });
+        })->values();
 
         return response()->json([
             'data' => [
