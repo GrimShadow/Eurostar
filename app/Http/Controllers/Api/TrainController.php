@@ -135,25 +135,28 @@ class TrainController extends Controller
             ->whereIn('gtfs_stop_times.trip_id', $tripIds)
             ->select([
                 'gtfs_stop_times.trip_id',
-                DB::raw('MIN(gtfs_stop_times.stop_id) as stop_id'),
-                DB::raw('MIN(gtfs_stops.stop_name) as stop_name'),
-                DB::raw('MAX(gtfs_stops.platform_code) as platform_code'),
+                'gtfs_stop_times.stop_id',
                 'gtfs_stop_times.stop_sequence',
                 'gtfs_stop_times.arrival_time',
                 'gtfs_stop_times.departure_time',
-                'gtfs_stop_times.new_departure_time'
+                'gtfs_stop_times.new_departure_time',
+                'gtfs_stops.stop_name',
+                'gtfs_stops.platform_code'
             ])
-            ->groupBy(
-                'gtfs_stop_times.trip_id',
-                'gtfs_stop_times.stop_sequence',
-                'gtfs_stop_times.arrival_time',
-                'gtfs_stop_times.departure_time',
-                'gtfs_stop_times.new_departure_time'
-            )
             ->orderBy('gtfs_stop_times.trip_id')
             ->orderBy('gtfs_stop_times.stop_sequence')
             ->get()
-            ->groupBy('trip_id');
+            ->groupBy('trip_id')
+            ->map(function ($tripStops) {
+                return $tripStops->groupBy(function ($stop) {
+                    return $stop->stop_sequence . '_' . $stop->arrival_time . '_' . $stop->departure_time;
+                })->map(function ($groupedStops) {
+                    // Take the first stop that has a platform code, or the first one if none have it
+                    return $groupedStops->first(function ($stop) {
+                        return !empty($stop->platform_code);
+                    }) ?? $groupedStops->first();
+                })->values();
+            });
 
         // Get all stop statuses
         $stopStatuses = StopStatus::whereIn('trip_id', $tripIds)
@@ -200,7 +203,9 @@ class TrainController extends Controller
         });
 
         return response()->json([
-            'data' => $trains,
+            'data' => [
+                'stops' => $trains
+            ],
             'meta' => [
                 'date' => $today,
                 'count' => $trains->count(),
