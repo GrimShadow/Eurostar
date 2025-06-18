@@ -163,20 +163,12 @@ class TrainController extends Controller
                 return $statuses->keyBy('stop_id');
             });
 
-        Log::info('API - Stop statuses retrieved', [
-            'stop_statuses' => $stopStatuses->toArray()
-        ]);
 
         // Map the trips with their stops
         $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset) {
             $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
                 
-                Log::info('API - Processing stop', [
-                    'trip_id' => $train->trip_id,
-                    'stop_id' => $stop->stop_id,
-                    'stop_status' => $stopStatus?->toArray()
-                ]);
 
                 // Calculate check-in start time by subtracting check-in time from departure time
                 $departureTime = Carbon::createFromFormat('H:i:s', $stop->departure_time);
@@ -229,11 +221,6 @@ class TrainController extends Controller
                 $firstStopStatus = $stopStatuses->get($train->trip_id)?->get($firstStop['stop_id']);
             }
 
-            Log::info('API - First stop status', [
-                'trip_id' => $train->trip_id,
-                'first_stop_id' => $firstStop['stop_id'],
-                'first_stop_status' => $firstStopStatus?->toArray()
-            ]);
 
             return [
                 'number' => $train->number,
