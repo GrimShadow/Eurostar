@@ -28,30 +28,52 @@ class RuleCondition extends Model
     {
         switch ($this->condition_type) {
             case 'time_until_departure':
-                $departureTime = Carbon::createFromFormat('H:i:s', $train->departure_time);
-                $minutesUntilDeparture = $departureTime->diffInMinutes(Carbon::now());
+                // Get the first stop's departure time
+                $firstStop = $train->stopTimes()->orderBy('stop_sequence')->first();
+                if (!$firstStop) return false;
+                
+                $departureTime = Carbon::createFromFormat('H:i:s', $firstStop->departure_time);
+                $minutesUntilDeparture = $departureTime->diffInMinutes(Carbon::now(), false);
                 return $this->compare($minutesUntilDeparture, $this->value);
             
             case 'time_since_arrival':
-                $arrivalTime = Carbon::createFromFormat('H:i:s', $train->arrival_time);
-                $minutesSinceArrival = Carbon::now()->diffInMinutes($arrivalTime);
+                // Get the last stop's arrival time  
+                $lastStop = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+                if (!$lastStop) return false;
+                
+                $arrivalTime = Carbon::createFromFormat('H:i:s', $lastStop->arrival_time);
+                $minutesSinceArrival = Carbon::now()->diffInMinutes($arrivalTime, false);
                 return $this->compare($minutesSinceArrival, $this->value);
             
             case 'platform_change':
-                return $this->compare($train->platform, $this->value);
+                // This would need specific logic for platform changes
+                return false;
             
             case 'delay_duration':
-                return $this->compare($train->delay_minutes, $this->value);
+                // This would need specific logic for delay calculations
+                return false;
             
             case 'current_status':
-                return $this->compare($train->status, $this->value);
+                $currentStatus = $train->currentStatus;
+                $statusValue = $currentStatus ? $currentStatus->status : 'on-time';
+                
+                // If the value is numeric (status ID), get the actual status text
+                if (is_numeric($this->value)) {
+                    $status = \App\Models\Status::find($this->value);
+                    $compareValue = $status ? $status->status : $this->value;
+                } else {
+                    $compareValue = $this->value;
+                }
+                
+                return $this->compare($statusValue, $compareValue);
             
             case 'time_of_day':
                 $currentTime = Carbon::now()->format('H:i:s');
                 return $this->compare($currentTime, $this->value);
             
             case 'train_number':
-                return $this->compare($train->number, $this->value);
+                $trainNumber = $train->trip_short_name ?? $train->trip_id;
+                return $this->compare($trainNumber, $this->value);
             
             default:
                 return false;

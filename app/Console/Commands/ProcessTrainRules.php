@@ -9,6 +9,9 @@ use App\Models\AviavoxTemplate;
 use App\Models\TrainStatus;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command(ProcessTrainRules::class)->everyMinute();
 
 class ProcessTrainRules extends Command
 {
@@ -30,7 +33,7 @@ class ProcessTrainRules extends Command
 
     private function processRules()
     {
-        $activeRules = TrainRule::with(['status', 'conditionStatus'])
+        $activeRules = TrainRule::with(['status', 'conditions'])
             ->where('is_active', true)
             ->get();
 
@@ -43,11 +46,15 @@ class ProcessTrainRules extends Command
 
     private function processRule($rule)
     {
-        $this->info("\nProcessing rule: When {$rule->condition_type} {$rule->operator} " . 
-            ($rule->condition_type === 'current_status' ? $rule->conditionStatus?->status : $rule->value));
+        $conditionsDescription = $rule->conditions->map(function($condition, $index) {
+            $prefix = $index > 0 ? strtoupper($condition->logical_operator) . ' ' : '';
+            return $prefix . "When {$condition->condition_type} {$condition->operator} {$condition->value}";
+        })->implode(' ');
+        
+        $this->info("\nProcessing rule: {$conditionsDescription}");
 
         // Get all trains without status restriction
-        $trains = GtfsTrip::with('currentStatus')->get();
+        $trains = GtfsTrip::with(['currentStatus', 'stopTimes'])->get();
 
         $this->info("Found " . $trains->count() . " trains");
 
@@ -55,7 +62,7 @@ class ProcessTrainRules extends Command
             $this->info("\nChecking train {$train->trip_id}:");
             $this->info("Current status: " . ($train->currentStatus ? $train->currentStatus->status : 'No status'));
             
-            $conditionMet = $this->evaluateCondition($train, $rule);
+            $conditionMet = $rule->shouldTrigger($train);
             
             $this->info("Condition " . ($conditionMet ? 'MET ✓' : 'NOT MET ✗'));
 
@@ -63,42 +70,6 @@ class ProcessTrainRules extends Command
                 $this->info("Applying action: {$rule->action}");
                 $this->applyAction($rule, $train);
             }
-        }
-    }
-
-    private function evaluateCondition($trip, $rule)
-    {
-        switch ($rule->condition_type) {
-            case 'current_status':
-                $currentStatus = $trip->currentStatus;
-                $status = $currentStatus ? $currentStatus->status : 'on-time';
-                $ruleStatus = $rule->conditionStatus?->status;
-                $this->info("Comparing current status '{$status}' with rule status '{$ruleStatus}'");
-                return $status === $ruleStatus;
-            
-            case 'departure_time':
-                $departureTime = strtotime($trip->departure_time);
-                $ruleTime = strtotime($rule->value);
-                return $departureTime >= $ruleTime;
-            
-            case 'arrival_time':
-                $arrivalTime = strtotime($trip->arrival_time);
-                $ruleTime = strtotime($rule->value);
-                return $arrivalTime >= $ruleTime;
-            
-            case 'time_until_departure':
-                $minutesUntilDeparture = $this->getMinutesUntilDeparture($trip);
-                $this->info("Minutes until departure: {$minutesUntilDeparture}, Rule value: {$rule->value}");
-                return $this->compareWithOperator($minutesUntilDeparture, $rule->operator, (int)$rule->value);
-            
-            case 'time_since_arrival':
-                $minutesSinceArrival = $this->getMinutesSinceArrival($trip);
-                $this->info("Minutes since arrival: {$minutesSinceArrival}, Rule value: {$rule->value}");
-                return $this->compareWithOperator($minutesSinceArrival, $rule->operator, (int)$rule->value);
-            
-            default:
-                $this->info("Unknown condition type: {$rule->condition_type}");
-                return false;
         }
     }
 

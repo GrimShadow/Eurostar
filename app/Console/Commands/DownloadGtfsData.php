@@ -7,7 +7,7 @@ use App\Http\Controllers\GtfsController;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schedule;
 
-Schedule::command(DownloadGtfsData::class)->dailyAt('04:00');
+Schedule::command(DownloadGtfsData::class)->dailyAt('03:00');
 
 class DownloadGtfsData extends Command
 {
@@ -23,13 +23,13 @@ class DownloadGtfsData extends Command
             return 1;
         }
 
-        if (now()->lt($settings->next_download)) {
+        if ($settings->next_download && now()->lt($settings->next_download)) {
             $this->info('Next download scheduled for: ' . $settings->next_download);
             return 0;
         }
 
         $this->info('Downloading GTFS data...');
-        (new GtfsController)->downloadGtfs();
+        (new GtfsController)->download();
         
         return 0;
     }

@@ -17,12 +17,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // ... existing scheduled tasks ...
-        
-        // Run every minute
-        $schedule->command('trains:process-rules --debug')
-                ->everyMinute()
-                ->appendOutputTo(storage_path('logs/scheduler.log'));
+        // Schedules are now defined in individual command files
     }
 
     /**
