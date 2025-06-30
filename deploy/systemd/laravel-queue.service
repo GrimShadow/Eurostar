@@ -1,0 +1,17 @@
+[Unit]
+Description=Laravel Queue Worker for Eurostar Train Rules
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=3
+WorkingDirectory=/var/www/eurostar
+ExecStart=/usr/bin/php /var/www/eurostar/artisan queue:work --queue=train-rules --sleep=3 --tries=3 --max-time=3600 --memory=512
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 

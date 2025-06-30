@@ -1,0 +1,17 @@
+[Unit]
+Description=Laravel Scheduler for Eurostar
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=3
+WorkingDirectory=/var/www/eurostar
+ExecStart=/usr/bin/php /var/www/eurostar/artisan schedule:work
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 

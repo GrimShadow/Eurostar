@@ -104,7 +104,7 @@
                     </div>
                 </div>
             @else
-                @foreach($trains as $train)
+            @foreach($trains as $train)
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-4 hover:shadow-md transition-shadow">
                     <div class="flex flex-col h-full">
                         <div class="flex-1">
@@ -166,7 +166,7 @@
                         </div>
                     </div>
                 </div>
-                @endforeach
+            @endforeach
             @endif
         </div>
 
