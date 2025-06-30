@@ -10,10 +10,12 @@ use App\Models\Zone;
 use App\Models\GtfsTrip;
 use App\Models\PendingAnnouncement;
 use App\Models\Reason;
+use App\Models\Group;
 use Livewire\Component;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class CreateAnnouncement extends Component
 {
@@ -30,11 +32,20 @@ class CreateAnnouncement extends Component
     public $selectedReason = '';
     public $templates = [];
     public $reasons = [];
+    public $group = null;
+    public $selectedStations = [];
 
-    public function mount()
+    public function mount(Group $group = null)
     {
+        $this->group = $group;
         $this->zones = Zone::orderBy('value')->get();
         $this->reasons = Reason::orderBy('code')->get();
+        
+        // Load selected stations if we have a group
+        if ($this->group) {
+            $this->loadSelectedStations();
+        }
+        
         $this->loadTrains();
         $this->templates = AviavoxTemplate::all()->mapWithKeys(function ($template) {
             return [$template->name => [
@@ -45,7 +56,138 @@ class CreateAnnouncement extends Component
         })->toArray();
     }
 
+    public function loadSelectedStations()
+    {
+        if (!$this->group) {
+            $this->selectedStations = [];
+            return;
+        }
+
+        $this->selectedStations = $this->group->routeStations()
+            ->where('is_active', true)
+            ->get()
+            ->groupBy('route_id')
+            ->map(function ($stations) {
+                return $stations->pluck('stop_id')->toArray();
+            })
+            ->toArray();
+    }
+
     private function loadTrains()
+    {
+        if (!$this->group) {
+            // Fallback to original logic if no group (for backwards compatibility)
+            $this->loadTrainsOriginal();
+            return;
+        }
+
+        try {
+            // Get both API routes and group-specific routes (same logic as TrainGrid)
+            $apiRoutes = DB::table('selected_routes')
+                ->where('is_active', true)
+                ->pluck('route_id')
+                ->toArray();
+
+            $groupRoutes = $this->group->selectedRoutes()
+                ->where('is_active', true)
+                ->pluck('route_id')
+                ->toArray();
+
+            // Combine both sets of routes
+            $selectedRoutes = array_unique(array_merge($apiRoutes, $groupRoutes));
+
+            if (empty($selectedRoutes)) {
+                $this->trains = [];
+                return;
+            }
+
+            // Set time range - show trains from 30 minutes ago to end of day
+            $currentTime = now()->subMinutes(30)->format('H:i:s');
+            $endTime = '23:59:59';
+
+            // Get unique trips for today that are visible in the group's train grid
+            $uniqueTrips = DB::table('gtfs_trips')
+                ->select([
+                    'gtfs_trips.trip_id',
+                    'gtfs_trips.route_id',
+                    'gtfs_trips.trip_short_name',
+                    'gtfs_trips.trip_headsign'
+                ])
+                ->whereIn('gtfs_trips.route_id', $selectedRoutes)
+                ->whereExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('gtfs_calendar_dates')
+                        ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
+                        ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
+                        ->where('gtfs_calendar_dates.exception_type', 1);
+                })
+                ->whereExists(function ($query) use ($currentTime, $endTime) {
+                    $query->select(DB::raw(1))
+                        ->from('gtfs_stop_times')
+                        ->whereColumn('gtfs_stop_times.trip_id', 'gtfs_trips.trip_id')
+                        ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
+                        ->where('gtfs_stop_times.departure_time', '<=', $endTime);
+                })
+                ->groupBy('gtfs_trips.trip_id', 'gtfs_trips.route_id', 'gtfs_trips.trip_short_name', 'gtfs_trips.trip_headsign')
+                ->get();
+
+            $trains = [];
+
+            foreach ($uniqueTrips as $uniqueTrip) {
+                // Only include trains that have stops in the group's selected stations
+                $hasValidStops = DB::table('gtfs_stop_times')
+                    ->where('gtfs_stop_times.trip_id', $uniqueTrip->trip_id)
+                    ->whereIn('gtfs_stop_times.stop_id', $this->selectedStations[$uniqueTrip->route_id] ?? [])
+                    ->exists();
+
+                if (!$hasValidStops) {
+                    continue;
+                }
+
+                // Get the first stop for this trip in the selected stations
+                $firstStop = DB::table('gtfs_stop_times')
+                    ->where('gtfs_stop_times.trip_id', $uniqueTrip->trip_id)
+                    ->whereIn('gtfs_stop_times.stop_id', $this->selectedStations[$uniqueTrip->route_id] ?? [])
+                    ->orderBy('gtfs_stop_times.stop_sequence')
+                    ->first();
+
+                if ($firstStop) {
+                    // Extract just the train number from trip_short_name or trip_headsign
+                    $trainNumber = $uniqueTrip->trip_short_name ?: $uniqueTrip->trip_headsign;
+                    
+                    // Extract only the numeric part or first part before space/arrow
+                    if (preg_match('/^(\d+)/', $trainNumber, $matches)) {
+                        $trainNumber = $matches[1];
+                    } elseif (strpos($trainNumber, ' ') !== false) {
+                        $trainNumber = explode(' ', $trainNumber)[0];
+                    }
+                    
+                    $trains[] = [
+                        'number' => $trainNumber,
+                        'trip_id' => $uniqueTrip->trip_id,
+                        'departure' => substr($firstStop->departure_time, 0, 5),
+                        'route_id' => $uniqueTrip->route_id
+                    ];
+                }
+            }
+
+            // Sort trains by departure time and limit to next 6 trains
+            usort($trains, function ($a, $b) {
+                return strtotime($a['departure']) - strtotime($b['departure']);
+            });
+
+            $this->trains = array_slice($trains, 0, 6);
+
+        } catch (\Exception $e) {
+            Log::error('CreateAnnouncement - Error loading trains:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            $this->trains = [];
+        }
+    }
+
+    private function loadTrainsOriginal()
     {
         $today = Carbon::now()->format('Y-m-d');
         $currentTime = Carbon::now()->format('H:i:s');
@@ -75,8 +217,16 @@ class CreateAnnouncement extends Component
             ->limit(6)
             ->get()
             ->map(function ($train) {
+                // Extract just the train number
+                $trainNumber = $train->number;
+                if (preg_match('/^(\d+)/', $trainNumber, $matches)) {
+                    $trainNumber = $matches[1];
+                } elseif (strpos($trainNumber, ' ') !== false) {
+                    $trainNumber = explode(' ', $trainNumber)[0];
+                }
+                
                 return [
-                    'number' => $train->number,
+                    'number' => $trainNumber,
                     'departure' => substr($train->departure, 0, 5),
                     'route_name' => $train->route_long_name,
                     'destination' => $train->destination
@@ -127,8 +277,8 @@ class CreateAnnouncement extends Component
             case 'zone':
                 return $this->selectedZone;
             case 'train':
-                $train = GtfsTrip::where('trip_headsign', $this->selectedTrain)->first();
-                return $train ? $train->trip_headsign : '';
+                // Return the selected train number directly
+                return $this->selectedTrain ?: '';
             case 'datetime':
                 if ($this->scheduledTime) {
                     // Parse the time in Amsterdam timezone (CET/CEST)

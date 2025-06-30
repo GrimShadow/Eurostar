@@ -18,10 +18,93 @@
         }" x-on:livewire-upload-start="isUploading = true" x-on:livewire-upload-finish="isUploading = false"
         x-on:livewire-upload-error="isUploading = false">
 
+        <!-- Flash Messages -->
+        @if (session()->has('message'))
+            <div class="mb-4 bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">{{ session('message') }}</p>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        <!-- Date Selector -->
+        <div class="mb-6 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-900">Train Schedule</h2>
+                <p class="text-sm text-gray-600">
+                    @if($selectedDate === now()->format('Y-m-d'))
+                        Showing {{ count($trains) }} {{ count($trains) === 1 ? 'train' : 'trains' }} for today
+                    @else
+                        Showing {{ count($trains) }} {{ count($trains) === 1 ? 'train' : 'trains' }} for {{ \Carbon\Carbon::parse($selectedDate)->format('l, F j, Y') }}
+                    @endif
+                </p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <label for="date-selector" class="text-sm font-medium text-gray-700">Select Date:</label>
+                <input 
+                    type="date" 
+                    id="date-selector"
+                    wire:model.live="selectedDate"
+                    min="{{ now()->format('Y-m-d') }}"
+                    max="{{ now()->addDays(30)->format('Y-m-d') }}"
+                    class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                >
+                <button 
+                    wire:click="$set('selectedDate', '{{ now()->format('Y-m-d') }}')"
+                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Today
+                </button>
+            </div>
+        </div>
+
+
+        <!-- Loading State -->
+        <div wire:loading.delay wire:target="selectedDate" class="mb-4">
+            <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                <div class="flex items-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-blue-700 font-medium">Loading trains for selected date...</span>
+                </div>
+            </div>
+        </div>
 
         <!-- Train Cards -->
-        <div class="grid grid-cols-4 gap-4">
-            @foreach($trains as $train)
+        <div class="grid grid-cols-4 gap-4" wire:loading.remove wire:target="selectedDate">
+            @if(count($trains) === 0)
+                <div class="col-span-4">
+                    <div class="text-center py-12">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                        <h3 class="mt-4 text-lg font-medium text-gray-900">No trains found</h3>
+                        <p class="mt-2 text-sm text-gray-500">
+                            @if($selectedDate === now()->format('Y-m-d'))
+                                No trains are currently scheduled for your selected routes today.
+                            @else
+                                No trains are scheduled for {{ \Carbon\Carbon::parse($selectedDate)->format('l, F j, Y') }} on your selected routes.
+                            @endif
+                        </p>
+                        <div class="mt-6">
+                            <button 
+                                wire:click="$set('selectedDate', '{{ now()->format('Y-m-d') }}')"
+                                class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                View Today's Trains
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            @else
+                @foreach($trains as $train)
                 <div class="bg-white rounded-lg shadow-sm p-6 mb-4 hover:shadow-md transition-shadow">
                     <div class="flex flex-col h-full">
                         <div class="flex-1">
@@ -83,7 +166,8 @@
                         </div>
                     </div>
                 </div>
-            @endforeach
+                @endforeach
+            @endif
         </div>
 
         <!-- Status Update Modal -->

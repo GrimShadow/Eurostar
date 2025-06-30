@@ -43,7 +43,7 @@
                             </div>
 
                             <!-- Form Content -->
-                            <livewire:create-announcement />
+                            <livewire:create-announcement :group="$group" />
                             
                         </div>
                     </div>

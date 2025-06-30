@@ -29,6 +29,7 @@ class TrainGrid extends Component
     public $group;
     public $selectedStations = [];
     public $selectedStops = [];
+    public $selectedDate;
 
     protected $listeners = [
         'refreshTrains' => 'loadTrains',
@@ -45,6 +46,7 @@ class TrainGrid extends Component
     public function mount(Group $group)
     {
         $this->group = $group;
+        $this->selectedDate = now()->format('Y-m-d');
         $this->loadSelectedStations();
         $this->statuses = Status::all();
         $this->loadTrains();
@@ -60,6 +62,30 @@ class TrainGrid extends Component
                 return $stations->pluck('stop_id')->toArray();
             })
             ->toArray();
+    }
+
+    public function updatedSelectedDate($value)
+    {
+        // Validate the selected date
+        $selectedDate = Carbon::parse($value);
+        $today = Carbon::today();
+        $maxDate = $today->copy()->addDays(30);
+
+        // Don't allow past dates (except today)
+        if ($selectedDate->lt($today)) {
+            $this->selectedDate = $today->format('Y-m-d');
+            session()->flash('message', 'Cannot select dates in the past. Showing today\'s trains instead.');
+            return;
+        }
+
+        // Don't allow dates too far in the future
+        if ($selectedDate->gt($maxDate)) {
+            $this->selectedDate = $maxDate->format('Y-m-d');
+            session()->flash('message', 'Cannot select dates more than 30 days in the future.');
+            return;
+        }
+
+        $this->loadTrains();
     }
 
     public function loadTrains()
@@ -79,8 +105,9 @@ class TrainGrid extends Component
             // Combine both sets of routes
             $selectedRoutes = array_unique(array_merge($apiRoutes, $groupRoutes));
 
-            // Set time range for the entire day
-            $currentTime = now()->subMinutes(30)->format('H:i:s');
+            // Set time range based on selected date
+            $isToday = $this->selectedDate === now()->format('Y-m-d');
+            $currentTime = $isToday ? now()->subMinutes(30)->format('H:i:s') : '00:00:00';
             $endTime = '23:59:59';
 
             // Get unique trips for today
@@ -99,7 +126,7 @@ class TrainGrid extends Component
                     $query->select(DB::raw(1))
                         ->from('gtfs_calendar_dates')
                         ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
-                        ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
+                        ->where('gtfs_calendar_dates.date', $this->selectedDate)
                         ->where('gtfs_calendar_dates.exception_type', 1);
                 })
                 ->whereExists(function ($query) use ($currentTime, $endTime) {

@@ -54,8 +54,16 @@ class RuleCondition extends Model
                 return false;
             
             case 'current_status':
-                $currentStatus = $train->currentStatus;
-                $statusValue = $currentStatus ? $currentStatus->status : 'on-time';
+                // Check StopStatus for the first stop (departure station) instead of TrainStatus
+                $firstStopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+                if (!$firstStopTime) {
+                    $statusValue = 'On Time';
+                } else {
+                    $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+                        ->where('stop_id', $firstStopTime->stop_id)
+                        ->first();
+                    $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
+                }
                 
                 // If the value is numeric (status ID), get the actual status text
                 if (is_numeric($this->value)) {
