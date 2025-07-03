@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class RuleCondition extends Model
@@ -24,24 +25,36 @@ class RuleCondition extends Model
         return $this->belongsTo(TrainRule::class, 'train_rule_id');
     }
 
-    public function evaluate($train)
+    public function evaluate($train, $specificStopId = null)
     {
         switch ($this->condition_type) {
             case 'time_until_departure':
-                // Get the first stop's departure time
-                $firstStop = $train->stopTimes()->orderBy('stop_sequence')->first();
-                if (!$firstStop) return false;
+                // Get the first stop's departure time (or specific stop if provided)
+                if ($specificStopId) {
+                    $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+                } else {
+                    $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+                }
+                if (!$stopTime) return false;
                 
-                $departureTime = Carbon::createFromFormat('H:i:s', $firstStop->departure_time);
-                $minutesUntilDeparture = $departureTime->diffInMinutes(Carbon::now(), false);
+                $departureTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
+                $now = Carbon::now();
+                
+                // Calculate minutes until departure (positive = future, negative = past)
+                $minutesUntilDeparture = $now->diffInMinutes($departureTime, false);
+                
                 return $this->compare($minutesUntilDeparture, $this->value);
             
             case 'time_since_arrival':
-                // Get the last stop's arrival time  
-                $lastStop = $train->stopTimes()->orderByDesc('stop_sequence')->first();
-                if (!$lastStop) return false;
+                // Get the last stop's arrival time (or specific stop if provided)
+                if ($specificStopId) {
+                    $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+                } else {
+                    $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+                }
+                if (!$stopTime) return false;
                 
-                $arrivalTime = Carbon::createFromFormat('H:i:s', $lastStop->arrival_time);
+                $arrivalTime = Carbon::createFromFormat('H:i:s', $stopTime->arrival_time);
                 $minutesSinceArrival = Carbon::now()->diffInMinutes($arrivalTime, false);
                 return $this->compare($minutesSinceArrival, $this->value);
             
@@ -54,7 +67,13 @@ class RuleCondition extends Model
                 return false;
             
             case 'current_status':
-                // Check StopStatus for the first stop (departure station) instead of TrainStatus
+                // Check StopStatus for specific stop or first stop
+                if ($specificStopId) {
+                    $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+                        ->where('stop_id', $specificStopId)
+                        ->first();
+                    $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
+                } else {
                 $firstStopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
                 if (!$firstStopTime) {
                     $statusValue = 'On Time';
@@ -63,6 +82,7 @@ class RuleCondition extends Model
                         ->where('stop_id', $firstStopTime->stop_id)
                         ->first();
                     $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
+                    }
                 }
                 
                 // If the value is numeric (status ID), get the actual status text
@@ -73,7 +93,11 @@ class RuleCondition extends Model
                     $compareValue = $this->value;
                 }
                 
-                return $this->compare($statusValue, $compareValue);
+                // Normalize both values for comparison (case-insensitive, handle dash/space differences)
+                $normalizedStatusValue = strtolower(str_replace([' ', '-'], '', $statusValue));
+                $normalizedCompareValue = strtolower(str_replace([' ', '-'], '', $compareValue));
+                
+                return $this->compare($normalizedStatusValue, $normalizedCompareValue);
             
             case 'time_of_day':
                 $currentTime = Carbon::now()->format('H:i:s');

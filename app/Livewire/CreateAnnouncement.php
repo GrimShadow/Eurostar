@@ -256,18 +256,14 @@ class CreateAnnouncement extends Component
         foreach ($template['variables'] as $id => $type) {
             $value = $this->getVariableValue($id, $type);
             $xml .= "\t\t\t<Item ID=\"{$id}\" Value=\"{$value}\"/>\n";
-            Log::info('Announcement Variable', [
-                'id' => $id,
-                'type' => $type,
-                'value' => $value
-            ]);
+
         }
 
         $xml .= "\t\t</AnnouncementData>\n";
         $xml .= "\t</MessageData>\n";
         $xml .= "</AIP>";
 
-        Log::info('Generated XML for Aviavox', ['xml' => $xml]);
+
         return $xml;
     }
 
@@ -302,12 +298,12 @@ class CreateAnnouncement extends Component
     public function authenticateAndSendMessage($server, $port, $username, $password, $xml)
     {
         try {
-            Log::info('Establishing TCP connection to AviaVox server', ['server' => $server, 'port' => $port]);
+
             $socket = fsockopen($server, $port, $errno, $errstr, 5);
             if (!$socket) {
                 throw new \Exception("Failed to connect: $errstr ($errno)");
             }
-            Log::info('TCP connection established successfully');
+
 
             // Set a read timeout for the socket
             stream_set_timeout($socket, 20); // 20 seconds timeout
@@ -315,7 +311,7 @@ class CreateAnnouncement extends Component
             // Step 1: Send AuthenticationChallengeRequest
             $authChallengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
             fwrite($socket, chr(2) . $authChallengeRequest . chr(3));
-            Log::info('Sent AuthenticationChallengeRequest', ['request' => $authChallengeRequest]);
+
 
             // Step 2: Read AuthenticationChallengeResponse
             $response = fread($socket, 1024);
@@ -323,19 +319,16 @@ class CreateAnnouncement extends Component
                 Log::error('Stream timed out while waiting for AuthenticationChallengeResponse');
                 throw new \Exception('Stream timed out while waiting for response');
             }
-            Log::info('Received AuthenticationChallengeResponse', ['response' => $response]);
 
             // Extract challenge
             $challenge = $this->extractChallengeFromResponse($response);
             if (!$challenge) {
                 throw new \Exception('Challenge extraction failed from response.');
             }
-            Log::info('Challenge code extracted successfully', ['challenge' => $challenge]);
 
             // Step 3: Hash the password
             $saltedPassword = $password . ($challenge ^ strlen($password)) . strrev($password);
             $passwordHash = strtoupper(hash('sha512', $saltedPassword));
-            Log::info('Password hashed successfully', ['passwordHash' => $passwordHash]);
 
             // Step 4: Send AuthenticationRequest
             $authRequest = "<AIP>
@@ -347,7 +340,6 @@ class CreateAnnouncement extends Component
                                 </MessageData>
                             </AIP>";
             fwrite($socket, chr(2) . $authRequest . chr(3));
-            Log::info('Sent AuthenticationRequest', ['request' => $authRequest]);
 
             // Step 5: Read AuthenticationResponse
             $authResponse = fread($socket, 1024);
@@ -355,17 +347,14 @@ class CreateAnnouncement extends Component
                 Log::error('Stream timed out while waiting for AuthenticationResponse');
                 throw new \Exception('Stream timed out while waiting for response');
             }
-            Log::info('Received AuthenticationResponse', ['authResponse' => $authResponse]);
 
             if (strpos($authResponse, "<Authenticated>1</Authenticated>") === false) {
                 throw new \Exception("Authentication failed.");
             }
-            Log::info('Authentication successful, session is active');
 
 
             // Step 7: Send the XML announcement message
             fwrite($socket, chr(2) . $xml . chr(3));
-            Log::info('Sent AnnouncementTriggerRequest', ['xmlMessage' => $xml]);
 
             // Step 8: Read the final response
             $finalResponse = fread($socket, 1024);
@@ -374,7 +363,7 @@ class CreateAnnouncement extends Component
                 throw new \Exception('Stream timed out while waiting for response');
             }
             fclose($socket);
-            Log::info('Received response for AnnouncementTriggerRequest', ['response' => $finalResponse]);
+            
         } catch (\Exception $e) {
             Log::error('Error during AviaVox communication', ['error' => $e->getMessage()]);
             session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());

@@ -54,23 +54,77 @@ class GtfsController extends Controller
             return response()->json(['error' => 'GTFS settings not found'], 404);
         }
 
+        // Check if download has been stuck for more than 1 hour
         if ($gtfsSettings->is_downloading) {
-            return response()->json([
-                'status' => 'in_progress',
-                'elapsed_time' => $gtfsSettings->download_started_at->diffInSeconds(now()),
-                'progress' => $gtfsSettings->download_progress ?? 0
-            ]);
+            $elapsedTime = $gtfsSettings->download_started_at->diffInSeconds(now());
+            
+            // If stuck for more than 1 hour, reset the state
+            if ($elapsedTime > 3600) {
+                Log::warning('GTFS download appears stuck, resetting state', [
+                    'elapsed_time' => $elapsedTime,
+                    'started_at' => $gtfsSettings->download_started_at,
+                    'progress' => $gtfsSettings->download_progress
+                ]);
+                
+                $gtfsSettings->is_downloading = false;
+                $gtfsSettings->download_progress = 0;
+                $gtfsSettings->download_status = null;
+                $gtfsSettings->save();
+            } else {
+                return response()->json([
+                    'status' => 'in_progress',
+                    'elapsed_time' => $elapsedTime,
+                    'progress' => $gtfsSettings->download_progress ?? 0
+                ]);
+            }
         }
 
         $gtfsSettings->is_downloading = true;
         $gtfsSettings->download_started_at = now();
         $gtfsSettings->download_progress = 0;
+        $gtfsSettings->download_status = 'Starting download...';
+        $gtfsSettings->next_download = now()->addDay()->setTime(3, 0, 0);
         $gtfsSettings->save();
 
         // Dispatch the download job
         dispatch(new \App\Jobs\DownloadAndProcessGtfs());
 
         return response()->json(['status' => 'started']);
+    }
+
+    public function resetDownload()
+    {
+        $gtfsSettings = GtfsSetting::first();
+        
+        if (!$gtfsSettings) {
+            return response()->json(['error' => 'GTFS settings not found'], 404);
+        }
+
+        $gtfsSettings->is_downloading = false;
+        $gtfsSettings->download_progress = 0;
+        $gtfsSettings->download_status = null;
+        $gtfsSettings->save();
+
+        Log::info('GTFS download state manually reset');
+
+        return response()->json(['status' => 'reset', 'message' => 'Download state has been reset']);
+    }
+
+    public function progress()
+    {
+        $gtfsSettings = GtfsSetting::first();
+        
+        if (!$gtfsSettings) {
+            return response()->json(['error' => 'GTFS settings not found'], 404);
+        }
+
+        return response()->json([
+            'is_downloading' => $gtfsSettings->is_downloading,
+            'progress' => $gtfsSettings->download_progress ?? 0,
+            'status' => $gtfsSettings->download_status,
+            'started_at' => $gtfsSettings->download_started_at?->format('Y-m-d H:i:s'),
+            'elapsed_time' => $gtfsSettings->download_started_at ? $gtfsSettings->download_started_at->diffInSeconds(now()) : 0
+        ]);
     }
 
     public function clear()

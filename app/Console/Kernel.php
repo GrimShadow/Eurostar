@@ -17,7 +17,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Schedules are now defined in individual command files
+        // Schedules are defined in individual command files
     }
 
     /**

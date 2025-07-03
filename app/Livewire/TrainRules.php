@@ -188,10 +188,6 @@ class TrainRules extends Component
 
     public function updatedAction($value)
     {
-        Log::info('Action updated:', [
-            'action' => $value,
-            'statuses' => $this->statuses->toArray()
-        ]);
         
         // Reset the action-specific fields
         $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables']);

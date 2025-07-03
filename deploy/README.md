@@ -29,8 +29,14 @@ For Ubuntu production deployment:
 ## What Gets Installed
 
 Both approaches set up:
-- **Laravel Scheduler:** Runs every minute to enqueue train rule processing jobs
-- **Queue Worker:** Processes train rule jobs in the background
+- **Laravel Scheduler:** Runs continuously to execute scheduled commands:
+  - Train rule processing (every minute)
+  - Automated announcements (every minute)
+  - GTFS data downloads (daily at 3:00 AM)
+- **Queue Worker:** Processes background jobs including:
+  - Train rule processing jobs
+  - GTFS data download and import jobs
+  - Automated announcement jobs
 - **Automatic startup:** Services start when server boots
 - **Auto-restart:** Services restart if they crash
 - **Logging:** All output logged to system logs

@@ -54,20 +54,20 @@ class ProcessTrainRulesOld extends Command
             return $prefix . "When {$condition->condition_type} {$condition->operator} {$condition->value}";
         })->implode(' ');
         
-        $this->info("\nProcessing rule: {$conditionsDescription}");
+        //$this->info("\nProcessing rule: {$conditionsDescription}");
 
         // This was the problem: loading ALL trains into memory at once
         $trains = GtfsTrip::with(['currentStatus', 'stopTimes'])->get();
 
-        $this->info("Found " . $trains->count() . " trains");
+        //$this->info("Found " . $trains->count() . " trains");
 
         foreach ($trains as $train) {
-            $this->info("\nChecking train {$train->trip_id}:");
+            //$this->info("\nChecking train {$train->trip_id}:");
             $this->info("Current status: " . ($train->currentStatus ? $train->currentStatus->status : 'No status'));
             
             $conditionMet = $rule->shouldTrigger($train);
             
-            $this->info("Condition " . ($conditionMet ? 'MET ✓' : 'NOT MET ✗'));
+            //$this->info("Condition " . ($conditionMet ? 'MET ✓' : 'NOT MET ✗'));
 
             if ($conditionMet) {
                 $this->info("Applying action: {$rule->action}");
@@ -89,7 +89,7 @@ class ProcessTrainRulesOld extends Command
                 ['trip_id' => $train->trip_id],
                 ['status' => $status->status]
             );
-            $this->info("Set status for train {$train->trip_id} to {$status->status}");
+            //$this->info("Set status for train {$train->trip_id} to {$status->status}");
 
             event(new \App\Events\TrainStatusUpdated($train->trip_id, $status->status));
         } 
@@ -99,15 +99,15 @@ class ProcessTrainRulesOld extends Command
             
             $this->makeAnnouncement($template, $announcementData, $train);
             
-            $this->info("Made announcement for train {$train->trip_id} using template {$template->name}");
+            //$this->info("Made announcement for train {$train->trip_id} using template {$template->name}");
         }
     }
 
     private function makeAnnouncement($template, $announcementData, $train)
     {
-        $this->info("🔊 Making announcement:");
-        $this->info("Template: " . $template->name);
-        $this->info("Zone: " . $announcementData['zone']);
+        //$this->info("🔊 Making announcement:");
+        //$this->info("Template: " . $template->name);
+        //$this->info("Zone: " . $announcementData['zone']);
         if (!empty($announcementData['variables'])) {
             $this->info("Variables: " . json_encode($announcementData['variables'], JSON_PRETTY_PRINT));
         }

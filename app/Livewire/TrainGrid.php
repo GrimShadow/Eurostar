@@ -354,23 +354,9 @@ class TrainGrid extends Component
                 ->select('gtfs_stop_times.stop_id', 'gtfs_stop_times.new_departure_time')
                 ->get();
 
-            Log::info('Found matching stops', [
-                'trip_id' => $tripId,
-                'stop_name' => $firstStop['stop_name'],
-                'departure_time' => $firstStop['departure_time'],
-                'matching_stops' => $matchingStops->pluck('stop_id')
-            ]);
 
             // Update each matching stop
             foreach ($matchingStops as $matchingStop) {
-                Log::info('Updating stop status', [
-                    'trip_id' => $tripId,
-                    'stop_id' => $matchingStop->stop_id,
-                    'status' => $status,
-                    'platform' => $platform,
-                    'status_color' => $statusObj->color_rgb,
-                    'status_color_hex' => $this->rgbToHex($statusObj->color_rgb)
-                ]);
 
                 // Update the platform if provided
                 if ($platform) {
@@ -391,9 +377,6 @@ class TrainGrid extends Component
                     ]
                 );
 
-                Log::info('Stop status updated', [
-                    'stop_status' => $stopStatus->toArray()
-                ]);
 
                 // Only update the new departure time if it's provided and different from the current one
                 if ($newTime && $newTime !== $matchingStop->new_departure_time) {

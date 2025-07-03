@@ -8,7 +8,7 @@ set -e
 echo "🚀 Setting up Laravel Eurostar services for Ubuntu production..."
 
 # Configuration
-APP_PATH="/var/www/Eurostar"
+APP_PATH="/var/www/eurostar"
 APP_USER="www-data"
 APP_GROUP="www-data"
 
@@ -34,8 +34,8 @@ cp deploy/systemd/laravel-scheduler.service /etc/systemd/system/
 cp deploy/systemd/laravel-queue.service /etc/systemd/system/
 
 # Update service files with correct paths
-sed -i "s|/var/www/Eurostar|$APP_PATH|g" /etc/systemd/system/laravel-scheduler.service
-sed -i "s|/var/www/Eurostar|$APP_PATH|g" /etc/systemd/system/laravel-queue.service
+sed -i "s|/var/www/eurostar|$APP_PATH|g" /etc/systemd/system/laravel-scheduler.service
+sed -i "s|/var/www/eurostar|$APP_PATH|g" /etc/systemd/system/laravel-queue.service
 
 # Set correct permissions
 chown root:root /etc/systemd/system/laravel-scheduler.service

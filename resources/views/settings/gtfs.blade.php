@@ -44,33 +44,34 @@
                                                 Download in progress since {{ $gtfsSettings->download_started_at->format('Y-m-d H:i:s') }}
                                             </p>
                                             @if($gtfsSettings->download_status)
-                                                <p class="text-sm text-gray-600 mt-1">
+                                                <p class="text-sm text-gray-600 mt-1" id="download-status">
                                                     Status: {{ $gtfsSettings->download_status }}
                                                 </p>
                                             @endif
                                             <div class="mt-2">
                                                 <div class="flex justify-between text-sm text-gray-600 mb-1">
                                                     <span>Progress</span>
-                                                    <span>{{ $gtfsSettings->download_progress ?? 0 }}%</span>
+                                                    <span id="progress-percentage">{{ $gtfsSettings->download_progress ?? 0 }}%</span>
                                                 </div>
                                                 <div class="w-full bg-gray-200 rounded-full h-2.5">
                                                     <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                                                         id="progress-bar"
                                                          style="width: {{ $gtfsSettings->download_progress ?? 0 }}%"></div>
                                                 </div>
                                                 <div class="mt-2 grid grid-cols-5 gap-2 text-xs text-gray-500">
-                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 5 ? 'text-blue-600 font-medium' : '' }}">
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 5 ? 'text-blue-600 font-medium' : '' }}" id="stage-download">
                                                         Download
                                                     </div>
-                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 20 ? 'text-blue-600 font-medium' : '' }}">
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 20 ? 'text-blue-600 font-medium' : '' }}" id="stage-trips">
                                                         Trips
                                                     </div>
-                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 40 ? 'text-blue-600 font-medium' : '' }}">
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 40 ? 'text-blue-600 font-medium' : '' }}" id="stage-calendar">
                                                         Calendar
                                                     </div>
-                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 60 ? 'text-blue-600 font-medium' : '' }}">
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 60 ? 'text-blue-600 font-medium' : '' }}" id="stage-routes">
                                                         Routes
                                                     </div>
-                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 80 ? 'text-blue-600 font-medium' : '' }}">
+                                                    <div class="text-center {{ $gtfsSettings->download_progress >= 80 ? 'text-blue-600 font-medium' : '' }}" id="stage-stops">
                                                         Stops
                                                     </div>
                                                 </div>
@@ -130,6 +131,43 @@
                                         ">
                                         Download Now
                                     </a>
+
+                                    @if($gtfsSettings->is_downloading)
+                                        <button type="button"
+                                            class="inline-flex items-center px-4 py-2 border border-orange-300 rounded-md shadow-sm text-sm font-medium text-orange-700 bg-white hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                                            x-data=""
+                                            x-on:click="
+                                                if (confirm('Are you sure you want to reset the stuck download? This will stop the current download process.')) {
+                                                    $el.classList.add('opacity-50', 'cursor-not-allowed');
+                                                    $el.innerHTML = 'Resetting...';
+                                                    
+                                                    fetch('{{ route('settings.gtfs.reset') }}', {
+                                                        method: 'POST',
+                                                        headers: {
+                                                            'Accept': 'application/json',
+                                                            'X-Requested-With': 'XMLHttpRequest',
+                                                            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+                                                        },
+                                                        credentials: 'same-origin'
+                                                    })
+                                                    .then(response => response.json().then(data => {
+                                                        if (response.ok) {
+                                                            window.location.reload();
+                                                        } else {
+                                                            throw new Error(data.message || 'Reset failed');
+                                                        }
+                                                    }))
+                                                    .catch(error => {
+                                                        console.error('Error:', error);
+                                                        alert(error.message);
+                                                        $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                        $el.innerHTML = 'Reset Download';
+                                                    });
+                                                }
+                                            ">
+                                            Reset Download
+                                        </button>
+                                    @endif
 
                                     <form action="{{ route('settings.gtfs.clear') }}" method="POST" class="inline">
                                         @csrf
@@ -252,4 +290,76 @@
             </div>
         </x-modal>
     @endforeach
+
+    @if($gtfsSettings && $gtfsSettings->is_downloading)
+        <script>
+            function updateProgress() {
+                fetch('{{ route('settings.gtfs.progress') }}', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.is_downloading) {
+                        // Update progress bar
+                        const progressBar = document.getElementById('progress-bar');
+                        const progressPercentage = document.getElementById('progress-percentage');
+                        if (progressBar && progressPercentage) {
+                            progressBar.style.width = data.progress + '%';
+                            progressPercentage.textContent = data.progress + '%';
+                        }
+
+                        // Update status
+                        const statusElement = document.getElementById('download-status');
+                        if (statusElement && data.status) {
+                            statusElement.textContent = 'Status: ' + data.status;
+                        }
+
+                        // Update stage indicators
+                        const stages = ['download', 'trips', 'calendar', 'routes', 'stops'];
+                        const thresholds = [5, 20, 40, 60, 80];
+                        
+                        stages.forEach((stage, index) => {
+                            const element = document.getElementById('stage-' + stage);
+                            if (element) {
+                                if (data.progress >= thresholds[index]) {
+                                    element.classList.add('text-blue-600', 'font-medium');
+                                    element.classList.remove('text-gray-500');
+                                } else {
+                                    element.classList.remove('text-blue-600', 'font-medium');
+                                    element.classList.add('text-gray-500');
+                                }
+                            }
+                        });
+
+                        // Continue polling if still downloading
+                        if (data.progress < 100) {
+                            setTimeout(updateProgress, 2000); // Poll every 2 seconds
+                        } else {
+                            // Download completed, reload page after a short delay
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 3000);
+                        }
+                    } else {
+                        // Download finished, reload page
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching progress:', error);
+                    // Try again in 5 seconds on error
+                    setTimeout(updateProgress, 5000);
+                });
+            }
+
+            // Start polling when page loads
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(updateProgress, 1000); // Start after 1 second
+            });
+        </script>
+    @endif
 </x-admin-layout>

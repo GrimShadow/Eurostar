@@ -147,13 +147,19 @@ sudo supervisorctl tail -f laravel-queue
 
 ### Laravel Scheduler (`laravel-scheduler.service`)
 - Runs `php artisan schedule:work`
-- Executes the `ProcessTrainRules` command every minute
-- Enqueues train rule processing jobs
+- Executes scheduled commands including:
+  - `ProcessTrainRules` command every minute
+  - `ProcessAutomatedAnnouncements` command every minute  
+  - `DownloadGtfsData` command daily at 3:00 AM
+- Enqueues jobs for background processing
 
 ### Laravel Queue Worker (`laravel-queue.service`)
-- Runs `php artisan queue:work --queue=train-rules`
-- Processes the queued train rule jobs
-- Handles individual rule processing in isolation
+- Runs `php artisan queue:work --queue=default,train-rules`
+- Processes queued jobs including:
+  - Train rule processing jobs (train-rules queue)
+  - GTFS data download jobs (default queue)
+  - Automated announcement jobs (default queue)
+- Handles individual job processing in isolation
 
 ## Configuration Customization
 
@@ -166,7 +172,7 @@ If your application is not in `/var/www/eurostar`, update the paths in:
 ### Queue Worker Settings
 
 The queue worker includes these settings:
-- `--queue=train-rules`: Process only train rule jobs
+- `--queue=default,train-rules`: Process jobs from both default queue (GTFS downloads, announcements) and train-rules queue
 - `--sleep=3`: Sleep 3 seconds between job checks
 - `--tries=3`: Retry failed jobs up to 3 times
 - `--max-time=3600`: Restart worker every hour

@@ -61,6 +61,8 @@ class DownloadAndProcessGtfs implements ShouldQueue
                 throw new \Exception('GTFS settings not found');
             }
 
+            $this->updateProgress($gtfsSettings, 5, 'Downloading GTFS file...');
+
             // Download the file
             $response = Http::timeout(300)->get($gtfsSettings->url);
             if (!$response->successful()) {
@@ -70,6 +72,8 @@ class DownloadAndProcessGtfs implements ShouldQueue
             // Save the file
             $zipPath = storage_path('app/gtfs.zip');
             file_put_contents($zipPath, $response->body());
+
+            $this->updateProgress($gtfsSettings, 10, 'Extracting GTFS files...');
 
             // Extract the file
             $extractPath = storage_path('app/gtfs');
@@ -85,17 +89,20 @@ class DownloadAndProcessGtfs implements ShouldQueue
             $zip->extractTo($extractPath);
             $zip->close();
 
-            // Process each file
-            $this->processFile($extractPath, 'stops.txt', 'syncStopsData');
-            $this->processFile($extractPath, 'routes.txt', 'syncRoutesData');
-            $this->processFile($extractPath, 'trips.txt', 'syncTripsData');
-            $this->processFile($extractPath, 'stop_times.txt', 'syncStopTimesData');
-            $this->processFile($extractPath, 'calendar_dates.txt', 'syncCalendarDatesData');
+            // Process each file with proper progress tracking
+            $this->processFile($extractPath, 'stops.txt', 'syncStopsData', 15, 30);
+            $this->processFile($extractPath, 'routes.txt', 'syncRoutesData', 30, 45);
+            $this->processFile($extractPath, 'trips.txt', 'syncTripsData', 45, 70);
+            $this->processFile($extractPath, 'stop_times.txt', 'syncStopTimesData', 70, 90);
+            $this->processFile($extractPath, 'calendar_dates.txt', 'syncCalendarDatesData', 90, 95);
+
+            $this->updateProgress($gtfsSettings, 100, 'GTFS download completed successfully');
 
             // Update settings
             $gtfsSettings->last_download = now();
             $gtfsSettings->is_downloading = false;
             $gtfsSettings->download_progress = 100;
+            $gtfsSettings->next_download = now()->addDay()->setTime(3, 0, 0);
             $gtfsSettings->save();
 
             // Clean up
@@ -112,6 +119,7 @@ class DownloadAndProcessGtfs implements ShouldQueue
             if (isset($gtfsSettings)) {
                 $gtfsSettings->is_downloading = false;
                 $gtfsSettings->download_progress = 0;
+                $gtfsSettings->download_status = 'Failed: ' . $e->getMessage();
                 $gtfsSettings->save();
             }
 
@@ -120,18 +128,16 @@ class DownloadAndProcessGtfs implements ShouldQueue
         }
     }
 
-    private function processFile($extractPath, $filename, $method)
+    private function processFile($extractPath, $filename, $method, $progressStart, $progressEnd)
     {
         try {
             $gtfsSettings = GtfsSetting::first();
-            $gtfsSettings->download_progress = 0;
-            $gtfsSettings->save();
+            $this->updateProgress($gtfsSettings, $progressStart, "Processing {$filename}...");
 
             $controller = new \App\Http\Controllers\GtfsController();
             $controller->$method($extractPath);
 
-            $gtfsSettings->download_progress = 100;
-            $gtfsSettings->save();
+            $this->updateProgress($gtfsSettings, $progressEnd, "Completed {$filename}");
         } catch (\Exception $e) {
             Log::error("Failed to process {$filename}: " . $e->getMessage());
             throw $e;
