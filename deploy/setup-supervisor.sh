@@ -8,7 +8,7 @@ set -e
 echo "🚀 Setting up Laravel Eurostar with Supervisor..."
 
 # Configuration
-APP_PATH="/var/www/eurostar"
+APP_PATH="/var/www/Eurostar"
 APP_USER="www-data"
 
 # Check if running as root
@@ -39,8 +39,8 @@ cp deploy/supervisor/laravel-scheduler.conf /etc/supervisor/conf.d/
 cp deploy/supervisor/laravel-queue.conf /etc/supervisor/conf.d/
 
 # Update configuration files with correct paths
-sed -i "s|/var/www/eurostar|$APP_PATH|g" /etc/supervisor/conf.d/laravel-scheduler.conf
-sed -i "s|/var/www/eurostar|$APP_PATH|g" /etc/supervisor/conf.d/laravel-queue.conf
+sed -i "s|/var/www/Eurostar|$APP_PATH|g" /etc/supervisor/conf.d/laravel-scheduler.conf
+sed -i "s|/var/www/Eurostar|$APP_PATH|g" /etc/supervisor/conf.d/laravel-queue.conf
 
 # Create log directory
 mkdir -p /var/log/supervisor

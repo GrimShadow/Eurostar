@@ -8,8 +8,8 @@ User=www-data
 Group=www-data
 Restart=always
 RestartSec=3
-WorkingDirectory=/var/www/eurostar
-ExecStart=/usr/bin/php /var/www/eurostar/artisan schedule:work
+WorkingDirectory=/var/www/Eurostar
+ExecStart=/usr/bin/php /var/www/Eurostar/artisan schedule:work
 StandardOutput=journal
 StandardError=journal
 
