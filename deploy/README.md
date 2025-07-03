@@ -49,4 +49,41 @@ Both approaches set up:
 - Database configured
 - Root/sudo access for setup
 
+## How to Check Which Process Manager You're Using
+
+If you've already deployed and can't remember which process manager you chose, run these commands on your production server:
+
+### Check for Systemd Services
+```bash
+# Check if systemd services exist and are running
+sudo systemctl status laravel-scheduler.service
+sudo systemctl status laravel-queue.service
+
+# List all Laravel-related systemd services
+sudo systemctl list-units --type=service | grep laravel
+```
+
+### Check for Supervisor
+```bash
+# Check if supervisor is installed and running Laravel processes
+sudo supervisorctl status
+
+# Look specifically for Laravel processes
+sudo supervisorctl status | grep laravel
+```
+
+### Quick Detection Script
+```bash
+# Run this one-liner to detect your setup
+if sudo systemctl is-active laravel-scheduler.service >/dev/null 2>&1; then
+    echo "✅ Using SYSTEMD"
+    sudo systemctl status laravel-scheduler.service laravel-queue.service
+elif sudo supervisorctl status | grep -q laravel 2>/dev/null; then
+    echo "✅ Using SUPERVISOR" 
+    sudo supervisorctl status | grep laravel
+else
+    echo "❌ No Laravel services found - not deployed yet"
+fi
+```
+
 See `UBUNTU-DEPLOYMENT.md` for complete instructions. 
