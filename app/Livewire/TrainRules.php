@@ -238,6 +238,7 @@ class TrainRules extends Component
     {
         TrainRule::find($ruleId)->delete();
         session()->flash('success', 'Rule deleted successfully.');
+        $this->resetPage();
     }
 
     public function render()
