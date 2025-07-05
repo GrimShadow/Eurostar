@@ -32,6 +32,7 @@ class TrainRules extends Component
     public $valueField = [];
     public $conditions = [];
     public $logicalOperators = ['and' => 'AND', 'or' => 'OR'];
+    public $refreshFlag = 0;
 
     protected function rules()
     {
@@ -223,8 +224,17 @@ class TrainRules extends Component
             $rule->conditions()->save($ruleCondition);
         }
 
-        $this->reset();
+        // Reset form state and refresh the list
+        $this->reset([
+            'conditions',
+            'action',
+            'actionValue',
+            'selectedTemplate',
+            'announcementZone',
+            'templateVariables'
+        ]);
         $this->addCondition();
+        $this->resetPage();
         session()->flash('message', 'Rule created successfully.');
     }
 
@@ -236,9 +246,15 @@ class TrainRules extends Component
 
     public function deleteRule($ruleId)
     {
-        TrainRule::find($ruleId)->delete();
-        session()->flash('success', 'Rule deleted successfully.');
-        $this->resetPage();
+        $rule = TrainRule::find($ruleId);
+        if ($rule) {
+            $rule->delete();
+            session()->flash('success', 'Rule deleted successfully.');
+            
+            // Force component to refresh by updating state
+            $this->refreshFlag++;
+            $this->resetPage();
+        }
     }
 
     public function render()
