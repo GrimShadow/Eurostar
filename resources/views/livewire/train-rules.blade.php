@@ -34,11 +34,10 @@
                                 <select wire:model.live="conditions.{{ $index }}.condition_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                                     <option value="">Select Type</option>
                                     <option value="time_until_departure">Time Until Departure</option>
-                                    <option value="time_since_arrival">Time Since Arrival</option>
-                                    <option value="platform_change">Platform Change</option>
-                                    <option value="delay_duration">Delay Duration</option>
+                                    <option value="time_after_departure">Time After Departure</option>
+                                    <option value="time_until_arrival">Time Until Arrival</option>
+                                    <option value="time_after_arrival">Time After Arrival</option>
                                     <option value="current_status">Current Status</option>
-                                    <option value="time_of_day">Time of Day</option>
                                     <option value="train_number">Train Number</option>
                                 </select>
                                 @error("conditions.{$index}.condition_type") <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
@@ -49,8 +48,11 @@
                                 <select wire:model.live="conditions.{{ $index }}.operator" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                                     <option value="">Select Operator</option>
                                     <option value=">">Greater Than</option>
+                                    <option value=">=">Greater Than or Equal To</option>
                                     <option value="<">Less Than</option>
+                                    <option value="<=">Less Than or Equal To</option>
                                     <option value="=">Equals</option>
+                                    <option value="!=">Not Equal To</option>
                                 </select>
                                 @error("conditions.{$index}.operator") <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                             </div>
@@ -64,11 +66,7 @@
                                             <option value="{{ $status->id }}">{{ $status->status }}</option>
                                         @endforeach
                                     </select>
-                                @elseif($condition['condition_type'] === 'time_of_day')
-                                    <input type="time" 
-                                        wire:model.live="conditions.{{ $index }}.value" 
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
-                                @elseif(in_array($condition['condition_type'], ['time_until_departure', 'time_since_arrival', 'delay_duration']))
+                                @elseif(in_array($condition['condition_type'], ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival']))
                                     <div class="flex space-x-2">
                                         <div class="flex-1">
                                             <input type="number" 
@@ -77,6 +75,7 @@
                                                 step="1"
                                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
                                                 placeholder="Enter minutes">
+                                                <p class="text-xs text-gray-500">
                                         </div>
                                     </div>
                                 @else
@@ -202,7 +201,7 @@
                                     {{ $condition->operator }} 
                                     @if($condition->condition_type === 'current_status')
                                         {{ $condition->value }}
-                                    @elseif($condition->condition_type === 'time_of_day')
+                                    @elseif($condition->condition_type === 'train_number')
                                         {{ $condition->value }}
                                     @else
                                         {{ $condition->value }} minutes

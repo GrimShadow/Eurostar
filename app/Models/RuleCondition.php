@@ -45,6 +45,57 @@ class RuleCondition extends Model
                 
                 return $this->compare($minutesUntilDeparture, $this->value);
             
+            case 'time_after_departure':
+                // Get the first stop's departure time (or specific stop if provided)
+                if ($specificStopId) {
+                    $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+                } else {
+                    $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+                }
+                if (!$stopTime) return false;
+                
+                $departureTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
+                $now = Carbon::now();
+                
+                // Calculate minutes after departure (positive = departed, negative = not yet departed)
+                $minutesAfterDeparture = $departureTime->diffInMinutes($now, false);
+                
+                return $this->compare($minutesAfterDeparture, $this->value);
+            
+            case 'time_until_arrival':
+                // Get the last stop's arrival time (or specific stop if provided)
+                if ($specificStopId) {
+                    $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+                } else {
+                    $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+                }
+                if (!$stopTime) return false;
+                
+                $arrivalTime = Carbon::createFromFormat('H:i:s', $stopTime->arrival_time);
+                $now = Carbon::now();
+                
+                // Calculate minutes until arrival (positive = future, negative = past)
+                $minutesUntilArrival = $now->diffInMinutes($arrivalTime, false);
+                
+                return $this->compare($minutesUntilArrival, $this->value);
+            
+            case 'time_after_arrival':
+                // Get the last stop's arrival time (or specific stop if provided)
+                if ($specificStopId) {
+                    $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+                } else {
+                    $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+                }
+                if (!$stopTime) return false;
+                
+                $arrivalTime = Carbon::createFromFormat('H:i:s', $stopTime->arrival_time);
+                $now = Carbon::now();
+                
+                // Calculate minutes after arrival (positive = arrived, negative = not yet arrived)
+                $minutesAfterArrival = $arrivalTime->diffInMinutes($now, false);
+                
+                return $this->compare($minutesAfterArrival, $this->value);
+            
             case 'time_since_arrival':
                 // Get the last stop's arrival time (or specific stop if provided)
                 if ($specificStopId) {
@@ -97,6 +148,8 @@ class RuleCondition extends Model
                 $normalizedStatusValue = strtolower(str_replace([' ', '-'], '', $statusValue));
                 $normalizedCompareValue = strtolower(str_replace([' ', '-'], '', $compareValue));
                 
+                // Debug logging removed - rule is working correctly
+                
                 return $this->compare($normalizedStatusValue, $normalizedCompareValue);
             
             case 'time_of_day':
@@ -117,10 +170,16 @@ class RuleCondition extends Model
         switch ($this->operator) {
             case '>':
                 return $value1 > $value2;
+            case '>=':
+                return $value1 >= $value2;
             case '<':
                 return $value1 < $value2;
+            case '<=':
+                return $value1 <= $value2;
             case '=':
                 return $value1 == $value2;
+            case '!=':
+                return $value1 != $value2;
             default:
                 return false;
         }

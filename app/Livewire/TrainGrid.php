@@ -219,7 +219,7 @@ class TrainGrid extends Component
                     'status' => ucfirst($firstStopStatus?->status ?? 'on-time'),
                     'status_color' => $firstStopStatusObj?->color_rgb ?? '156,163,175',
                     'status_color_hex' => $this->rgbToHex($firstStopStatusObj?->color_rgb ?? '156,163,175'),
-                    'departure_platform' => $stops->first()->platform_code ?? 'TBD',
+                    'departure_platform' => $stops->last()->platform_code ?? 'TBD',
                     'arrival_platform' => $stops->last()->platform_code ?? 'TBD',
                     'stop_name' => $stops->first()->stop_name,
                     'stops' => $mappedStops
@@ -263,13 +263,14 @@ class TrainGrid extends Component
         $stops = DB::table('gtfs_stop_times')
             ->join('gtfs_stops', 'gtfs_stop_times.stop_id', '=', 'gtfs_stops.stop_id')
             ->where('gtfs_stop_times.trip_id', $tripId)
-            ->orderBy('gtfs_stop_times.stop_sequence')
             ->select([
-                'gtfs_stops.stop_name as name',
+                DB::raw('MIN(gtfs_stops.stop_name) as name'),
                 'gtfs_stop_times.stop_sequence as sequence',
-                'gtfs_stop_times.arrival_time as arrival',
-                'gtfs_stop_times.departure_time as departure'
+                DB::raw('MIN(gtfs_stop_times.arrival_time) as arrival'),
+                DB::raw('MIN(gtfs_stop_times.departure_time) as departure')
             ])
+            ->groupBy('gtfs_stop_times.stop_sequence')
+            ->orderBy('gtfs_stop_times.stop_sequence')
             ->get();
 
         $this->routeStops = $stops->map(function ($stop) {

@@ -38,7 +38,7 @@ class TrainRules extends Component
     {
         $rules = [
             'conditions' => 'required|array|min:1',
-            'conditions.*.condition_type' => 'required|in:time_until_departure,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number',
+            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,current_status,train_number',
             'conditions.*.operator' => 'required',
             'conditions.*.value' => 'required',
             'action' => 'required|in:set_status,make_announcement',
@@ -108,12 +108,10 @@ class TrainRules extends Component
             // Update the value field based on the new condition type
             switch ($value) {
                 case 'time_until_departure':
-                case 'time_since_arrival':
-                case 'delay_duration':
+                case 'time_after_departure':
+                case 'time_until_arrival':
+                case 'time_after_arrival':
                     $this->conditions[$index]['value'] = '0';
-                    break;
-                case 'time_of_day':
-                    $this->conditions[$index]['value'] = now()->format('H:i');
                     break;
                 default:
                     $this->conditions[$index]['value'] = '';
@@ -143,8 +141,9 @@ class TrainRules extends Component
         
         switch ($value) {
             case 'time_until_departure':
-            case 'time_since_arrival':
-            case 'delay_duration':
+            case 'time_after_departure':
+            case 'time_until_arrival':
+            case 'time_after_arrival':
                 $this->valueField = [
                     'type' => 'number',
                     'label' => 'Minutes',
@@ -152,24 +151,11 @@ class TrainRules extends Component
                     'step' => 1
                 ];
                 break;
-            case 'platform_change':
-                $this->valueField = [
-                    'type' => 'text',
-                    'label' => 'Platform',
-                    'placeholder' => 'Enter platform number'
-                ];
-                break;
             case 'current_status':
                 $this->valueField = [
                     'type' => 'select',
                     'label' => 'Status',
                     'options' => Status::pluck('status', 'id')->toArray()
-                ];
-                break;
-            case 'time_of_day':
-                $this->valueField = [
-                    'type' => 'time',
-                    'label' => 'Time'
                 ];
                 break;
             case 'train_number':

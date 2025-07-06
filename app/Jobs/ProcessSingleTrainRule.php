@@ -9,6 +9,7 @@ use App\Models\AviavoxTemplate;
 use App\Models\TrainStatus;
 use App\Models\StopStatus;
 use App\Models\Group;
+use App\Models\TrainRuleExecution;
 use App\Events\TrainStatusUpdated;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -55,6 +56,8 @@ class ProcessSingleTrainRule implements ShouldQueue
                 //Log::info("Rule {$this->ruleId} not found or inactive, skipping");
                 return;
             }
+
+            //Log::info("Processing rule {$rule->id} - Action: {$rule->action}");
 
 
             // Get trains that are visible in train grids (filtered by group configurations)
@@ -200,6 +203,12 @@ class ProcessSingleTrainRule implements ShouldQueue
             
             // Check each configured stop individually
             foreach ($configuredStops as $stopTime) {
+                // First check if this rule has already been executed for this train/stop combination
+                if (TrainRuleExecution::hasBeenExecuted($rule->id, $train->trip_id, $stopTime->stop_id)) {
+                    //Log::info("Rule {$rule->id} already executed for train {$train->trip_id} at stop {$stopTime->stop_id}, skipping");
+                    continue;
+                }
+                
                 $stopStatus = StopStatus::where('trip_id', $train->trip_id)
                     ->where('stop_id', $stopTime->stop_id)
                     ->first();
@@ -263,6 +272,21 @@ class ProcessSingleTrainRule implements ShouldQueue
             $this->setTrainStatusAtStops($rule, $train, $stopIds);
         } elseif ($rule->action === 'make_announcement') {
             $this->makeAnnouncement($rule, $train);
+        }
+        
+        // Record the execution for each unique stop to prevent re-triggering
+        $uniqueStopIds = array_unique($stopIds);
+        foreach ($uniqueStopIds as $stopId) {
+            TrainRuleExecution::recordExecution(
+                $rule->id,
+                $train->trip_id,
+                $stopId,
+                $rule->action,
+                [
+                    'action_value' => $rule->action_value,
+                    'train_number' => $train->trip_short_name ?? $train->trip_id
+                ]
+            );
         }
     }
 
@@ -411,25 +435,39 @@ class ProcessSingleTrainRule implements ShouldQueue
             return;
         }
 
+        // Use friendly_name if available, otherwise fall back to name
+        $templateName = $template->friendly_name ?? $template->name;
+        $zone = $announcementData['zone'] ?? 'Terminal';
+
         // Check if announcement was already made recently to prevent spam
         $recentAnnouncement = DB::table('announcements')
-            ->where('message', $template->name)
+            ->where('message', $templateName)
+            ->where('area', $zone)
             ->where('created_at', '>', now()->subMinutes(5))
             ->exists();
 
         if ($recentAnnouncement) {
-            //Log::info("Recent announcement for template {$template->name} already exists, skipping");
+            Log::info("Recent announcement for template '{$templateName}' in zone '{$zone}' already exists, skipping");
             return;
         }
 
-        //Log::info("Making announcement for train {$train->trip_id} using template {$template->name}", [
-        //    'zone' => $announcementData['zone'] ?? 'Unknown',
-        //    'variables' => $announcementData['variables'] ?? []
-        //]);
+        // Create announcement record in the database
+        \App\Models\Announcement::create([
+            'type' => 'audio',
+            'message' => $templateName,
+            'scheduled_time' => now()->format('H:i:s'),
+            'author' => 'System (Train Rule)',
+            'area' => $zone,
+            'status' => 'Finished',
+            'recurrence' => null
+        ]);
 
-        // Here you would integrate with your actual announcement system
-        // For now, just log the announcement
-        // You can implement the actual Aviavox API call here similar to CreateAnnouncement
+        Log::info("Train rule announcement created for train {$train->trip_id} using template '{$templateName}' in zone '{$zone}'", [
+            'rule_id' => $rule->id,
+            'template_id' => $announcementData['template_id'],
+            'zone' => $zone,
+            'variables' => $announcementData['variables'] ?? []
+        ]);
     }
 
     /**
