@@ -199,7 +199,7 @@ class ProcessAutomatedAnnouncements extends Command
         $variables['zone'] = $rule->zone;
         
         // Start with template content
-        $xml = $template->content;
+        $xml = $template->xml_template;
         
         // Replace variables in the XML
         foreach ($variables as $key => $value) {
