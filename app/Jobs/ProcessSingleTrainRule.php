@@ -452,13 +452,13 @@ class ProcessSingleTrainRule implements ShouldQueue
         }
 
         // Create announcement record in the database
-        \App\Models\Announcement::create([
+        $announcement = \App\Models\Announcement::create([
             'type' => 'audio',
             'message' => $templateName,
             'scheduled_time' => now()->format('H:i:s'),
             'author' => 'System (Train Rule)',
             'area' => $zone,
-            'status' => 'Finished',
+            'status' => 'Pending',
             'recurrence' => null
         ]);
 
@@ -468,6 +468,202 @@ class ProcessSingleTrainRule implements ShouldQueue
             'zone' => $zone,
             'variables' => $announcementData['variables'] ?? []
         ]);
+
+        // Try to send to Aviavox if configured
+        $settings = \App\Models\AviavoxSetting::first();
+        if ($settings && $settings->ip_address && $settings->port) {
+            try {
+                $this->sendToAviavox($template, $announcementData, $settings, $rule, $train);
+                $announcement->update(['status' => 'Finished']);
+            } catch (\Exception $e) {
+                $announcement->update(['status' => 'Failed']);
+                
+                Log::error("Failed to send train rule announcement to Aviavox", [
+                    'rule_id' => $rule->id,
+                    'train_id' => $train->trip_id,
+                    'template_name' => $templateName,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        } else {
+            // No Aviavox settings configured - still log the announcement but mark as finished
+            $announcement->update(['status' => 'Finished']);
+            
+            Log::info("Train rule announcement logged (Aviavox not configured)", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'template_name' => $templateName,
+                'zone' => $zone
+            ]);
+        }
+    }
+
+    /**
+     * Send train rule announcement to Aviavox system
+     */
+    private function sendToAviavox($template, $announcementData, $settings, $rule, $train): void
+    {
+        // Generate XML from template and variables
+        $xml = $this->generateXmlForTrainRule($template, $announcementData, $train);
+        
+        Log::info("Train Rule Announcement - Starting Aviavox transmission", [
+            'rule_id' => $rule->id,
+            'train_id' => $train->trip_id,
+            'train_number' => $train->trip_short_name ?? $train->trip_id,
+            'template_name' => $template->friendly_name ?? $template->name,
+            'aviavox_server' => $settings->ip_address . ':' . $settings->port,
+            'template_id' => $template->id,
+            'zone' => $announcementData['zone'] ?? 'Terminal',
+            'xml_to_send' => $xml
+        ]);
+        
+        // Connect to Aviavox server using the same method as existing system
+        $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 30);
+        if (!$socket) {
+            throw new \Exception("Failed to connect to Aviavox: $errstr ($errno)");
+        }
+
+        try {
+            // Authentication flow (same as existing system)
+            // Step 1: Send challenge request
+            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            Log::debug("Train Rule Announcement - Sending challenge request", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'challenge_xml' => $challengeRequest
+            ]);
+            fwrite($socket, chr(2) . $challengeRequest . chr(3));
+            
+            // Step 2: Read challenge response
+            $response = fread($socket, 1024);
+            Log::debug("Train Rule Announcement - Received challenge response", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'challenge_response' => $response
+            ]);
+            
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            $challenge = $matches[1] ?? null;
+            
+            if (!$challenge) {
+                Log::error("Train Rule Announcement - Invalid challenge received", [
+                    'rule_id' => $rule->id,
+                    'train_id' => $train->trip_id,
+                    'response' => $response
+                ]);
+                throw new \Exception('Invalid challenge received from Aviavox');
+            }
+
+            // Step 3: Generate password hash
+            $password = $settings->password;
+            $passwordLength = strlen($password);
+            $salt = $passwordLength ^ $challenge;
+            $saltedPassword = $password . $salt . strrev($password);
+            $hash = strtoupper(hash('sha512', $saltedPassword));
+            
+            Log::debug("Train Rule Announcement - Authentication details", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'username' => $settings->username,
+                'challenge' => $challenge,
+                'password_length' => $passwordLength,
+                'salt' => $salt
+            ]);
+
+            // Step 4: Send authentication request
+            $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+            Log::debug("Train Rule Announcement - Sending auth request", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'auth_xml' => $authRequest
+            ]);
+            fwrite($socket, chr(2) . $authRequest . chr(3));
+
+            // Step 5: Read authentication response
+            $authResponse = fread($socket, 1024);
+            Log::debug("Train Rule Announcement - Received auth response", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'auth_response' => $authResponse
+            ]);
+
+            if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                Log::error("Train Rule Announcement - Authentication failed", [
+                    'rule_id' => $rule->id,
+                    'train_id' => $train->trip_id,
+                    'auth_response' => $authResponse
+                ]);
+                throw new \Exception('Authentication failed');
+            }
+
+            // Step 6: Send the announcement
+            Log::info("Train Rule Announcement - Sending announcement XML to Aviavox", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'final_xml' => $xml
+            ]);
+            fwrite($socket, chr(2) . $xml . chr(3));
+            
+            // Step 7: Read final response
+            $finalResponse = fread($socket, 1024);
+            Log::info("Train Rule Announcement - Received final response from Aviavox", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id,
+                'final_response' => $finalResponse,
+                'xml_sent' => $xml
+            ]);
+
+        } finally {
+            fclose($socket);
+            Log::debug("Train Rule Announcement - Connection closed", [
+                'rule_id' => $rule->id,
+                'train_id' => $train->trip_id
+            ]);
+        }
+    }
+
+    /**
+     * Generate XML for train rule announcement
+     */
+    private function generateXmlForTrainRule($template, $announcementData, $train): string
+    {
+        // Start with the template's XML content
+        $xml = $template->xml_template;
+        
+        // If no XML template, fall back to basic format
+        if (empty($xml)) {
+            $xml = '<AIP>
+                <MessageID>AnnouncementTriggerRequest</MessageID>
+                <MessageData>
+                    <AnnouncementData>
+                        <Item ID="MessageName" Value="{MessageName}"/>
+                        <Item ID="Zones" Value="{zone}"/>
+                    </AnnouncementData>
+                </MessageData>
+            </AIP>';
+        }
+
+        // Prepare variables for substitution
+        $variables = array_merge($announcementData['variables'] ?? [], [
+            'MessageName' => $template->name,
+            'zone' => $announcementData['zone'] ?? 'Terminal',
+            'train_number' => $train->trip_short_name ?? $train->trip_id,
+            'train_id' => $train->trip_id,
+            'trip_headsign' => $train->trip_headsign ?? ''
+        ]);
+
+        // Replace variables in the XML template
+        foreach ($variables as $key => $value) {
+            $xml = str_replace('{' . $key . '}', htmlspecialchars($value), $xml);
+        }
+
+        // Clean up any remaining unreplaced variables (remove empty {variable} placeholders)
+        $xml = preg_replace('/\{[^}]+\}/', '', $xml);
+        
+        // Clean up whitespace and format XML properly
+        $xml = preg_replace('/>\s+</', '><', trim($xml));
+
+        return $xml;
     }
 
     /**

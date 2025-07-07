@@ -246,19 +246,52 @@ class ProcessAutomatedAnnouncements extends Command
     private function generateXml(AutomatedAnnouncementRule $rule): string
     {
         $template = $rule->aviavoxTemplate;
-        $variables = $rule->template_variables ?? [];
         
-        // Add zone to variables
-        $variables['zone'] = $rule->zone;
-        
-        // Start with template content
-        $xml = $template->xml_template;
-        
-        // Replace variables in the XML
-        foreach ($variables as $key => $value) {
-            $xml = str_replace("{{$key}}", $value, $xml);
+        // Build XML dynamically like the manual announcement system
+        $xml = "<AIP>";
+        $xml .= "<MessageID>AnnouncementTriggerRequest</MessageID>";
+        $xml .= "<MessageData>";
+        $xml .= "<AnnouncementData>";
+        $xml .= '<Item ID="MessageName" Value="' . htmlspecialchars($template->name) . '"/>';
+
+        // Process template variables
+        if ($template->variables && is_array($template->variables)) {
+            foreach ($template->variables as $id => $type) {
+                $value = $this->getVariableValueForAutomated($id, $type, $rule);
+                $xml .= '<Item ID="' . htmlspecialchars($id) . '" Value="' . htmlspecialchars($value) . '"/>';
+            }
         }
-        
+
+        $xml .= "</AnnouncementData>";
+        $xml .= "</MessageData>";
+        $xml .= "</AIP>";
+
         return $xml;
+    }
+
+    /**
+     * Get variable value for automated announcements (similar to manual announcement logic)
+     */
+    private function getVariableValueForAutomated($id, $type, AutomatedAnnouncementRule $rule): string
+    {
+        $ruleVariables = $rule->template_variables ?? [];
+        
+        switch ($type) {
+            case 'zone':
+                return $rule->zone;
+            case 'train':
+                return $ruleVariables['train'] ?? '';
+            case 'datetime':
+                return $ruleVariables['datetime'] ?? now()->format('Y-m-d\TH:i:s+01:00');
+            case 'route':
+                return $ruleVariables['route'] ?? 'GBR_LON';
+            case 'text':
+                return $ruleVariables['text'] ?? '';
+            case 'reason':
+                return $ruleVariables['reason'] ?? '';
+            default:
+                // Check if there's a custom value in rule variables
+                return $ruleVariables[$id] ?? $ruleVariables[$type] ?? '';
+        }
     }
 }
