@@ -136,6 +136,15 @@ class ProcessAutomatedAnnouncements extends Command
         // Generate XML from template and variables
         $xml = $this->generateXml($rule);
         
+        Log::info("Automated Announcement - Starting Aviavox transmission", [
+            'rule_id' => $rule->id,
+            'rule_name' => $rule->name,
+            'aviavox_server' => $settings->ip_address . ':' . $settings->port,
+            'template_id' => $rule->aviavox_template_id,
+            'zone' => $rule->zone,
+            'xml_to_send' => $xml
+        ]);
+        
         // Connect to Aviavox server using the same method as existing system
         $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 30);
         if (!$socket) {
@@ -146,14 +155,27 @@ class ProcessAutomatedAnnouncements extends Command
             // Authentication flow (same as existing system)
             // Step 1: Send challenge request
             $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            Log::debug("Automated Announcement - Sending challenge request", [
+                'rule_id' => $rule->id,
+                'challenge_xml' => $challengeRequest
+            ]);
             fwrite($socket, chr(2) . $challengeRequest . chr(3));
             
             // Step 2: Read challenge response
             $response = fread($socket, 1024);
+            Log::debug("Automated Announcement - Received challenge response", [
+                'rule_id' => $rule->id,
+                'challenge_response' => $response
+            ]);
+            
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
             
             if (!$challenge) {
+                Log::error("Automated Announcement - Invalid challenge received", [
+                    'rule_id' => $rule->id,
+                    'response' => $response
+                ]);
                 throw new \Exception('Invalid challenge received from Aviavox');
             }
 
@@ -163,27 +185,58 @@ class ProcessAutomatedAnnouncements extends Command
             $salt = $passwordLength ^ $challenge;
             $saltedPassword = $password . $salt . strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
+            
+            Log::debug("Automated Announcement - Authentication details", [
+                'rule_id' => $rule->id,
+                'username' => $settings->username,
+                'challenge' => $challenge,
+                'password_length' => $passwordLength,
+                'salt' => $salt
+            ]);
 
             // Step 4: Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+            Log::debug("Automated Announcement - Sending auth request", [
+                'rule_id' => $rule->id,
+                'auth_xml' => $authRequest
+            ]);
             fwrite($socket, chr(2) . $authRequest . chr(3));
 
             // Step 5: Read authentication response
             $authResponse = fread($socket, 1024);
+            Log::debug("Automated Announcement - Received auth response", [
+                'rule_id' => $rule->id,
+                'auth_response' => $authResponse
+            ]);
 
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                Log::error("Automated Announcement - Authentication failed", [
+                    'rule_id' => $rule->id,
+                    'auth_response' => $authResponse
+                ]);
                 throw new \Exception('Authentication failed');
             }
 
             // Step 6: Send the announcement
+            Log::info("Automated Announcement - Sending announcement XML to Aviavox", [
+                'rule_id' => $rule->id,
+                'final_xml' => $xml
+            ]);
             fwrite($socket, chr(2) . $xml . chr(3));
             
             // Step 7: Read final response
             $finalResponse = fread($socket, 1024);
-
+            Log::info("Automated Announcement - Received final response from Aviavox", [
+                'rule_id' => $rule->id,
+                'final_response' => $finalResponse,
+                'xml_sent' => $xml
+            ]);
 
         } finally {
             fclose($socket);
+            Log::debug("Automated Announcement - Connection closed", [
+                'rule_id' => $rule->id
+            ]);
         }
     }
 

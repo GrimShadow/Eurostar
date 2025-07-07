@@ -297,48 +297,88 @@ class CreateAnnouncement extends Component
 
     public function authenticateAndSendMessage($server, $port, $username, $password, $xml)
     {
+        Log::info("Manual Announcement - Starting Aviavox transmission", [
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'aviavox_server' => $server . ':' . $port,
+            'selected_announcement' => $this->selectedAnnouncement,
+            'zone' => $this->selectedZone,
+            'xml_to_send' => $xml
+        ]);
+
+        // Step 1: Create a TCP socket to connect to the server
+        $socket = fsockopen($server, $port, $errno, $errstr, 30);
+        if (!$socket) {
+            Log::error('Manual Announcement - Failed to create socket', [
+                'user_id' => Auth::id(),
+                'server' => $server,
+                'port' => $port,
+                'error' => "$errstr ($errno)"
+            ]);
+            throw new \Exception("Failed to connect to server: $errstr ($errno)");
+        }
+
+        Log::debug("Manual Announcement - Socket connected successfully", [
+            'user_id' => Auth::id(),
+            'server' => $server . ':' . $port
+        ]);
+
+        // Set stream timeout
+        stream_set_timeout($socket, 20);
+
         try {
+            // Step 2: Send AuthenticationChallengeRequest
+            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
+            Log::debug("Manual Announcement - Sending challenge request", [
+                'user_id' => Auth::id(),
+                'challenge_xml' => $challengeRequest
+            ]);
+            fwrite($socket, chr(2) . $challengeRequest . chr(3));
 
-            $socket = fsockopen($server, $port, $errno, $errstr, 5);
-            if (!$socket) {
-                throw new \Exception("Failed to connect: $errstr ($errno)");
-            }
-
-
-            // Set a read timeout for the socket
-            stream_set_timeout($socket, 20); // 20 seconds timeout
-
-            // Step 1: Send AuthenticationChallengeRequest
-            $authChallengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            fwrite($socket, chr(2) . $authChallengeRequest . chr(3));
-
-
-            // Step 2: Read AuthenticationChallengeResponse
+            // Step 3: Read AuthenticationChallengeResponse
             $response = fread($socket, 1024);
             if (stream_get_meta_data($socket)['timed_out']) {
-                Log::error('Stream timed out while waiting for AuthenticationChallengeResponse');
+                Log::error('Manual Announcement - Stream timed out while waiting for AuthenticationChallengeResponse', [
+                    'user_id' => Auth::id()
+                ]);
                 throw new \Exception('Stream timed out while waiting for response');
             }
 
-            // Extract challenge
-            $challenge = $this->extractChallengeFromResponse($response);
+            Log::debug("Manual Announcement - Received challenge response", [
+                'user_id' => Auth::id(),
+                'challenge_response' => $response
+            ]);
+
+            // Step 4: Extract challenge from response and generate password hash
+            preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+            $challenge = $matches[1] ?? null;
             if (!$challenge) {
-                throw new \Exception('Challenge extraction failed from response.');
+                Log::error('Manual Announcement - Invalid challenge received', [
+                    'user_id' => Auth::id(),
+                    'response' => $response
+                ]);
+                throw new \Exception('Invalid challenge received from server');
             }
 
-            // Step 3: Hash the password
-            $saltedPassword = $password . ($challenge ^ strlen($password)) . strrev($password);
-            $passwordHash = strtoupper(hash('sha512', $saltedPassword));
+            $passwordLength = strlen($password);
+            $salt = $passwordLength ^ $challenge;
+            $saltedPassword = $password . $salt . strrev($password);
+            $hash = strtoupper(hash('sha512', $saltedPassword));
 
-            // Step 4: Send AuthenticationRequest
-            $authRequest = "<AIP>
-                                <MessageID>AuthenticationRequest</MessageID>
-                                <ClientID>1234567</ClientID>
-                                <MessageData>
-                                    <Username>{$username}</Username>
-                                    <PasswordHash>{$passwordHash}</PasswordHash>
-                                </MessageData>
-                            </AIP>";
+            Log::debug("Manual Announcement - Authentication details", [
+                'user_id' => Auth::id(),
+                'username' => $username,
+                'challenge' => $challenge,
+                'password_length' => $passwordLength,
+                'salt' => $salt
+            ]);
+
+            // Step 5: Send AuthenticationRequest
+            $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
+            Log::debug("Manual Announcement - Sending auth request", [
+                'user_id' => Auth::id(),
+                'auth_xml' => $authRequest
+            ]);
             fwrite($socket, chr(2) . $authRequest . chr(3));
 
             // Step 5: Read AuthenticationResponse
@@ -348,12 +388,28 @@ class CreateAnnouncement extends Component
                 throw new \Exception('Stream timed out while waiting for response');
             }
 
+            Log::debug("Manual Announcement - Received auth response", [
+                'user_id' => Auth::id(),
+                'auth_response' => $authResponse
+            ]);
+
             if (strpos($authResponse, "<Authenticated>1</Authenticated>") === false) {
+                Log::error("Manual Announcement - Authentication failed", [
+                    'user_id' => Auth::id(),
+                    'auth_response' => $authResponse
+                ]);
                 throw new \Exception("Authentication failed.");
             }
 
+            Log::info("Manual Announcement - Authentication successful, sending announcement", [
+                'user_id' => Auth::id()
+            ]);
 
             // Step 7: Send the XML announcement message
+            Log::info("Manual Announcement - Sending announcement XML to Aviavox", [
+                'user_id' => Auth::id(),
+                'final_xml' => $xml
+            ]);
             fwrite($socket, chr(2) . $xml . chr(3));
 
             // Step 8: Read the final response
@@ -362,6 +418,13 @@ class CreateAnnouncement extends Component
                 Log::error('Stream timed out while waiting for AnnouncementTriggerResponse');
                 throw new \Exception('Stream timed out while waiting for response');
             }
+            
+            Log::info("Manual Announcement - Received final response from Aviavox", [
+                'user_id' => Auth::id(),
+                'final_response' => $finalResponse,
+                'xml_sent' => $xml
+            ]);
+            
             fclose($socket);
             
         } catch (\Exception $e) {
