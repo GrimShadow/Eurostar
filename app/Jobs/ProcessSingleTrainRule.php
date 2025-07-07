@@ -52,8 +52,13 @@ class ProcessSingleTrainRule implements ShouldQueue
             // Fetch the rule with conditions
             $rule = TrainRule::with('conditions')->find($this->ruleId);
             
-            if (!$rule || !$rule->is_active) {
-                //Log::info("Rule {$this->ruleId} not found or inactive, skipping");
+            if (!$rule) {
+                Log::info("Rule {$this->ruleId} not found (possibly deleted), skipping job execution");
+                return;
+            }
+            
+            if (!$rule->is_active) {
+                //Log::info("Rule {$this->ruleId} is inactive, skipping");
                 return;
             }
 
@@ -204,8 +209,14 @@ class ProcessSingleTrainRule implements ShouldQueue
             // Check each configured stop individually
             foreach ($configuredStops as $stopTime) {
                 // First check if this rule has already been executed for this train/stop combination
-                if (TrainRuleExecution::hasBeenExecuted($rule->id, $train->trip_id, $stopTime->stop_id)) {
-                    //Log::info("Rule {$rule->id} already executed for train {$train->trip_id} at stop {$stopTime->stop_id}, skipping");
+                try {
+                    if (TrainRuleExecution::hasBeenExecuted($rule->id, $train->trip_id, $stopTime->stop_id)) {
+                        //Log::info("Rule {$rule->id} already executed for train {$train->trip_id} at stop {$stopTime->stop_id}, skipping");
+                        continue;
+                    }
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Handle the case where the rule might have been deleted
+                    Log::warning("Error checking rule execution for rule {$rule->id}: " . $e->getMessage());
                     continue;
                 }
                 
@@ -277,7 +288,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         // Record the execution for each unique stop to prevent re-triggering
         $uniqueStopIds = array_unique($stopIds);
         foreach ($uniqueStopIds as $stopId) {
-            TrainRuleExecution::recordExecution(
+            $execution = TrainRuleExecution::recordExecution(
                 $rule->id,
                 $train->trip_id,
                 $stopId,
@@ -287,6 +298,12 @@ class ProcessSingleTrainRule implements ShouldQueue
                     'train_number' => $train->trip_short_name ?? $train->trip_id
                 ]
             );
+            
+            // If recording failed due to deleted rule, exit early
+            if ($execution === null) {
+                Log::info("Rule {$rule->id} was deleted during execution, stopping further processing");
+                return;
+            }
         }
     }
 

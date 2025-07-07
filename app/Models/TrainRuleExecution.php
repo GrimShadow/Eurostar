@@ -42,18 +42,27 @@ class TrainRuleExecution extends Model
      */
     public static function recordExecution($ruleId, $tripId, $stopId, $actionTaken, $actionDetails = null)
     {
-        return self::updateOrCreate(
-            [
-                'rule_id' => $ruleId,
-                'trip_id' => $tripId,
-                'stop_id' => $stopId
-            ],
-            [
-                'executed_at' => Carbon::now(),
-                'action_taken' => $actionTaken,
-                'action_details' => $actionDetails
-            ]
-        );
+        try {
+            return self::updateOrCreate(
+                [
+                    'rule_id' => $ruleId,
+                    'trip_id' => $tripId,
+                    'stop_id' => $stopId
+                ],
+                [
+                    'executed_at' => Carbon::now(),
+                    'action_taken' => $actionTaken,
+                    'action_details' => $actionDetails
+                ]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Handle foreign key constraint violations gracefully
+            if ($e->getCode() === '23000') {
+                \Illuminate\Support\Facades\Log::warning("Failed to record execution for rule {$ruleId} - rule may have been deleted");
+                return null;
+            }
+            throw $e; // Re-throw other database errors
+        }
     }
 
     /**
