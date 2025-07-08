@@ -307,6 +307,27 @@ class ProcessSingleTrainRule implements ShouldQueue
         }
     }
 
+    /**
+     * Convert RGB color string to hex format
+     */
+    private function rgbToHex($rgb)
+    {
+        if (empty($rgb)) {
+            return '#9CA3AF'; // Default gray color
+        }
+
+        $rgbArray = explode(',', $rgb);
+        if (count($rgbArray) !== 3) {
+            return '#9CA3AF'; // Default gray color if invalid format
+        }
+
+        $hex = '#';
+        foreach ($rgbArray as $component) {
+            $hex .= str_pad(dechex(trim($component)), 2, '0', STR_PAD_LEFT);
+        }
+        return strtoupper($hex);
+    }
+
     private function setTrainStatusAtStops($rule, $train, $stopIds)
     {
         // Get the status text from the statuses table
@@ -316,43 +337,60 @@ class ProcessSingleTrainRule implements ShouldQueue
             return;
         }
 
-        $updatedStops = [];
-        
-        foreach ($stopIds as $stopId) {
-            // Check if status has already been set to prevent unnecessary updates
-            $currentStopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
-                ->where('stop_id', $stopId)
-                ->first();
+        DB::beginTransaction();
+        try {
+            $updatedStops = [];
+            
+            foreach ($stopIds as $stopId) {
+                // Check if status has already been set to prevent unnecessary updates
+                $currentStopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+                    ->where('stop_id', $stopId)
+                    ->first();
+                    
+                if ($currentStopStatus && $currentStopStatus->status === $status->status) {
+                    continue; // Skip if already set
+                }
+
+                // Update or create the status in stop_statuses table with colors
+                \App\Models\StopStatus::updateOrCreate(
+                    [
+                        'trip_id' => $train->trip_id,
+                        'stop_id' => $stopId
+                    ],
+                    [
+                        'status' => $status->status,
+                        'status_color' => $status->color_rgb ?? '156,163,175',
+                        'status_color_hex' => $status->color_rgb ? $this->rgbToHex($status->color_rgb) : '#9CA3AF',
+                    ]
+                );
                 
-            if ($currentStopStatus && $currentStopStatus->status === $status->status) {
-                continue; // Skip if already set
+                $updatedStops[] = $stopId;
             }
 
-            // Update or create the status in stop_statuses table
-            \App\Models\StopStatus::updateOrCreate(
-                [
-                    'trip_id' => $train->trip_id,
-                    'stop_id' => $stopId
-                ],
-                ['status' => $status->status]
-            );
-            
-            $updatedStops[] = $stopId;
-        }
+            if (!empty($updatedStops)) {
+                // Update or create the status in train_statuses table (for backward compatibility)
+                TrainStatus::updateOrCreate(
+                    ['trip_id' => $train->trip_id],
+                    ['status' => $status->status]
+                );
 
-        if (!empty($updatedStops)) {
-            // Update or create the status in train_statuses table (for backward compatibility)
-            TrainStatus::updateOrCreate(
-                ['trip_id' => $train->trip_id],
-                ['status' => $status->status]
-            );
+                DB::commit();
 
-            //Log::info("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
+                //Log::info("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
 
-            // Broadcast the status change event
-            event(new TrainStatusUpdated($train->trip_id, $status->status));
-        } else {
-            //Log::info("Train {$train->trip_id} already has status {$status->status} at specified stops, skipping");
+                // Broadcast the status change event after successful commit
+                event(new TrainStatusUpdated($train->trip_id, $status->status));
+            } else {
+                DB::commit();
+                //Log::info("Train {$train->trip_id} already has status {$status->status} at specified stops, skipping");
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Failed to update train status at stops for train {$train->trip_id}", [
+                'rule_id' => $rule->id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
 
@@ -373,43 +411,60 @@ class ProcessSingleTrainRule implements ShouldQueue
             return;
         }
 
-        $updatedStops = [];
-        
-        foreach ($allConfiguredStops as $stopTime) {
-            // Check if status has already been set to prevent unnecessary updates
-            $currentStopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
-                ->where('stop_id', $stopTime->stop_id)
-                ->first();
+        DB::beginTransaction();
+        try {
+            $updatedStops = [];
+            
+            foreach ($allConfiguredStops as $stopTime) {
+                // Check if status has already been set to prevent unnecessary updates
+                $currentStopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+                    ->where('stop_id', $stopTime->stop_id)
+                    ->first();
+                    
+                if ($currentStopStatus && $currentStopStatus->status === $status->status) {
+                    continue; // Skip if already set
+                }
+
+                // Update or create the status in stop_statuses table with colors
+                \App\Models\StopStatus::updateOrCreate(
+                    [
+                        'trip_id' => $train->trip_id,
+                        'stop_id' => $stopTime->stop_id
+                    ],
+                    [
+                        'status' => $status->status,
+                        'status_color' => $status->color_rgb ?? '156,163,175',
+                        'status_color_hex' => $status->color_rgb ? $this->rgbToHex($status->color_rgb) : '#9CA3AF',
+                    ]
+                );
                 
-            if ($currentStopStatus && $currentStopStatus->status === $status->status) {
-                continue; // Skip if already set
+                $updatedStops[] = $stopTime->stop_id;
             }
 
-            // Update or create the status in stop_statuses table (what the train grids use)
-            \App\Models\StopStatus::updateOrCreate(
-                [
-                    'trip_id' => $train->trip_id,
-                    'stop_id' => $stopTime->stop_id
-                ],
-                ['status' => $status->status]
-            );
-            
-            $updatedStops[] = $stopTime->stop_id;
-        }
+            if (!empty($updatedStops)) {
+                // Update or create the status in train_statuses table (for backward compatibility)
+                TrainStatus::updateOrCreate(
+                    ['trip_id' => $train->trip_id],
+                    ['status' => $status->status]
+                );
 
-        if (!empty($updatedStops)) {
-            // Update or create the status in train_statuses table (for backward compatibility)
-            TrainStatus::updateOrCreate(
-                ['trip_id' => $train->trip_id],
-                ['status' => $status->status]
-            );
+                DB::commit();
 
-            //Log::info("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
+                //Log::info("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
 
-            // Broadcast the status change event
-            event(new TrainStatusUpdated($train->trip_id, $status->status));
-        } else {
-            //Log::info("Train {$train->trip_id} already has status {$status->status} at all configured stops, skipping");
+                // Broadcast the status change event after successful commit
+                event(new TrainStatusUpdated($train->trip_id, $status->status));
+            } else {
+                DB::commit();
+                //Log::info("Train {$train->trip_id} already has status {$status->status} at all configured stops, skipping");
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Failed to update train status for train {$train->trip_id}", [
+                'rule_id' => $rule->id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
 

@@ -34,6 +34,9 @@ class TrainController extends Controller
 
     public function today()
     {
+        // Ensure we're reading the most up-to-date data
+        DB::connection()->reconnect();
+        
         $today = Carbon::now()->format('Y-m-d');
         $startTime = '00:00:00';
         $endTime = '23:59:59';

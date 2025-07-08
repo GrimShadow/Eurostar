@@ -561,6 +561,27 @@ class GtfsController extends Controller
         fclose($handle);
     }
 
+    /**
+     * Convert RGB color string to hex format
+     */
+    private function rgbToHex($rgb)
+    {
+        if (empty($rgb)) {
+            return '#9CA3AF'; // Default gray color
+        }
+
+        $rgbArray = explode(',', $rgb);
+        if (count($rgbArray) !== 3) {
+            return '#9CA3AF'; // Default gray color if invalid format
+        }
+
+        $hex = '#';
+        foreach ($rgbArray as $component) {
+            $hex .= str_pad(dechex(trim($component)), 2, '0', STR_PAD_LEFT);
+        }
+        return strtoupper($hex);
+    }
+
     public function updateStopStatus(Request $request)
     {
         $request->validate([
@@ -574,25 +595,50 @@ class GtfsController extends Controller
             'arrival_platform' => 'nullable|string'
         ]);
 
-        $stopStatus = StopStatus::updateOrCreate(
-            [
+        DB::beginTransaction();
+        try {
+            // Get the status object to retrieve color information
+            $statusObj = \App\Models\Status::where('status', $request->status)->first();
+            
+            $stopStatus = StopStatus::updateOrCreate(
+                [
+                    'trip_id' => $request->trip_id,
+                    'stop_id' => $request->stop_id,
+                ],
+                [
+                    'status' => $request->status,
+                    'status_color' => $statusObj?->color_rgb ?? '156,163,175',
+                    'status_color_hex' => $statusObj ? $this->rgbToHex($statusObj->color_rgb) : '#9CA3AF',
+                    'actual_arrival_time' => $request->actual_arrival_time,
+                    'actual_departure_time' => $request->actual_departure_time,
+                    'platform_code' => $request->platform_code,
+                    'departure_platform' => $request->departure_platform,
+                    'arrival_platform' => $request->arrival_platform,
+                ]
+            );
+
+            // Fire the same event that automated updates fire for consistency
+            event(new \App\Events\TrainStatusUpdated($request->trip_id, $request->status));
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'data' => $stopStatus
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to update stop status', [
                 'trip_id' => $request->trip_id,
                 'stop_id' => $request->stop_id,
-            ],
-            [
-                'status' => $request->status,
-                'actual_arrival_time' => $request->actual_arrival_time,
-                'actual_departure_time' => $request->actual_departure_time,
-                'platform_code' => $request->platform_code,
-                'departure_platform' => $request->departure_platform,
-                'arrival_platform' => $request->arrival_platform,
-            ]
-        );
-
-        return response()->json([
-            'success' => true,
-            'data' => $stopStatus
-        ]);
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to update stop status'
+            ], 500);
+        }
     }
 
     public function getStopStatuses($tripId)
@@ -727,15 +773,44 @@ class GtfsController extends Controller
             'status' => 'required|string'
         ]);
 
-        $trainStatus = TrainStatus::updateOrCreate(
-            ['trip_id' => $request->trip_id],
-            ['status' => $request->status]
-        );
+        DB::beginTransaction();
+        try {
+            // Get the status object to retrieve color information
+            $statusObj = \App\Models\Status::where('status', $request->status)->first();
+            
+            $trainStatus = TrainStatus::updateOrCreate(
+                ['trip_id' => $request->trip_id],
+                ['status' => $request->status]
+            );
 
-        return response()->json([
-            'success' => true,
-            'data' => $trainStatus
-        ]);
+            // Also update any existing stop statuses for this train with the new colors
+            StopStatus::where('trip_id', $request->trip_id)->update([
+                'status' => $request->status,
+                'status_color' => $statusObj?->color_rgb ?? '156,163,175',
+                'status_color_hex' => $statusObj ? $this->rgbToHex($statusObj->color_rgb) : '#9CA3AF',
+            ]);
+
+            // Fire the same event that automated updates fire for consistency
+            event(new \App\Events\TrainStatusUpdated($request->trip_id, $request->status));
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'data' => $trainStatus
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to update train status', [
+                'trip_id' => $request->trip_id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to update train status'
+            ], 500);
+        }
     }
 
     public function getTrainStatus($tripId)
