@@ -30,7 +30,7 @@
                                 </div>
                             @endforeach
                         @else
-                            <p class="text-gray-500">No log file found or the log file is empty.</p>
+                            <p class="text-gray-500">No log file found or the log file is currently empty.</p>
                         @endif
                     </div>
                 </div>
