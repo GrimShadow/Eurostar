@@ -23,7 +23,7 @@ class TrainRule extends Model
 
     public function conditions()
     {
-        return $this->hasMany(RuleCondition::class)->orderBy('order');
+        return $this->hasMany(RuleCondition::class, 'train_rule_id')->orderBy('order');
     }
 
     public function status()

@@ -11,6 +11,7 @@ use App\Models\Status;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class TrainController extends Controller
 {
@@ -34,6 +35,20 @@ class TrainController extends Controller
 
     public function today()
     {
+        // Create a cache key based on current time (rounded to nearest 5 minutes)
+        $cacheKey = 'train_api_today_' . now()->format('Y-m-d_H:') . str_pad(floor(now()->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
+        
+        // Cache the expensive query result for 5 minutes
+        $result = Cache::remember($cacheKey, now()->addMinutes(5), function () {
+            return $this->getTrainsApiData();
+        });
+        
+        return response()->json($result)
+            ->header('Cache-Control', 'public, max-age=300'); // 5 minutes client-side cache
+    }
+
+    private function getTrainsApiData()
+    {
         // Ensure we're reading the most up-to-date data
         DB::connection()->reconnect();
         
@@ -50,7 +65,7 @@ class TrainController extends Controller
             ->toArray();
 
         if (empty($selectedRoutes)) {
-            return response()->json([
+            return [
                 'data' => [],
                 'meta' => [
                     'date' => $today,
@@ -60,7 +75,7 @@ class TrainController extends Controller
                         'end' => $endTime
                     ]
                 ]
-            ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            ];
         }
 
         // First, get all the trips with their basic information
@@ -126,6 +141,7 @@ class TrainController extends Controller
             ->where('departure_stop.departure_time', '>=', $startTime)
             ->where('departure_stop.departure_time', '<=', $endTime)
             ->orderBy('departure_stop.departure_time')
+            ->limit(1000) // Add limit to prevent excessive data loading
             ->get();
 
         // Get all stops for each trip
@@ -240,7 +256,7 @@ class TrainController extends Controller
             ];
         })->values();
 
-        return response()->json([
+        return [
             'data' => [
                 'stops' => $trains
             ],
@@ -252,6 +268,6 @@ class TrainController extends Controller
                     'end' => $endTime
                 ]
             ]
-        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        ];
     }
 }

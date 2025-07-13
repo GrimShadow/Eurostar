@@ -201,13 +201,14 @@ class TrainRules extends Component
         // Save each condition
         foreach ($this->conditions as $index => $condition) {
             $ruleCondition = new RuleCondition([
+                'train_rule_id' => $rule->id,
                 'condition_type' => $condition['condition_type'],
                 'operator' => $condition['operator'],
                 'value' => $condition['value'],
                 'logical_operator' => $index > 0 ? $condition['logical_operator'] : null,
                 'order' => $index
             ]);
-            $rule->conditions()->save($ruleCondition);
+            $ruleCondition->save();
         }
 
         // Reset form state and refresh the list

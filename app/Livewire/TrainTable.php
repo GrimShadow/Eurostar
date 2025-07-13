@@ -29,6 +29,8 @@ class TrainTable extends Component
 
     public function handleTrainStatusUpdated($event)
     {
+        // Clear cache when train status is updated to ensure instant updates
+        $this->clearTrainTableCache();
         $this->loadTrains();
     }
 
@@ -66,14 +68,32 @@ class TrainTable extends Component
 
     public function loadTrains()
     {
-        $query = $this->getTrainsQuery();
-        $this->total = $query->count();
+        // Create a cache key based on group, page, and current time (rounded to nearest minute)
+        $cacheKey = "train_table_group_{$this->group->id}_page_{$this->page}_" . now()->format('Y-m-d_H:i');
         
+        // Cache the expensive query result for 5 minutes
+        $results = Cache::remember($cacheKey, now()->addMinutes(5), function () {
+            return $this->getTrainsData();
+        });
+        
+        $this->trains = $results['trains'];
+        $this->total = $results['total'];
+    }
+
+    private function getTrainsData()
+    {
+        $query = $this->getTrainsQuery();
+        
+        // Optimize count query separately to avoid GROUP BY overhead
+        $countQuery = $this->getTrainsCountQuery();
+        $total = $countQuery->count();
+        
+        // Get paginated results with proper limits
         $trains = $query->skip(($this->page - 1) * $this->perPage)
             ->take($this->perPage)
             ->get();
 
-        $this->trains = $trains->map(function ($train) {
+        $processedTrains = $trains->map(function ($train) {
             return [
                 'number' => $train->number,
                 'departure' => substr($train->departure, 0, 5),
@@ -85,10 +105,48 @@ class TrainTable extends Component
             ];
         });
 
-        // Debug the first train's data
-        if ($trains->isNotEmpty()) {
-            $firstTrain = $trains->first();
+        return [
+            'trains' => $processedTrains,
+            'total' => $total
+        ];
+    }
+
+    private function getTrainsCountQuery()
+    {
+        $today = Carbon::now()->format('Y-m-d');
+        $currentTime = Carbon::now()->format('H:i:s');
+        $endTime = Carbon::now()->addHours(4)->format('H:i:s');
+
+        if (!$this->group) {
+            return GtfsTrip::query()->whereRaw('1 = 0');
         }
+
+        $selectedRoutes = $this->group->trainTableSelections()
+            ->where('is_active', true)
+            ->pluck('route_id')
+            ->toArray();
+
+        if (empty($selectedRoutes)) {
+            return GtfsTrip::query()->whereRaw('1 = 0');
+        }
+
+        // Simplified count query without complex joins
+        return DB::table('gtfs_trips')
+            ->join('gtfs_stop_times as first_stop', function ($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'first_stop.trip_id')
+                    ->where('first_stop.stop_sequence', '=', 1);
+            })
+            ->whereIn('gtfs_trips.route_id', $selectedRoutes)
+            ->where('first_stop.departure_time', '>=', $currentTime)
+            ->where('first_stop.departure_time', '<=', $endTime)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('gtfs_calendar_dates')
+                    ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
+                    ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
+                    ->where('gtfs_calendar_dates.exception_type', 1);
+            })
+            ->selectRaw('DISTINCT gtfs_trips.trip_id');
     }
 
     public function getTrainsQuery()
@@ -165,7 +223,8 @@ class TrainTable extends Component
                      'first_stop.departure_time', 'last_stop.arrival_time', 'gtfs_routes.route_long_name',
                      'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
                      'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code')
-            ->orderBy('first_stop.departure_time');
+            ->orderBy('first_stop.departure_time')
+            ->limit(500); // Add safety limit to prevent scanning entire day
 
         return $query;
     }
@@ -186,8 +245,11 @@ class TrainTable extends Component
         }
     }
 
+    // Clear cache when routes are toggled
     public function toggleTableRoute($routeId)
     {
+        // Clear cache for this group when routes change
+        $this->clearTrainTableCache();
         
         $route = DB::table('selected_routes')
             ->where('route_id', $routeId)
@@ -210,6 +272,39 @@ class TrainTable extends Component
 
         $this->loadSelectedRoutes();
         $this->loadTrains();
+    }
+
+    /**
+     * Clear the train table cache for instant updates
+     */
+    private function clearTrainTableCache()
+    {
+        // Clear current minute cache for all pages
+        for ($page = 1; $page <= 10; $page++) { // Clear up to 10 pages
+            $currentCacheKey = "train_table_group_{$this->group->id}_page_{$page}_" . now()->format('Y-m-d_H:i');
+            Cache::forget($currentCacheKey);
+            
+            // Also clear the previous minute cache in case we're at the boundary
+            $previousMinuteCacheKey = "train_table_group_{$this->group->id}_page_{$page}_" . now()->subMinute()->format('Y-m-d_H:i');
+            Cache::forget($previousMinuteCacheKey);
+        }
+        
+        // Clear API cache as well to ensure consistency
+        $this->clearApiCache();
+    }
+
+    /**
+     * Clear the API cache for train data
+     */
+    private function clearApiCache()
+    {
+        // Clear current 5-minute interval API cache
+        $currentApiCacheKey = 'train_api_today_' . now()->format('Y-m-d_H:') . str_pad(floor(now()->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
+        Cache::forget($currentApiCacheKey);
+        
+        // Also clear the previous 5-minute interval in case we're at the boundary
+        $previousApiCacheKey = 'train_api_today_' . now()->subMinutes(5)->format('Y-m-d_H:') . str_pad(floor(now()->subMinutes(5)->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
+        Cache::forget($previousApiCacheKey);
     }
 
     public function render()

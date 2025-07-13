@@ -37,8 +37,11 @@ class RuleCondition extends Model
                 }
                 if (!$stopTime) return false;
                 
-                $departureTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
                 $now = Carbon::now();
+                $today = $now->format('Y-m-d');
+                
+                // Create departure time for today
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today . ' ' . $stopTime->departure_time);
                 
                 // Calculate minutes until departure (positive = future, negative = past)
                 $minutesUntilDeparture = $now->diffInMinutes($departureTime, false);
@@ -54,8 +57,11 @@ class RuleCondition extends Model
                 }
                 if (!$stopTime) return false;
                 
-                $departureTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
                 $now = Carbon::now();
+                $today = $now->format('Y-m-d');
+                
+                // Create departure time for today
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today . ' ' . $stopTime->departure_time);
                 
                 // Calculate minutes after departure (positive = departed, negative = not yet departed)
                 $minutesAfterDeparture = $departureTime->diffInMinutes($now, false);
@@ -71,8 +77,11 @@ class RuleCondition extends Model
                 }
                 if (!$stopTime) return false;
                 
-                $arrivalTime = Carbon::createFromFormat('H:i:s', $stopTime->arrival_time);
                 $now = Carbon::now();
+                $today = $now->format('Y-m-d');
+                
+                // Create arrival time for today
+                $arrivalTime = Carbon::createFromFormat('Y-m-d H:i:s', $today . ' ' . $stopTime->arrival_time);
                 
                 // Calculate minutes until arrival (positive = future, negative = past)
                 $minutesUntilArrival = $now->diffInMinutes($arrivalTime, false);
@@ -92,7 +101,7 @@ class RuleCondition extends Model
                 $now = Carbon::now();
                 
                 // Calculate minutes after arrival (positive = arrived, negative = not yet arrived)
-                $minutesAfterArrival = $arrivalTime->diffInMinutes($now, false);
+                $minutesAfterArrival = $now->diffInMinutes($arrivalTime, false);
                 
                 return $this->compare($minutesAfterArrival, $this->value);
             
@@ -158,7 +167,9 @@ class RuleCondition extends Model
             
             case 'train_number':
                 $trainNumber = $train->trip_short_name ?? $train->trip_id;
-                return $this->compare($trainNumber, $this->value);
+                // Extract just the train number (first part before space)
+                $extractedTrainNumber = explode(' ', $trainNumber)[0];
+                return $this->compare($extractedTrainNumber, $this->value);
             
             default:
                 return false;

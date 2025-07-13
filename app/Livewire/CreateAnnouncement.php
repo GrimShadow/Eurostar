@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class CreateAnnouncement extends Component
 {
@@ -81,6 +82,17 @@ class CreateAnnouncement extends Component
             return;
         }
 
+        // Create a cache key based on group and current time (rounded to nearest minute)
+        $cacheKey = "create_announcement_trains_group_{$this->group->id}_" . now()->format('Y-m-d_H:i');
+        
+        // Cache the expensive query result for 5 minutes
+        $this->trains = Cache::remember($cacheKey, now()->addMinutes(5), function () {
+            return $this->getTrainsData();
+        });
+    }
+
+    private function getTrainsData()
+    {
         try {
             // Get both API routes and group-specific routes (same logic as TrainGrid)
             $apiRoutes = DB::table('selected_routes')
@@ -97,8 +109,7 @@ class CreateAnnouncement extends Component
             $selectedRoutes = array_unique(array_merge($apiRoutes, $groupRoutes));
 
             if (empty($selectedRoutes)) {
-                $this->trains = [];
-                return;
+                return [];
             }
 
             // Set time range - show trains from 30 minutes ago to end of day
@@ -129,6 +140,8 @@ class CreateAnnouncement extends Component
                         ->where('gtfs_stop_times.departure_time', '<=', $endTime);
                 })
                 ->groupBy('gtfs_trips.trip_id', 'gtfs_trips.route_id', 'gtfs_trips.trip_short_name', 'gtfs_trips.trip_headsign')
+                ->orderBy('gtfs_trips.trip_short_name')
+                ->limit(20) // Limit to prevent excessive data loading
                 ->get();
 
             $trains = [];
@@ -176,14 +189,14 @@ class CreateAnnouncement extends Component
                 return strtotime($a['departure']) - strtotime($b['departure']);
             });
 
-            $this->trains = array_slice($trains, 0, 6);
+            return array_slice($trains, 0, 6);
 
         } catch (\Exception $e) {
             Log::error('CreateAnnouncement - Error loading trains:', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            $this->trains = [];
+            return [];
         }
     }
 
