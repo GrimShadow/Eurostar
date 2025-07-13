@@ -5,6 +5,8 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
 use App\Http\Middleware\GroupAccess;
+use Illuminate\Support\Facades\Gate;
+use App\Models\User;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,5 +28,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(GroupAccess::class);
+
+        Gate::define('viewPulse', function (User $user) {
+            return $user->isAdmin();
+        });
     }
 }
