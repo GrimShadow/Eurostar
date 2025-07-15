@@ -198,15 +198,22 @@ class TrainRules extends Component
             'is_active' => true
         ]);
 
+        // Clear train rules cache to ensure new rules are loaded immediately
+        $this->clearTrainRulesCache();
+
         // Save each condition
         foreach ($this->conditions as $index => $condition) {
+            // Calculate appropriate tolerance based on condition type and operator
+            $tolerance = $this->calculateTolerance($condition);
+            
             $ruleCondition = new RuleCondition([
                 'train_rule_id' => $rule->id,
                 'condition_type' => $condition['condition_type'],
                 'operator' => $condition['operator'],
                 'value' => $condition['value'],
                 'logical_operator' => $index > 0 ? $condition['logical_operator'] : null,
-                'order' => $index
+                'order' => $index,
+                'tolerance_minutes' => $tolerance
             ]);
             $ruleCondition->save();
         }
@@ -229,6 +236,9 @@ class TrainRules extends Component
     {
         $rule = TrainRule::find($ruleId);
         $rule->update(['is_active' => !$rule->is_active]);
+        
+        // Clear cache so rule status changes take effect immediately
+        $this->clearTrainRulesCache();
     }
 
     public function deleteRule($ruleId)
@@ -238,10 +248,53 @@ class TrainRules extends Component
             $rule->delete();
             session()->flash('success', 'Rule deleted successfully.');
             
+            // Clear cache so deleted rules are removed immediately
+            $this->clearTrainRulesCache();
+            
             // Force component to refresh by updating state
             $this->refreshFlag++;
             $this->resetPage();
         }
+    }
+
+    /**
+     * Clear train rules cache to ensure immediate updates
+     */
+    private function clearTrainRulesCache()
+    {
+        try {
+            // Clear active rules cache used by ProcessTrainRules command
+            \Illuminate\Support\Facades\Cache::forget('active_train_rules');
+            \Illuminate\Support\Facades\Cache::forget('active_train_rules_2min');
+            
+            // Clear any time-based rule caches
+            $now = now();
+            for ($i = 0; $i < 5; $i++) {
+                $cacheKey = 'active_train_rules_' . $now->copy()->addMinutes($i)->format('Y-m-d_H:i');
+                \Illuminate\Support\Facades\Cache::forget($cacheKey);
+            }
+            
+            Log::info('Train rules cache cleared after rule modification');
+        } catch (\Exception $e) {
+            Log::warning('Failed to clear train rules cache: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Calculate appropriate tolerance for a condition based on type and operator
+     */
+    private function calculateTolerance($condition)
+    {
+        // For time-based conditions with equality operator, use tolerance to handle timing issues
+        if (in_array($condition['condition_type'], ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival'])) {
+            if ($condition['operator'] === '=') {
+                // For equality, use 1-minute tolerance window to handle the rules engine running every minute
+                return 1;
+            }
+        }
+        
+        // For non-time conditions or non-equality operators, no tolerance needed
+        return 0;
     }
 
     public function render()

@@ -55,6 +55,8 @@
                                     <option value="!=">Not Equal To</option>
                                 </select>
                                 @error("conditions.{$index}.operator") <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                
+                               
                             </div>
 
                             <div wire:key="value-field-{{ $index }}-{{ $condition['condition_type'] }}">

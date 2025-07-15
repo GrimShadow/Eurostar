@@ -17,9 +17,12 @@ class ProcessTrainRules extends Command
 
     public function handle()
     {
-        $activeRules = TrainRule::with('conditions')
-            ->where('is_active', true)
-            ->get();
+        // Cache active rules for 2 minutes to reduce database load
+        $activeRules = \Illuminate\Support\Facades\Cache::remember('active_train_rules_2min', 120, function () {
+            return TrainRule::with('conditions')
+                ->where('is_active', true)
+                ->get();
+        });
 
         if ($activeRules->isEmpty()) {
             if ($this->option('debug')) {

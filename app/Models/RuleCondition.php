@@ -17,7 +17,8 @@ class RuleCondition extends Model
         'operator',
         'value',
         'logical_operator',
-        'order'
+        'order',
+        'tolerance_minutes'
     ];
 
     public function rule()
@@ -188,6 +189,11 @@ class RuleCondition extends Model
             case '<=':
                 return $value1 <= $value2;
             case '=':
+                // For time-based conditions, use tolerance window to handle timing issues
+                if (in_array($this->condition_type, ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival'])) {
+                    $tolerance = $this->tolerance_minutes ?? 1;
+                    return abs($value1 - $value2) <= $tolerance;
+                }
                 return $value1 == $value2;
             case '!=':
                 return $value1 != $value2;
