@@ -39,16 +39,19 @@ class StatusBanner extends Component
             return;
         }
 
-        $minutesSinceLastUpdate = Carbon::parse($lastHeartbeat->last_update_sent_timestamp)->diffInMinutes(now());
+        // Check if the heartbeat itself is recent (within 5 minutes)
+        $minutesSinceHeartbeat = Carbon::parse($lastHeartbeat->created_at)->diffInMinutes(now());
         
-        if ($minutesSinceLastUpdate > 2) {
-            $this->showBanner = true;
-            $this->message = 'No real time updates available';
-            $this->status = 'error';
-        } else {
+        // If status is "up" and heartbeat is recent, don't show banner
+        if ($lastHeartbeat->status === 'up' && $minutesSinceHeartbeat <= 5) {
             $this->showBanner = false;
             $this->message = '';
             $this->status = '';
+        } else {
+            // Show banner if status is not "up" or heartbeat is too old
+            $this->showBanner = true;
+            $this->message = 'No real time updates available';
+            $this->status = 'error';
         }
     }
 
