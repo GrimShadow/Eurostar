@@ -20,6 +20,31 @@ class AviavoxApiController extends Controller
             'ip' => $request->ip()
         ]);
 
+        // Handle GET requests (typically for health checks or status updates)
+        if ($request->method() === 'GET') {
+            // Check if there are query parameters that might contain response data
+            $queryParams = $request->query();
+            
+            if (!empty($queryParams)) {
+                // Store GET request with query parameters
+                AviavoxResponse::create([
+                    'status' => 'get_request',
+                    'raw_response' => json_encode($queryParams)
+                ]);
+                
+                Log::info('Aviavox GET Request with Parameters', [
+                    'query_params' => $queryParams
+                ]);
+            }
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Aviavox response endpoint is reachable',
+                'timestamp' => now()->toDateTimeString(),
+                'method' => 'GET'
+            ]);
+        }
+
         // Enable user error handling for XML parsing
         libxml_use_internal_errors(true);
         

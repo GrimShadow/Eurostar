@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\BrokerController;
 use App\Http\Controllers\Api\AnnouncementController;
 
 Route::post('/aviavox/response', [AviavoxApiController::class, 'handleResponse']);
+Route::get('/aviavox/response', [AviavoxApiController::class, 'handleResponse']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('users', UserController::class);
