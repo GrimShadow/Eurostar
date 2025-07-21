@@ -27,6 +27,7 @@ class TrainRules extends Component
     public $selectedTemplate = '';
     public $announcementZone = '';
     public $templateVariables = [];
+    public $variableTypes = []; // Track whether each variable is 'manual' or 'dynamic'
     public $availableTemplates;
     public $zones;
     public $valueField = [];
@@ -56,7 +57,11 @@ class TrainRules extends Component
                 if ($template && !empty($template->variables)) {
                     foreach ($template->variables as $variable) {
                         if ($variable !== 'zone') {
-                            $rules["templateVariables.$variable"] = 'required';
+                            // Only require validation for manual variables, not dynamic ones
+                            $variableType = $this->variableTypes[$variable] ?? 'manual';
+                            if ($variableType === 'manual') {
+                                $rules["templateVariables.$variable"] = 'required';
+                            }
                         }
                     }
                 }
@@ -125,19 +130,20 @@ class TrainRules extends Component
             $template = AviavoxTemplate::find($value);
             if ($template) {
                 // Initialize variables with empty values, excluding 'zone'
-                $this->templateVariables = collect($template->variables)
-                    ->filter(fn($var) => $var !== 'zone') // Exclude zone from variables
-                    ->mapWithKeys(fn($var) => [$var => ''])
-                    ->toArray();
+                $variables = collect($template->variables)->filter(fn($var) => $var !== 'zone');
+                
+                $this->templateVariables = $variables->mapWithKeys(fn($var) => [$var => ''])->toArray();
+                $this->variableTypes = $variables->mapWithKeys(fn($var) => [$var => 'manual'])->toArray();
             }
         } else {
             $this->templateVariables = [];
+            $this->variableTypes = [];
         }
     }
 
     public function updatedConditionType($value)
     {
-        $this->reset(['operator', 'value', 'action', 'actionValue', 'selectedTemplate', 'templateVariables']);
+        $this->reset(['operator', 'value', 'action', 'actionValue', 'selectedTemplate', 'templateVariables', 'variableTypes']);
         
         switch ($value) {
             case 'time_until_departure':
@@ -177,7 +183,7 @@ class TrainRules extends Component
     {
         
         // Reset the action-specific fields
-        $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables']);
+        $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables', 'variableTypes']);
         
         // Force a re-render
         $this->dispatch('action-updated', action: $value);
@@ -193,7 +199,8 @@ class TrainRules extends Component
             'action_value' => $this->action === 'set_status' ? $this->actionValue : json_encode([
                 'template_id' => $this->selectedTemplate,
                 'zone' => $this->announcementZone,
-                'variables' => $this->templateVariables
+                'variables' => $this->processTemplateVariables(),
+                'variable_types' => $this->variableTypes
             ]),
             'is_active' => true
         ]);
@@ -225,7 +232,8 @@ class TrainRules extends Component
             'actionValue',
             'selectedTemplate',
             'announcementZone',
-            'templateVariables'
+            'templateVariables',
+            'variableTypes'
         ]);
         $this->addCondition();
         $this->resetPage();
@@ -278,6 +286,28 @@ class TrainRules extends Component
         } catch (\Exception $e) {
             Log::warning('Failed to clear train rules cache: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Process template variables, replacing dynamic ones with special markers
+     */
+    private function processTemplateVariables()
+    {
+        $processedVariables = [];
+        
+        foreach ($this->templateVariables as $variable => $value) {
+            $variableType = $this->variableTypes[$variable] ?? 'manual';
+            
+            if ($variableType === 'dynamic') {
+                // Store a special marker for dynamic variables that will be replaced at runtime
+                $processedVariables[$variable] = "{{DYNAMIC_$variable}}";
+            } else {
+                // Store the manual value as-is
+                $processedVariables[$variable] = $value;
+            }
+        }
+        
+        return $processedVariables;
     }
 
     /**

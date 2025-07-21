@@ -10,18 +10,12 @@
                 </div>
             </div>
 
+            
+
             <!-- System Information Card -->
             <div class="bg-white shadow-sm sm:rounded-xl p-6">
                 <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">System Information</h3>
                 <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-                    <div class="sm:col-span-1">
-                        <dt class="text-sm font-medium text-gray-500">PHP Version</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ phpversion() }}</dd>
-                    </div>
-                    <div class="sm:col-span-1">
-                        <dt class="text-sm font-medium text-gray-500">Laravel Version</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ app()->version() }}</dd>
-                    </div>
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500">Environment</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ config('app.env') }}</dd>
@@ -75,6 +69,15 @@
                 <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Banner Settings</h3>
                 <div class="space-y-4">
                     <livewire:banner-status-toggle />
+                </div>
+            </div>
+
+            <!-- Log Settings Card -->
+            <div class="bg-white shadow-sm sm:rounded-xl p-6">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Log Settings</h3>
+                <p class="text-sm text-gray-600 mb-4">Control which types of logs are written to help with debugging and monitoring.</p>
+                <div class="space-y-4">
+                    <livewire:log-settings />
                 </div>
             </div>
 

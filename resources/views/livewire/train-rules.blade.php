@@ -152,15 +152,58 @@
                                 <div class="border-t pt-4">
                                     <h4 class="text-sm font-medium text-gray-700 mb-2">Template Variables</h4>
                                     @foreach($templateVariables as $variable => $value)
-                                        <div class="mb-2">
-                                            <label class="block text-sm font-medium text-gray-700">{{ ucfirst(str_replace('_', ' ', $variable)) }}</label>
-                                            <input type="text" 
-                                                wire:model="templateVariables.{{ $variable }}" 
-                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
-                                                placeholder="Enter {{ str_replace('_', ' ', $variable) }}">
-                                            @error("templateVariables.$variable") 
-                                                <span class="text-red-500 text-sm">{{ $message }}</span> 
-                                            @enderror
+                                        <div class="mb-4 p-4 bg-gray-50 rounded-lg">
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                                {{ ucfirst(str_replace('_', ' ', $variable)) }}
+                                            </label>
+                                            
+                                                                        <!-- Variable Type Selection -->
+                            <div class="mb-3">
+                                <div class="flex space-x-4">
+                                    <label class="inline-flex items-center">
+                                        <input 
+                                            type="radio" 
+                                            name="variableType_{{ $variable }}"
+                                            wire:model.live="variableTypes.{{ $variable }}" 
+                                            value="manual" 
+                                            class="form-radio text-neutral-600 focus:ring-neutral-500"
+                                        />
+                                        <span class="ml-2 text-sm text-gray-700">Manual Input</span>
+                                    </label>
+                                    <label class="inline-flex items-center">
+                                        <input 
+                                            type="radio" 
+                                            name="variableType_{{ $variable }}"
+                                            wire:model.live="variableTypes.{{ $variable }}" 
+                                            value="dynamic" 
+                                            class="form-radio text-neutral-600 focus:ring-neutral-500"
+                                        />
+                                        <span class="ml-2 text-sm text-gray-700">From Train Data</span>
+                                    </label>
+                                </div>
+                            </div>
+                                            
+                                            <!-- Input Field (only shown for manual) -->
+                                            @if(($variableTypes[$variable] ?? 'manual') === 'manual')
+                                                <input type="text" 
+                                                    wire:model="templateVariables.{{ $variable }}" 
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
+                                                    placeholder="Enter {{ str_replace('_', ' ', $variable) }}">
+                                                @error("templateVariables.$variable") 
+                                                    <span class="text-red-500 text-sm">{{ $message }}</span> 
+                                                @enderror
+                                            @else
+                                                <div class="mt-1 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                                    <div class="flex items-center">
+                                                        <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                        </svg>
+                                                        <span class="text-sm text-blue-700">
+                                                            This will be automatically populated with {{ str_replace('_', ' ', $variable) }} from the train that triggers the rule
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            @endif
                                         </div>
                                     @endforeach
                                 </div>
@@ -222,12 +265,28 @@
                                         $announcementData = json_decode($rule->action_value, true);
                                         $template = \App\Models\AviavoxTemplate::find($announcementData['template_id']);
                                         $zone = $announcementData['zone'] ?? 'unknown';
+                                        $variables = $announcementData['variables'] ?? [];
+                                        $variableTypes = $announcementData['variable_types'] ?? [];
                                     @endphp
-                                    Make announcement: {{ $template->friendly_name }} 
+                                    Make announcement: {{ $template->friendly_name ?? $template->name }} 
                                     <span class="text-gray-500">({{ $zone }})</span>
-                                    @if(count($announcementData['variables'] ?? []) > 0)
+                                    @if(count($variables) > 0)
                                         <div class="text-xs text-gray-500 mt-1">
-                                            Variables: {{ collect($announcementData['variables'])->map(fn($value, $key) => "$key: $value")->join(', ') }}
+                                            Variables: 
+                                            @foreach($variables as $key => $value)
+                                                @php
+                                                    $variableType = $variableTypes[$key] ?? 'manual';
+                                                    $displayValue = $variableType === 'dynamic' ? '(from train data)' : $value;
+                                                @endphp
+                                                <span class="inline-flex items-center">
+                                                    {{ $key }}: {{ $displayValue }}
+                                                    @if($variableType === 'dynamic')
+                                                        <svg class="w-3 h-3 ml-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                                        </svg>
+                                                    @endif
+                                                </span>{{ !$loop->last ? ', ' : '' }}
+                                            @endforeach
                                         </div>
                                     @endif
                                 @endif

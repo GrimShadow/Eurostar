@@ -87,148 +87,148 @@ class TrainGrid extends Component
 
     private function getTrainsData()
     {
-        // Get both API routes and group-specific routes
-        $apiRoutes = DB::table('selected_routes')
-            ->where('is_active', true)
-            ->pluck('route_id')
-            ->toArray();
+            // Get both API routes and group-specific routes
+            $apiRoutes = DB::table('selected_routes')
+                ->where('is_active', true)
+                ->pluck('route_id')
+                ->toArray();
 
-        $groupRoutes = $this->group->selectedRoutes()
-            ->where('is_active', true)
-            ->pluck('route_id')
-            ->toArray();
+            $groupRoutes = $this->group->selectedRoutes()
+                ->where('is_active', true)
+                ->pluck('route_id')
+                ->toArray();
 
-        // Combine both sets of routes
-        $selectedRoutes = array_unique(array_merge($apiRoutes, $groupRoutes));
+            // Combine both sets of routes
+            $selectedRoutes = array_unique(array_merge($apiRoutes, $groupRoutes));
 
-        // Set time range based on selected date
-        $isToday = $this->selectedDate === now()->format('Y-m-d');
-        $currentTime = $isToday ? now()->subMinutes(30)->format('H:i:s') : '00:00:00';
-        $endTime = '23:59:59';
+            // Set time range based on selected date
+            $isToday = $this->selectedDate === now()->format('Y-m-d');
+            $currentTime = $isToday ? now()->subMinutes(30)->format('H:i:s') : '00:00:00';
+            $endTime = '23:59:59';
 
         // Get unique trips for today with optimized query
-        $uniqueTrips = DB::table('gtfs_trips')
-            ->select([
-                'gtfs_trips.trip_id',
-                'gtfs_trips.route_id',
-                'gtfs_trips.trip_short_name',
-                'gtfs_routes.route_long_name',
-                'gtfs_routes.route_color',
-                'gtfs_trips.trip_headsign'
-            ])
-            ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
-            ->whereIn('gtfs_trips.route_id', $selectedRoutes)
-            ->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('gtfs_calendar_dates')
-                    ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
-                    ->where('gtfs_calendar_dates.date', $this->selectedDate)
-                    ->where('gtfs_calendar_dates.exception_type', 1);
-            })
-            ->whereExists(function ($query) use ($currentTime, $endTime) {
-                $query->select(DB::raw(1))
-                    ->from('gtfs_stop_times')
-                    ->whereColumn('gtfs_stop_times.trip_id', 'gtfs_trips.trip_id')
-                    ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
-                    ->where('gtfs_stop_times.departure_time', '<=', $endTime);
-            })
-            ->groupBy('gtfs_trips.trip_id', 'gtfs_trips.route_id', 'gtfs_trips.trip_short_name', 
-                     'gtfs_routes.route_long_name', 'gtfs_routes.route_color', 'gtfs_trips.trip_headsign')
+            $uniqueTrips = DB::table('gtfs_trips')
+                ->select([
+                    'gtfs_trips.trip_id',
+                    'gtfs_trips.route_id',
+                    'gtfs_trips.trip_short_name',
+                    'gtfs_routes.route_long_name',
+                    'gtfs_routes.route_color',
+                    'gtfs_trips.trip_headsign'
+                ])
+                ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
+                ->whereIn('gtfs_trips.route_id', $selectedRoutes)
+                ->whereExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('gtfs_calendar_dates')
+                        ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
+                        ->where('gtfs_calendar_dates.date', $this->selectedDate)
+                        ->where('gtfs_calendar_dates.exception_type', 1);
+                })
+                ->whereExists(function ($query) use ($currentTime, $endTime) {
+                    $query->select(DB::raw(1))
+                        ->from('gtfs_stop_times')
+                        ->whereColumn('gtfs_stop_times.trip_id', 'gtfs_trips.trip_id')
+                        ->where('gtfs_stop_times.departure_time', '>=', $currentTime)
+                        ->where('gtfs_stop_times.departure_time', '<=', $endTime);
+                })
+                ->groupBy('gtfs_trips.trip_id', 'gtfs_trips.route_id', 'gtfs_trips.trip_short_name', 
+                         'gtfs_routes.route_long_name', 'gtfs_routes.route_color', 'gtfs_trips.trip_headsign')
             ->orderBy('gtfs_trips.trip_short_name')
             ->limit(200) // Add limit to prevent excessive memory usage
-            ->get();
+                ->get();
 
         $trains = [];
 
-        foreach ($uniqueTrips as $uniqueTrip) {
-            // Get all stops for this trip
-            $stops = DB::table('gtfs_stop_times')
-                ->join('gtfs_stops', 'gtfs_stop_times.stop_id', '=', 'gtfs_stops.stop_id')
-                ->where('gtfs_stop_times.trip_id', $uniqueTrip->trip_id)
-                ->whereIn('gtfs_stop_times.stop_id', $this->selectedStations[$uniqueTrip->route_id] ?? [])
-                ->orderBy('gtfs_stop_times.stop_sequence')
-                ->select([
-                    'gtfs_stop_times.stop_id',
-                    'gtfs_stops.stop_name',
-                    'gtfs_stop_times.arrival_time',
-                    'gtfs_stop_times.departure_time',
-                    'gtfs_stop_times.stop_sequence',
-                    'gtfs_stops.platform_code',
-                    'gtfs_stop_times.new_departure_time'
-                ])
+            foreach ($uniqueTrips as $uniqueTrip) {
+                // Get all stops for this trip
+                $stops = DB::table('gtfs_stop_times')
+                    ->join('gtfs_stops', 'gtfs_stop_times.stop_id', '=', 'gtfs_stops.stop_id')
+                    ->where('gtfs_stop_times.trip_id', $uniqueTrip->trip_id)
+                    ->whereIn('gtfs_stop_times.stop_id', $this->selectedStations[$uniqueTrip->route_id] ?? [])
+                    ->orderBy('gtfs_stop_times.stop_sequence')
+                    ->select([
+                        'gtfs_stop_times.stop_id',
+                        'gtfs_stops.stop_name',
+                        'gtfs_stop_times.arrival_time',
+                        'gtfs_stop_times.departure_time',
+                        'gtfs_stop_times.stop_sequence',
+                        'gtfs_stops.platform_code',
+                        'gtfs_stop_times.new_departure_time'
+                    ])
                 ->limit(50) // Limit stops per trip
-                ->get();
+                    ->get();
 
-            if ($stops->isEmpty()) {
-                continue;
-            }
+                if ($stops->isEmpty()) {
+                    continue;
+                }
 
-            // Get all stop statuses for this trip
-            $stopStatuses = StopStatus::where('trip_id', $uniqueTrip->trip_id)
-                ->get()
-                ->keyBy('stop_id');
+                // Get all stop statuses for this trip
+                $stopStatuses = StopStatus::where('trip_id', $uniqueTrip->trip_id)
+                    ->get()
+                    ->keyBy('stop_id');
 
-            // Map the stops to match API format
-            $mappedStops = $stops->map(function ($stop) use ($stopStatuses) {
-                $stopStatus = $stopStatuses->get($stop->stop_id);
-                $status = Status::where('status', $stopStatus?->status ?? 'on-time')->first();
+                // Map the stops to match API format
+                $mappedStops = $stops->map(function ($stop) use ($stopStatuses) {
+                    $stopStatus = $stopStatuses->get($stop->stop_id);
+                    $status = Status::where('status', $stopStatus?->status ?? 'on-time')->first();
+                    
+                    return [
+                        'stop_id' => $stop->stop_id,
+                        'stop_name' => $stop->stop_name,
+                        'arrival_time' => substr($stop->arrival_time, 0, 5),
+                        'departure_time' => substr($stop->departure_time, 0, 5),
+                        'new_departure_time' => $stop->new_departure_time ? substr($stop->new_departure_time, 0, 5) : null,
+                        'stop_sequence' => $stop->stop_sequence,
+                        'status' => $stopStatus?->status ?? 'on-time',
+                        'status_color' => $status?->color_rgb ?? '156,163,175',
+                        'status_color_hex' => $this->rgbToHex($status?->color_rgb ?? '156,163,175'),
+                        'departure_platform' => $stop->platform_code ?? ($stopStatus?->departure_platform ?? 'TBD'),
+                        'arrival_platform' => $stop->platform_code ?? ($stopStatus?->arrival_platform ?? 'TBD'),
+                        'check_in_time' => 90
+                    ];
+                })->values()->toArray();
+
+                // Get the status for the first stop, preferring amsterdam_centraal over amsterdam_centraal_15
+                $firstStop = $stops->first();
+                $firstStopStatus = null;
                 
-                return [
-                    'stop_id' => $stop->stop_id,
-                    'stop_name' => $stop->stop_name,
-                    'arrival_time' => substr($stop->arrival_time, 0, 5),
-                    'departure_time' => substr($stop->departure_time, 0, 5),
-                    'new_departure_time' => $stop->new_departure_time ? substr($stop->new_departure_time, 0, 5) : null,
-                    'stop_sequence' => $stop->stop_sequence,
-                    'status' => $stopStatus?->status ?? 'on-time',
-                    'status_color' => $status?->color_rgb ?? '156,163,175',
-                    'status_color_hex' => $this->rgbToHex($status?->color_rgb ?? '156,163,175'),
-                    'departure_platform' => $stop->platform_code ?? ($stopStatus?->departure_platform ?? 'TBD'),
-                    'arrival_platform' => $stop->platform_code ?? ($stopStatus?->arrival_platform ?? 'TBD'),
-                    'check_in_time' => 90
-                ];
-            })->values()->toArray();
+                // If the first stop is amsterdam_centraal_15, check if we have a status for amsterdam_centraal
+                if (str_ends_with($firstStop->stop_id, '_15')) {
+                    $baseStopId = str_replace('_15', '', $firstStop->stop_id);
+                    $baseStopStatus = $stopStatuses->get($baseStopId);
+                    $firstStopStatus = $baseStopStatus ?? $stopStatuses->get($firstStop->stop_id);
+                } else {
+                    $firstStopStatus = $stopStatuses->get($firstStop->stop_id);
+                }
 
-            // Get the status for the first stop, preferring amsterdam_centraal over amsterdam_centraal_15
-            $firstStop = $stops->first();
-            $firstStopStatus = null;
-            
-            // If the first stop is amsterdam_centraal_15, check if we have a status for amsterdam_centraal
-            if (str_ends_with($firstStop->stop_id, '_15')) {
-                $baseStopId = str_replace('_15', '', $firstStop->stop_id);
-                $baseStopStatus = $stopStatuses->get($baseStopId);
-                $firstStopStatus = $baseStopStatus ?? $stopStatuses->get($firstStop->stop_id);
-            } else {
-                $firstStopStatus = $stopStatuses->get($firstStop->stop_id);
+                $firstStopStatusObj = Status::where('status', $firstStopStatus?->status ?? 'on-time')->first();
+
+                // Create the train entry matching API format
+            $trains[] = [
+                    'number' => $uniqueTrip->trip_short_name,
+                    'trip_id' => $uniqueTrip->trip_id,
+                    'departure' => substr($stops->first()->departure_time, 0, 5),
+                    'arrival_time' => substr($stops->first()->arrival_time, 0, 5),
+                    'departure_time' => substr($stops->first()->departure_time, 0, 5),
+                    'new_departure_time' => $stops->first()->new_departure_time ? substr($stops->first()->new_departure_time, 0, 5) : null,
+                    'route_name' => $uniqueTrip->route_long_name,
+                    'route_short_name' => $uniqueTrip->trip_short_name,
+                    'train_id' => $uniqueTrip->trip_headsign,
+                    'status' => ucfirst($firstStopStatus?->status ?? 'on-time'),
+                    'status_color' => $firstStopStatusObj?->color_rgb ?? '156,163,175',
+                    'status_color_hex' => $this->rgbToHex($firstStopStatusObj?->color_rgb ?? '156,163,175'),
+                    'departure_platform' => $stops->last()->platform_code ?? 'TBD',
+                    'arrival_platform' => $stops->last()->platform_code ?? 'TBD',
+                    'stop_name' => $stops->first()->stop_name,
+                    'stops' => $mappedStops
+                ];
             }
 
-            $firstStopStatusObj = Status::where('status', $firstStopStatus?->status ?? 'on-time')->first();
-
-            // Create the train entry matching API format
-            $trains[] = [
-                'number' => $uniqueTrip->trip_short_name,
-                'trip_id' => $uniqueTrip->trip_id,
-                'departure' => substr($stops->first()->departure_time, 0, 5),
-                'arrival_time' => substr($stops->first()->arrival_time, 0, 5),
-                'departure_time' => substr($stops->first()->departure_time, 0, 5),
-                'new_departure_time' => $stops->first()->new_departure_time ? substr($stops->first()->new_departure_time, 0, 5) : null,
-                'route_name' => $uniqueTrip->route_long_name,
-                'route_short_name' => $uniqueTrip->trip_short_name,
-                'train_id' => $uniqueTrip->trip_headsign,
-                'status' => ucfirst($firstStopStatus?->status ?? 'on-time'),
-                'status_color' => $firstStopStatusObj?->color_rgb ?? '156,163,175',
-                'status_color_hex' => $this->rgbToHex($firstStopStatusObj?->color_rgb ?? '156,163,175'),
-                'departure_platform' => $stops->last()->platform_code ?? 'TBD',
-                'arrival_platform' => $stops->last()->platform_code ?? 'TBD',
-                'stop_name' => $stops->first()->stop_name,
-                'stops' => $mappedStops
-            ];
-        }
-
-        // Sort trains by departure time
+            // Sort trains by departure time
         usort($trains, function ($a, $b) {
-            return strtotime($a['departure']) - strtotime($b['departure']);
-        });
+                return strtotime($a['departure']) - strtotime($b['departure']);
+            });
 
         return $trains;
     }

@@ -715,8 +715,11 @@ class ProcessSingleTrainRule implements ShouldQueue
             </AIP>';
         }
 
+        // Process template variables, handling both manual and dynamic variables
+        $processedVariables = $this->processAnnouncementVariables($announcementData, $train);
+
         // Prepare variables for substitution
-        $variables = array_merge($announcementData['variables'] ?? [], [
+        $variables = array_merge($processedVariables, [
             'MessageName' => $template->name,
             'zone' => $announcementData['zone'] ?? 'Terminal',
             'train_number' => $train->trip_short_name ?? $train->trip_id,
@@ -729,13 +732,90 @@ class ProcessSingleTrainRule implements ShouldQueue
             $xml = str_replace('{' . $key . '}', htmlspecialchars($value), $xml);
         }
 
-        // Clean up any remaining unreplaced variables (remove empty {variable} placeholders)
-        $xml = preg_replace('/\{[^}]+\}/', '', $xml);
-        
-        // Clean up whitespace and format XML properly
-        $xml = preg_replace('/>\s+</', '><', trim($xml));
-
         return $xml;
+    }
+
+    /**
+     * Process announcement variables, replacing dynamic markers with actual train data
+     */
+    private function processAnnouncementVariables($announcementData, $train): array
+    {
+        $processedVariables = [];
+        $variables = $announcementData['variables'] ?? [];
+        $variableTypes = $announcementData['variable_types'] ?? [];
+
+        foreach ($variables as $key => $value) {
+            $variableType = $variableTypes[$key] ?? 'manual';
+            
+            if ($variableType === 'dynamic' && strpos($value, '{{DYNAMIC_') === 0) {
+                // Extract the variable name from the marker
+                $variableName = str_replace(['{{DYNAMIC_', '}}'], '', $value);
+                $processedVariables[$key] = $this->getDynamicVariableValue($variableName, $train);
+            } else {
+                // Use the manual value as-is
+                $processedVariables[$key] = $value;
+            }
+        }
+
+        return $processedVariables;
+    }
+
+    /**
+     * Get dynamic variable value based on train data
+     */
+    private function getDynamicVariableValue($variableName, $train): string
+    {
+        switch ($variableName) {
+            case 'train_number':
+                return $train->trip_short_name ?? $train->trip_id;
+                
+            case 'train_id':
+                return $train->trip_id;
+                
+            case 'trip_headsign':
+            case 'destination':
+                return $train->trip_headsign ?? '';
+                
+            case 'route_short_name':
+                return $train->route_short_name ?? '';
+                
+            case 'route_long_name':
+                return $train->route_long_name ?? '';
+                
+            case 'departure_time':
+                // Get the departure time for the first configured stop
+                try {
+                    $stopTime = \App\Models\GtfsStopTime::where('trip_id', $train->trip_id)
+                        ->orderBy('stop_sequence')
+                        ->first();
+                    return $stopTime ? substr($stopTime->departure_time, 0, 5) : '';
+                } catch (\Exception $e) {
+                    return '';
+                }
+                
+            case 'platform':
+                // Get platform information if available
+                try {
+                    $stopTime = \App\Models\GtfsStopTime::where('trip_id', $train->trip_id)
+                        ->join('gtfs_stops', 'gtfs_stop_times.stop_id', '=', 'gtfs_stops.stop_id')
+                        ->whereNotNull('gtfs_stops.platform_code')
+                        ->orderBy('stop_sequence')
+                        ->first();
+                    return $stopTime ? $stopTime->platform_code : '';
+                } catch (\Exception $e) {
+                    return '';
+                }
+                
+            case 'current_time':
+                return now()->format('H:i');
+                
+            case 'current_date':
+                return now()->format('Y-m-d');
+                
+            default:
+                // For unknown variables, try to get them from the train object
+                return $train->$variableName ?? '';
+        }
     }
 
     /**
