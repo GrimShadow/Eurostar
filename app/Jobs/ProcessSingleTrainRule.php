@@ -508,7 +508,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         }
 
         // Use friendly_name if available, otherwise fall back to name
-        $templateName = $template->friendly_name ?? $template->name;
+        $templateName = $template->name;
         $zone = $announcementData['zone'] ?? 'Terminal';
 
         // Check if announcement was already made recently to prevent spam
