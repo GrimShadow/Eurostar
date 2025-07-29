@@ -508,7 +508,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         }
 
         // Use friendly_name if available, otherwise fall back to name
-        $templateName = $template->name;
+        $templateName = $template->friendly_name ?? $template->name;
         $zone = $announcementData['zone'] ?? 'Terminal';
 
         // Check if announcement was already made recently to prevent spam
@@ -585,7 +585,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             'template_name' => $template->friendly_name ?? $template->name,
             'aviavox_server' => $settings->ip_address . ':' . $settings->port,
             'template_id' => $template->id,
-            'zone' => $announcementData['zone'] ?? 'Terminal',
+            'zone' => $announcementData['zone'] ?? 'Amsterdam',
             'xml_to_send' => $xml
         ]);
         
