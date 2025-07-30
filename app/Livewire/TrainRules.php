@@ -198,7 +198,7 @@ class TrainRules extends Component
             'action' => $this->action,
             'action_value' => $this->action === 'set_status' ? $this->actionValue : json_encode([
                 'template_id' => $this->selectedTemplate,
-                'zone' => $this->announcementZone,
+                'zone' => !empty($this->announcementZone) ? $this->announcementZone : 'Terminal',
                 'variables' => $this->processTemplateVariables(),
                 'variable_types' => $this->variableTypes
             ]),
