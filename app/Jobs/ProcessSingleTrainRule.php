@@ -732,6 +732,17 @@ class ProcessSingleTrainRule implements ShouldQueue
             $xml = str_replace('{' . $key . '}', htmlspecialchars($value), $xml);
         }
 
+        // Special handling for zone replacement - also replace hardcoded "Terminal" values
+        // This handles the case where templates were created with hardcoded zone values
+        if (!empty($announcementData['zone']) && $announcementData['zone'] !== 'Terminal') {
+            // Replace hardcoded "Terminal" values in Zones Item elements
+            $xml = preg_replace(
+                '/(<Item\s+ID="Zones"\s+Value=")Terminal(")/i',
+                '$1' . htmlspecialchars($announcementData['zone']) . '$2',
+                $xml
+            );
+        }
+
         return $xml;
     }
 
