@@ -743,6 +743,29 @@ class ProcessSingleTrainRule implements ShouldQueue
             );
         }
 
+        // Special handling for train number replacement - replace common placeholders and hardcoded values
+        $trainNumber = $train->trip_short_name ?? $train->trip_id;
+        if (!empty($trainNumber)) {
+            // Replace common train number placeholders
+            $xml = str_replace('{TrainNumber}', htmlspecialchars($trainNumber), $xml);
+            $xml = str_replace('{train_number}', htmlspecialchars($trainNumber), $xml);
+            $xml = str_replace('{train}', htmlspecialchars($trainNumber), $xml);
+            
+            // Replace hardcoded "XX" or "XXXX" patterns commonly used in templates
+            $xml = preg_replace(
+                '/(<Item\s+ID="[^"]*[Tt]rain[^"]*"\s+Value=")X{2,}(")/i',
+                '$1' . htmlspecialchars($trainNumber) . '$2',
+                $xml
+            );
+            
+            // Replace hardcoded "TrainNumber" values
+            $xml = preg_replace(
+                '/(<Item\s+ID="[^"]*[Tt]rain[^"]*"\s+Value=")TrainNumber(")/i',
+                '$1' . htmlspecialchars($trainNumber) . '$2',
+                $xml
+            );
+        }
+
         return $xml;
     }
 
