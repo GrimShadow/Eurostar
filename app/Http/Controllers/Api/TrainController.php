@@ -33,6 +33,56 @@ class TrainController extends Controller
         return strtoupper($hex);
     }
 
+    private function getPlatformCode($stopId, $platformCode, $manualPlatform, $tripId = null)
+    {
+        // If we have a platform code from the stop, use it
+        if (!empty($platformCode)) {
+            return $platformCode;
+        }
+        
+        // If we have a manually set platform, use it
+        if (!empty($manualPlatform) && $manualPlatform !== 'TBD') {
+            return $manualPlatform;
+        }
+        
+        // If the stop ID is a base stop (like amsterdam_centraal), determine the correct platform
+        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
+            // For Amsterdam Centraal, determine platform based on train number pattern
+            if ($stopId === 'amsterdam_centraal' && $tripId) {
+                $trainNumber = explode('-', $tripId)[0];
+                
+                // Platform assignments based on historical GTFS data patterns
+                $platformAssignments = [
+                    '9145' => '15', // NLAMA -> GBSPX
+                    '9167' => '15', // NLAMA -> GBSPX
+                    '9115' => '15', // NLAMA -> GBSPX
+                    '9106' => '8',  // GBSPX -> NLAMA
+                    '9126' => '8',  // GBSPX -> NLAMA
+                    '9152' => '8',  // GBSPX -> NLAMA
+                ];
+                
+                if (isset($platformAssignments[$trainNumber])) {
+                    return $platformAssignments[$trainNumber];
+                }
+            }
+            
+            // Fallback: Look for platform-specific stops for this base stop
+            $platformStops = DB::table('gtfs_stops')
+                ->where('stop_id', 'LIKE', $stopId . '_%')
+                ->whereNotNull('platform_code')
+                ->where('platform_code', '!=', '')
+                ->orderBy('platform_code')
+                ->limit(1)
+                ->pluck('platform_code');
+            
+            if ($platformStops->isNotEmpty()) {
+                return $platformStops->first();
+            }
+        }
+        
+        return 'TBD';
+    }
+
     public function today()
     {
         // Create a cache key based on current time (rounded to nearest 5 minutes)
@@ -220,8 +270,8 @@ class TrainController extends Controller
                     'status_color' => $stopStatus?->status_color ?? '156,163,175',
                     'status_color_hex' => $stopStatus?->status_color_hex ?? '#9CA3AF',
                     'status_updated_at' => $statusUpdatedAt,
-                    'departure_platform' => $stop->platform_code ?? ($stopStatus?->departure_platform ?? 'TBD'),
-                    'arrival_platform' => $stop->platform_code ?? ($stopStatus?->arrival_platform ?? 'TBD'),
+                    'departure_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->departure_platform, $train->trip_id),
+                    'arrival_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->arrival_platform, $train->trip_id),
                     'check_in_time' => $globalCheckInOffset,
                     'check_in_starts' => $checkInStarts
                 ];

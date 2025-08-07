@@ -169,7 +169,7 @@ class TrainGrid extends Component
                     ->keyBy('stop_id');
 
                 // Map the stops to match API format
-                $mappedStops = $stops->map(function ($stop) use ($stopStatuses) {
+                $mappedStops = $stops->map(function ($stop) use ($stopStatuses, $uniqueTrip) {
                     $stopStatus = $stopStatuses->get($stop->stop_id);
                     $status = Status::where('status', $stopStatus?->status ?? 'on-time')->first();
                     
@@ -183,8 +183,8 @@ class TrainGrid extends Component
                         'status' => $stopStatus?->status ?? 'on-time',
                         'status_color' => $status?->color_rgb ?? '156,163,175',
                         'status_color_hex' => $this->rgbToHex($status?->color_rgb ?? '156,163,175'),
-                        'departure_platform' => $stop->platform_code ?? ($stopStatus?->departure_platform ?? 'TBD'),
-                        'arrival_platform' => $stop->platform_code ?? ($stopStatus?->arrival_platform ?? 'TBD'),
+                        'departure_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->departure_platform, $uniqueTrip->trip_id),
+                        'arrival_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->arrival_platform, $uniqueTrip->trip_id),
                         'check_in_time' => 90
                     ];
                 })->values()->toArray();
@@ -218,8 +218,8 @@ class TrainGrid extends Component
                     'status' => ucfirst($firstStopStatus?->status ?? 'on-time'),
                     'status_color' => $firstStopStatusObj?->color_rgb ?? '156,163,175',
                     'status_color_hex' => $this->rgbToHex($firstStopStatusObj?->color_rgb ?? '156,163,175'),
-                    'departure_platform' => $stops->last()->platform_code ?? 'TBD',
-                    'arrival_platform' => $stops->last()->platform_code ?? 'TBD',
+                    'departure_platform' => $mappedStops[0]['departure_platform'] ?? 'TBD',
+                    'arrival_platform' => $mappedStops[count($mappedStops) - 1]['arrival_platform'] ?? 'TBD',
                     'stop_name' => $stops->first()->stop_name,
                     'stops' => $mappedStops
                 ];
@@ -241,6 +241,56 @@ class TrainGrid extends Component
         Cache::forget("train_grid_group_{$this->group->id}_date_{$this->selectedDate}_" . now()->format('H:i'));
         
         $this->loadTrains();
+    }
+
+    private function getPlatformCode($stopId, $platformCode, $manualPlatform, $tripId = null)
+    {
+        // If we have a platform code from the stop, use it
+        if (!empty($platformCode)) {
+            return $platformCode;
+        }
+        
+        // If we have a manually set platform, use it
+        if (!empty($manualPlatform) && $manualPlatform !== 'TBD') {
+            return $manualPlatform;
+        }
+        
+        // If the stop ID is a base stop (like amsterdam_centraal), determine the correct platform
+        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
+            // For Amsterdam Centraal, determine platform based on train number pattern
+            if ($stopId === 'amsterdam_centraal' && $tripId) {
+                $trainNumber = explode('-', $tripId)[0];
+                
+                // Platform assignments based on historical GTFS data patterns
+                $platformAssignments = [
+                    '9145' => '15', // NLAMA -> GBSPX
+                    '9167' => '15', // NLAMA -> GBSPX
+                    '9115' => '15', // NLAMA -> GBSPX
+                    '9106' => '8',  // GBSPX -> NLAMA
+                    '9126' => '8',  // GBSPX -> NLAMA
+                    '9152' => '8',  // GBSPX -> NLAMA
+                ];
+                
+                if (isset($platformAssignments[$trainNumber])) {
+                    return $platformAssignments[$trainNumber];
+                }
+            }
+            
+            // Fallback: Look for platform-specific stops for this base stop
+            $platformStops = DB::table('gtfs_stops')
+                ->where('stop_id', 'LIKE', $stopId . '_%')
+                ->whereNotNull('platform_code')
+                ->where('platform_code', '!=', '')
+                ->orderBy('platform_code')
+                ->limit(1)
+                ->pluck('platform_code');
+            
+            if ($platformStops->isNotEmpty()) {
+                return $platformStops->first();
+            }
+        }
+        
+        return 'TBD';
     }
 
     private function rgbToHex($rgb)
