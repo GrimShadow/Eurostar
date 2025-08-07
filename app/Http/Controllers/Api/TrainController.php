@@ -47,8 +47,8 @@ class TrainController extends Controller
         
         // If the stop ID is a base stop (like amsterdam_centraal), determine the correct platform
         if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
-            // For Amsterdam Centraal, determine platform based on train number pattern
-            if ($stopId === 'amsterdam_centraal' && $tripId) {
+            // For Amsterdam Centraal and Rotterdam Centraal, determine platform based on train number pattern
+            if (($stopId === 'amsterdam_centraal' || $stopId === 'rotterdam_centraal') && $tripId) {
                 $trainNumber = explode('-', $tripId)[0];
                 
                 // Platform assignments based on historical GTFS data patterns
@@ -60,6 +60,20 @@ class TrainController extends Controller
                     '9126' => '8',  // GBSPX -> NLAMA
                     '9152' => '8',  // GBSPX -> NLAMA
                 ];
+                
+                // Rotterdam Centraal platform assignments
+                $rotterdamPlatformAssignments = [
+                    '9145' => '2',  // NLAMA -> GBSPX
+                    '9167' => '2',  // NLAMA -> GBSPX
+                    '9115' => '2',  // NLAMA -> GBSPX
+                    '9106' => '13', // GBSPX -> NLAMA
+                    '9126' => '13', // GBSPX -> NLAMA
+                    '9152' => '13', // GBSPX -> NLAMA
+                ];
+                
+                if ($stopId === 'rotterdam_centraal' && isset($rotterdamPlatformAssignments[$trainNumber])) {
+                    return $rotterdamPlatformAssignments[$trainNumber];
+                }
                 
                 if (isset($platformAssignments[$trainNumber])) {
                     return $platformAssignments[$trainNumber];
