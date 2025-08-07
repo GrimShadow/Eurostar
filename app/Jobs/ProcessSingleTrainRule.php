@@ -576,7 +576,19 @@ class ProcessSingleTrainRule implements ShouldQueue
     private function sendToAviavox($template, $announcementData, $settings, $rule, $train): void
     {
         // Generate XML from template and variables
+        Log::info("About to generate XML for train rule", [
+            'rule_id' => $rule->id,
+            'template_id' => $template->id,
+            'template_name' => $template->name
+        ]);
+        
         $xml = $this->generateXmlForTrainRule($template, $announcementData, $train);
+        
+        Log::info("Generated XML for train rule", [
+            'rule_id' => $rule->id,
+            'template_id' => $template->id,
+            'final_xml' => $xml
+        ]);
         
         Log::info("Train Rule Announcement - Starting Aviavox transmission", [
             'rule_id' => $rule->id,
@@ -699,72 +711,76 @@ class ProcessSingleTrainRule implements ShouldQueue
      */
     private function generateXmlForTrainRule($template, $announcementData, $train): string
     {
-        // Start with the template's XML content
-        $xml = $template->xml_template;
-        
-        // If no XML template, fall back to basic format
-        if (empty($xml)) {
-            $xml = '<AIP>
-                <MessageID>AnnouncementTriggerRequest</MessageID>
-                <MessageData>
-                    <AnnouncementData>
-                        <Item ID="MessageName" Value="{MessageName}"/>
-                        <Item ID="Zones" Value="{zone}"/>
-                    </AnnouncementData>
-                </MessageData>
-            </AIP>';
-        }
-
-        // Process template variables, handling both manual and dynamic variables
-        $processedVariables = $this->processAnnouncementVariables($announcementData, $train);
-
-        // Prepare variables for substitution
-        $variables = array_merge($processedVariables, [
-            'MessageName' => $template->name,
-            'zone' => !empty($announcementData['zone']) ? $announcementData['zone'] : 'Terminal',
-            'train_number' => $train->trip_short_name ?? $train->trip_id,
-            'train_id' => $train->trip_id,
-            'trip_headsign' => $train->trip_headsign ?? ''
+        Log::info("NEW XML GENERATION METHOD CALLED - Building XML from scratch", [
+            'rule_id' => $announcementData['rule_id'] ?? 'unknown',
+            'template_id' => $template->id,
+            'template_name' => $template->name
         ]);
-
-        // Replace variables in the XML template
+        
+        // Log the original template for debugging
+        Log::debug("Original XML template for rule", [
+            'rule_id' => $announcementData['rule_id'] ?? 'unknown',
+            'template_id' => $template->id,
+            'original_xml' => $template->xml_template
+        ]);
+        
+        // Instead of trying to fix a potentially malformed template, let's build the XML from scratch
+        // This ensures we always have properly formatted XML
+        $xml = '<AIP>';
+        $xml .= '<MessageID>AnnouncementTriggerRequest</MessageID>';
+        $xml .= '<MessageData>';
+        $xml .= '<AnnouncementData>';
+        $xml .= '<Item ID="MessageName" Value="' . htmlspecialchars($template->name) . '"/>';
+        
+        // Add train number if the template has train variables
+        $variables = $announcementData['variables'] ?? [];
+        $variableTypes = $announcementData['variable_types'] ?? [];
+        
+        $hasTrainVariable = false;
         foreach ($variables as $key => $value) {
-            $xml = str_replace('{' . $key . '}', htmlspecialchars($value), $xml);
+            $variableType = $variableTypes[$key] ?? 'manual';
+            if ($variableType === 'dynamic' && strpos($value, '{{DYNAMIC_') === 0) {
+                $variableName = str_replace(['{{DYNAMIC_', '}}'], '', $value);
+                if ($variableName === 'train' || $variableName === 'train_number') {
+                    $hasTrainVariable = true;
+                    $trainNumber = preg_replace('/[^0-9]/', '', $train->trip_short_name ?? $train->trip_id);
+                    $xml .= '<Item ID="TrainNumber" Value="' . htmlspecialchars($trainNumber) . '"/>';
+                    break;
+                }
+            }
         }
-
-        // Special handling for zone replacement - also replace hardcoded "Terminal" values
-        // This handles the case where templates were created with hardcoded zone values
-        if (!empty($announcementData['zone']) && $announcementData['zone'] !== 'Terminal') {
-            // Replace hardcoded "Terminal" values in Zones Item elements
-            $xml = preg_replace(
-                '/(<Item\s+ID="Zones"\s+Value=")Terminal(")/i',
-                '$1' . htmlspecialchars($announcementData['zone']) . '$2',
-                $xml
-            );
+        
+        // If no dynamic train variable found, check if template has train-related variables
+        if (!$hasTrainVariable) {
+            // Check if the original template has any train-related items
+            if (strpos($template->xml_template, 'TrainNumber') !== false || 
+                strpos($template->xml_template, 'train') !== false) {
+                $trainNumber = preg_replace('/[^0-9]/', '', $train->trip_short_name ?? $train->trip_id);
+                $xml .= '<Item ID="TrainNumber" Value="' . htmlspecialchars($trainNumber) . '"/>';
+            }
         }
-
-        // Special handling for train number replacement - replace common placeholders and hardcoded values
-        $trainNumber = $train->trip_short_name ?? $train->trip_id;
-        if (!empty($trainNumber)) {
-            // Replace common train number placeholders
-            $xml = str_replace('{TrainNumber}', htmlspecialchars($trainNumber), $xml);
-            $xml = str_replace('{train_number}', htmlspecialchars($trainNumber), $xml);
-            $xml = str_replace('{train}', htmlspecialchars($trainNumber), $xml);
-            
-            // Replace hardcoded "XX" or "XXXX" patterns commonly used in templates
-            $xml = preg_replace(
-                '/(<Item\s+ID="[^"]*[Tt]rain[^"]*"\s+Value=")X{2,}(")/i',
-                '$1' . htmlspecialchars($trainNumber) . '$2',
-                $xml
-            );
-            
-            // Replace hardcoded "TrainNumber" values
-            $xml = preg_replace(
-                '/(<Item\s+ID="[^"]*[Tt]rain[^"]*"\s+Value=")TrainNumber(")/i',
-                '$1' . htmlspecialchars($trainNumber) . '$2',
-                $xml
-            );
+        
+        // Add zone
+        $zone = !empty($announcementData['zone']) ? $announcementData['zone'] : 'Terminal';
+        $xml .= '<Item ID="Zones" Value="' . htmlspecialchars($zone) . '"/>';
+        
+        // Add any other manual variables
+        foreach ($variables as $key => $value) {
+            $variableType = $variableTypes[$key] ?? 'manual';
+            if ($variableType === 'manual' && $key !== 'zone') {
+                $xml .= '<Item ID="' . htmlspecialchars($key) . '" Value="' . htmlspecialchars($value) . '"/>';
+            }
         }
+        
+        $xml .= '</AnnouncementData>';
+        $xml .= '</MessageData>';
+        $xml .= '</AIP>';
+        
+        Log::debug("Generated XML for rule", [
+            'rule_id' => $announcementData['rule_id'] ?? 'unknown',
+            'template_id' => $template->id,
+            'generated_xml' => $xml
+        ]);
 
         return $xml;
     }
@@ -801,7 +817,9 @@ class ProcessSingleTrainRule implements ShouldQueue
     {
         switch ($variableName) {
             case 'train_number':
-                return $train->trip_short_name ?? $train->trip_id;
+                $trainNumber = $train->trip_short_name ?? $train->trip_id;
+                // Return just the numeric part for templates that expect only the train number
+                return preg_replace('/[^0-9]/', '', $trainNumber);
                 
             case 'train_id':
                 return $train->trip_id;
@@ -850,6 +868,91 @@ class ProcessSingleTrainRule implements ShouldQueue
                 // For unknown variables, try to get them from the train object
                 return $train->$variableName ?? '';
         }
+    }
+
+    /**
+     * Clean up and validate XML to ensure it's properly formatted
+     */
+    private function cleanupXml($xml, $train): string
+    {
+        $trainNumber = preg_replace('/[^0-9]/', '', $train->trip_short_name ?? $train->trip_id);
+        
+        // Log the XML before cleanup for debugging
+        Log::debug("XML before cleanup", [
+            'xml' => $xml,
+            'train_number' => $trainNumber
+        ]);
+        
+        // Remove any malformed train number entries completely - more aggressive patterns
+        $xml = preg_replace(
+            '/<Item\s+ID="[^"]*[Tt]rain[^"]*"\s+Value="[^"]*[0-9]+[^"]*NLAMA[^"]*"[^>]*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Remove any broken XML lines that might contain partial train numbers
+        $xml = preg_replace(
+            '/\s*[0-9]+\s+NLAMA[^>]*\s*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Remove any lines containing "NLAMA" and "&gt;" (HTML encoded >)
+        $xml = preg_replace(
+            '/\s*[0-9]+\s+NLAMA[^>]*&gt;[^>]*\s*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Remove any malformed Item elements that don't have proper closing
+        $xml = preg_replace(
+            '/<Item\s+[^>]*[0-9]+[^>]*NLAMA[^>]*\s*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Remove any lines that start with a number followed by NLAMA
+        $xml = preg_replace(
+            '/\s*[0-9]+\s+NLAMA[^>]*\s*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Remove the specific malformed pattern we're seeing in the logs
+        $xml = preg_replace(
+            '/\s*[0-9]+\s+NLAMA[^>]*&gt;[^>]*\s*\"\s*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Remove any lines containing the exact pattern from the logs
+        $xml = preg_replace(
+            '/\s*[0-9]+\s+NLAMA[^>]*-&gt;[^>]*\s*\/>/i',
+            '',
+            $xml
+        );
+        
+        // Ensure we have a proper TrainNumber entry
+        if (strpos($xml, 'TrainNumber') === false && !empty($trainNumber)) {
+            // Find the position after MessageName and insert TrainNumber
+            $xml = preg_replace(
+                '/(<Item\s+ID="MessageName"[^>]*\/>)/',
+                '$1' . "\n" . '<Item ID="TrainNumber" Value="' . htmlspecialchars($trainNumber) . '"/>',
+                $xml
+            );
+        }
+        
+        // Clean up any extra whitespace and ensure proper formatting
+        $xml = preg_replace('/>\s+</', '><', $xml);
+        $xml = preg_replace('/\s+/', ' ', $xml);
+        
+        // Log the XML after cleanup for debugging
+        Log::debug("XML after cleanup", [
+            'xml' => $xml,
+            'train_number' => $trainNumber
+        ]);
+        
+        return $xml;
     }
 
     /**

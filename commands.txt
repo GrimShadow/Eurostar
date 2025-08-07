@@ -1,0 +1,3 @@
+php artisan schedule:work                                                   
+
+php artisan queue:work --queue=default,train-rules --tries=3 --timeout=3600 
