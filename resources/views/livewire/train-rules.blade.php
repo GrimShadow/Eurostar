@@ -245,7 +245,10 @@
                                     When {{ str_replace('_', ' ', $condition->condition_type) }} 
                                     {{ $condition->operator }} 
                                     @if($condition->condition_type === 'current_status')
-                                        {{ $condition->value }}
+                                        @php
+                                            $status = \App\Models\Status::find($condition->value);
+                                        @endphp
+                                        {{ $status ? $status->status : 'Unknown Status' }}
                                     @elseif($condition->condition_type === 'train_number')
                                         {{ $condition->value }}
                                     @else
