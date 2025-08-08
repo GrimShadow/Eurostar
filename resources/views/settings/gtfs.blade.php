@@ -501,7 +501,7 @@
                                     <div class="flex justify-between items-center">
                                         <div class="flex items-center">
                                             @if($group->image)
-                                                <img src="{{ $group->image }}" alt="{{ $group->name }}" class="w-8 h-8 rounded-full mr-3">
+                                                <img src="{{ asset('storage/' . $group->image) }}" alt="{{ $group->name }}" class="w-8 h-8 rounded-full mr-3">
                                             @else
                                                 <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
                                                     <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
