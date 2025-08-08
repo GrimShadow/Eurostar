@@ -138,13 +138,55 @@
                                     </button>
                                     
                                     @if($gtfsSettings && $gtfsSettings->url)
-                                        <a href="{{ route('settings.gtfs.download') }}" 
-                                           class="inline-flex items-center px-4 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200">
+                                        <button type="button"
+                                            class="inline-flex items-center px-4 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200"
+                                            x-data=""
+                                            x-on:click="
+                                                $el.classList.add('opacity-50', 'cursor-not-allowed');
+                                                $el.innerHTML = '<svg class=\'animate-spin w-4 h-4 mr-2\' fill=\'none\' viewBox=\'0 0 24 24\'><circle class=\'opacity-25\' cx=\'12\' cy=\'12\' r=\'10\' stroke=\'currentColor\' stroke-width=\'4\'></circle><path class=\'opacity-75\' fill=\'currentColor\' d=\'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z\'></path></svg>Starting...';
+                                                
+                                                fetch('{{ route('settings.gtfs.download') }}', {
+                                                    method: 'GET',
+                                                    headers: {
+                                                        'Accept': 'application/json',
+                                                        'X-Requested-With': 'XMLHttpRequest',
+                                                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+                                                    },
+                                                    credentials: 'same-origin'
+                                                })
+                                                .then(response => response.json().then(data => {
+                                                    if (response.ok) {
+                                                        $el.innerHTML = '<svg class=\'w-4 h-4 mr-2 text-green-600\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M5 13l4 4L19 7\'></path></svg>Download Started';
+                                                        $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                        $el.classList.add('bg-green-50', 'border-green-300', 'text-green-700');
+                                                        
+                                                        // Reload page after a short delay to show progress
+                                                        setTimeout(() => {
+                                                            window.location.reload();
+                                                        }, 2000);
+                                                    } else {
+                                                        throw new Error(data.message || 'Download failed');
+                                                    }
+                                                }))
+                                                .catch(error => {
+                                                    console.error('Error:', error);
+                                                    $el.innerHTML = '<svg class=\'w-4 h-4 mr-2 text-red-600\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M6 18L18 6M6 6l12 12\'></path></svg>Download Failed';
+                                                    $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                    $el.classList.add('bg-red-50', 'border-red-300', 'text-red-700');
+                                                    
+                                                    // Reset button after 3 seconds
+                                                    setTimeout(() => {
+                                                        $el.innerHTML = '<svg class=\'w-4 h-4 mr-2\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4\'></path></svg>Download GTFS Data';
+                                                        $el.classList.remove('bg-red-50', 'border-red-300', 'text-red-700');
+                                                        $el.classList.add('bg-white', 'border-green-300', 'text-green-700');
+                                                    }, 3000);
+                                                });
+                                            ">
                                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                                             </svg>
                                             Download GTFS Data
-                                        </a>
+                                        </button>
                                     @endif
                                 </div>
                             </div>
@@ -184,13 +226,55 @@
                                     </div>
                                     
                                     <div class="pt-2">
-                                        <a href="{{ route('settings.gtfs.download') }}" 
-                                           class="inline-flex items-center px-3 py-1.5 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+                                        <button type="button"
+                                            class="inline-flex items-center px-3 py-1.5 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                                            x-data=""
+                                            x-on:click="
+                                                $el.classList.add('opacity-50', 'cursor-not-allowed');
+                                                $el.innerHTML = '<svg class=\'animate-spin w-4 h-4 mr-2\' fill=\'none\' viewBox=\'0 0 24 24\'><circle class=\'opacity-25\' cx=\'12\' cy=\'12\' r=\'10\' stroke=\'currentColor\' stroke-width=\'4\'></circle><path class=\'opacity-75\' fill=\'currentColor\' d=\'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z\'></path></svg>Starting...';
+                                                
+                                                fetch('{{ route('settings.gtfs.download') }}', {
+                                                    method: 'GET',
+                                                    headers: {
+                                                        'Accept': 'application/json',
+                                                        'X-Requested-With': 'XMLHttpRequest',
+                                                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+                                                    },
+                                                    credentials: 'same-origin'
+                                                })
+                                                .then(response => response.json().then(data => {
+                                                    if (response.ok) {
+                                                        $el.innerHTML = '<svg class=\'w-4 h-4 mr-2 text-green-600\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M5 13l4 4L19 7\'></path></svg>Download Started';
+                                                        $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                        $el.classList.add('bg-green-50', 'border-green-300', 'text-green-700');
+                                                        
+                                                        // Reload page after a short delay to show progress
+                                                        setTimeout(() => {
+                                                            window.location.reload();
+                                                        }, 2000);
+                                                    } else {
+                                                        throw new Error(data.message || 'Download failed');
+                                                    }
+                                                }))
+                                                .catch(error => {
+                                                    console.error('Error:', error);
+                                                    $el.innerHTML = '<svg class=\'w-4 h-4 mr-2 text-red-600\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M6 18L18 6M6 6l12 12\'></path></svg>Download Failed';
+                                                    $el.classList.remove('opacity-50', 'cursor-not-allowed');
+                                                    $el.classList.add('bg-red-50', 'border-red-300', 'text-red-700');
+                                                    
+                                                    // Reset button after 3 seconds
+                                                    setTimeout(() => {
+                                                        $el.innerHTML = '<svg class=\'w-4 h-4 mr-2\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4\'></path></svg>Download Now';
+                                                        $el.classList.remove('bg-red-50', 'border-red-300', 'text-red-700');
+                                                        $el.classList.add('bg-white', 'border-blue-300', 'text-blue-700');
+                                                    }, 3000);
+                                                });
+                                            ">
                                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                                             </svg>
                                             Download Now
-                                        </a>
+                                        </button>
                                     </div>
                                     
                                     @if($gtfsSettings->is_downloading)
