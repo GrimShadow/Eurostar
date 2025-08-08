@@ -136,6 +136,16 @@
                                         </svg>
                                         Save Configuration
                                     </button>
+                                    
+                                    @if($gtfsSettings && $gtfsSettings->url)
+                                        <a href="{{ route('settings.gtfs.download') }}" 
+                                           class="inline-flex items-center px-4 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-200">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                            </svg>
+                                            Download GTFS Data
+                                        </a>
+                                    @endif
                                 </div>
                             </div>
                         </form>
@@ -171,6 +181,16 @@
                                         <span class="text-sm font-medium text-gray-900">
                                             {{ $gtfsSettings->next_download ? $gtfsSettings->next_download->format('M j, Y g:i A') : 'Not Scheduled' }}
                                         </span>
+                                    </div>
+                                    
+                                    <div class="pt-2">
+                                        <a href="{{ route('settings.gtfs.download') }}" 
+                                           class="inline-flex items-center px-3 py-1.5 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                            </svg>
+                                            Download Now
+                                        </a>
                                     </div>
                                     
                                     @if($gtfsSettings->is_downloading)
