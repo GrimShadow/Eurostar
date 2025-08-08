@@ -174,6 +174,7 @@ class TrainTable extends Component
         $query = DB::table('gtfs_trips')
             ->select([
                 DB::raw('DISTINCT gtfs_trips.trip_short_name as number'),
+                DB::raw('SUBSTRING_INDEX(gtfs_trips.trip_id, "-", 1) as train_number'),
                 'gtfs_trips.trip_id',
                 'gtfs_trips.route_id',
                 'first_stop.departure_time as departure',

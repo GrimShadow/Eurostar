@@ -18,6 +18,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class ProcessSingleTrainRule implements ShouldQueue
 {
@@ -85,6 +86,17 @@ class ProcessSingleTrainRule implements ShouldQueue
     }
 
     private function getRelevantTrains()
+    {
+        // Create a shared cache key for train data across all rule jobs
+        $cacheKey = 'shared_train_data_' . now()->format('Y-m-d_H:i');
+        
+        // Cache train data for 2 minutes to prevent database storm
+        return Cache::remember($cacheKey, 120, function () {
+            return $this->fetchRelevantTrainsFromDatabase();
+        });
+    }
+
+    private function fetchRelevantTrainsFromDatabase()
     {
         // Get all active groups and their train grid configurations
         $groups = \App\Models\Group::where('active', true)->get();
@@ -175,16 +187,21 @@ class ProcessSingleTrainRule implements ShouldQueue
         $uniqueTrainIds = $allTrainIds->unique();
         
         if ($uniqueTrainIds->isEmpty()) {
-            //Log::info("No trains found matching any group's train grid configuration");
             return collect();
         }
 
-        //Log::info("Found {$uniqueTrainIds->count()} unique trains across all groups' train grids");
-
         // Get trains with minimal relationships to reduce memory usage
-        return \App\Models\GtfsTrip::with(['currentStatus', 'stopTimes' => function($query) {
+        return \App\Models\GtfsTrip::select([
+                'gtfs_trips.trip_id',
+                'gtfs_trips.route_id',
+                'gtfs_trips.trip_short_name',
+                'gtfs_trips.trip_headsign',
+                'gtfs_trips.service_id'
+            ])
+            ->with(['currentStatus', 'stopTimes' => function($query) {
                 // Only get first and last stops to minimize data
-                $query->orderBy('stop_sequence');
+                $query->select(['trip_id', 'stop_id', 'stop_sequence', 'arrival_time', 'departure_time'])
+                    ->orderBy('stop_sequence');
             }])
             ->whereIn('trip_id', $uniqueTrainIds->toArray())
             ->limit(500) // Keep the safety limit
@@ -817,9 +834,16 @@ class ProcessSingleTrainRule implements ShouldQueue
     {
         switch ($variableName) {
             case 'train_number':
-                $trainNumber = $train->trip_short_name ?? $train->trip_id;
-                // Return just the numeric part for templates that expect only the train number
-                return preg_replace('/[^0-9]/', '', $trainNumber);
+                // Use the new train_number attribute that parses from trip_id
+                return $train->train_number ?? preg_replace('/[^0-9]/', '', $train->trip_short_name ?? $train->trip_id);
+                
+            case 'train_date':
+                // Return the formatted date from trip_id
+                return $train->formatted_date ?? '';
+                
+            case 'train_date_human':
+                // Return the human-readable date
+                return $train->human_readable_date ?? '';
                 
             case 'train_id':
                 return $train->trip_id;

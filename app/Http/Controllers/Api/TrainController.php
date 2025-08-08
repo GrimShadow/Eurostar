@@ -45,53 +45,35 @@ class TrainController extends Controller
             return $manualPlatform;
         }
         
-        // If the stop ID is a base stop (like amsterdam_centraal), determine the correct platform
-        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
-            // For Amsterdam Centraal and Rotterdam Centraal, determine platform based on train number pattern
-            if (($stopId === 'amsterdam_centraal' || $stopId === 'rotterdam_centraal') && $tripId) {
-                $trainNumber = explode('-', $tripId)[0];
-                
-                // Platform assignments based on historical GTFS data patterns
-                $platformAssignments = [
-                    '9145' => '15', // NLAMA -> GBSPX
-                    '9167' => '15', // NLAMA -> GBSPX
-                    '9115' => '15', // NLAMA -> GBSPX
-                    '9106' => '8',  // GBSPX -> NLAMA
-                    '9126' => '8',  // GBSPX -> NLAMA
-                    '9152' => '8',  // GBSPX -> NLAMA
-                ];
-                
-                // Rotterdam Centraal platform assignments
-                $rotterdamPlatformAssignments = [
-                    '9145' => '2',  // NLAMA -> GBSPX
-                    '9167' => '2',  // NLAMA -> GBSPX
-                    '9115' => '2',  // NLAMA -> GBSPX
-                    '9106' => '13', // GBSPX -> NLAMA
-                    '9126' => '13', // GBSPX -> NLAMA
-                    '9152' => '13', // GBSPX -> NLAMA
-                ];
-                
-                if ($stopId === 'rotterdam_centraal' && isset($rotterdamPlatformAssignments[$trainNumber])) {
-                    return $rotterdamPlatformAssignments[$trainNumber];
-                }
-                
-                if (isset($platformAssignments[$trainNumber])) {
-                    return $platformAssignments[$trainNumber];
-                }
-            }
+        // Check for platform assignments in the train_platform_assignments table
+        if ($tripId) {
+            $platformAssignment = DB::table('train_platform_assignments')
+                ->where('trip_id', $tripId)
+                ->where('stop_id', $stopId)
+                ->first();
             
-            // Fallback: Look for platform-specific stops for this base stop
+            if ($platformAssignment && !empty($platformAssignment->platform_code) && $platformAssignment->platform_code !== 'TBD') {
+                return $platformAssignment->platform_code;
+            }
+        }
+        
+        // If the stop ID is a base stop (like amsterdam_centraal), look up the actual platform from GTFS data
+        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
+            // If the stop ID is a base stop (like amsterdam_centraal), look up available platform codes
+            // from the platform-specific stops in the GTFS data
             $platformStops = DB::table('gtfs_stops')
                 ->where('stop_id', 'LIKE', $stopId . '_%')
                 ->whereNotNull('platform_code')
                 ->where('platform_code', '!=', '')
                 ->orderBy('platform_code')
-                ->limit(1)
                 ->pluck('platform_code');
             
             if ($platformStops->isNotEmpty()) {
+                // Return the first available platform code
                 return $platformStops->first();
             }
+            
+            return 'TBD';
         }
         
         return 'TBD';

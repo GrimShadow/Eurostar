@@ -106,16 +106,17 @@ class TrainGrid extends Component
             $currentTime = $isToday ? now()->subMinutes(30)->format('H:i:s') : '00:00:00';
             $endTime = '23:59:59';
 
-        // Get unique trips for today with optimized query
-            $uniqueTrips = DB::table('gtfs_trips')
-                ->select([
-                    'gtfs_trips.trip_id',
-                    'gtfs_trips.route_id',
-                    'gtfs_trips.trip_short_name',
-                    'gtfs_routes.route_long_name',
-                    'gtfs_routes.route_color',
-                    'gtfs_trips.trip_headsign'
-                ])
+                // Get unique trips for today with optimized query
+        $uniqueTrips = DB::table('gtfs_trips')
+            ->select([
+                'gtfs_trips.trip_id',
+                'gtfs_trips.route_id',
+                'gtfs_trips.trip_short_name',
+                DB::raw('SUBSTRING_INDEX(gtfs_trips.trip_id, "-", 1) as train_number'),
+                'gtfs_routes.route_long_name',
+                'gtfs_routes.route_color',
+                'gtfs_trips.trip_headsign'
+            ])
                 ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
                 ->whereIn('gtfs_trips.route_id', $selectedRoutes)
                 ->whereExists(function ($query) {
@@ -255,53 +256,35 @@ class TrainGrid extends Component
             return $manualPlatform;
         }
         
-        // If the stop ID is a base stop (like amsterdam_centraal), determine the correct platform
-        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
-            // For Amsterdam Centraal and Rotterdam Centraal, determine platform based on train number pattern
-            if (($stopId === 'amsterdam_centraal' || $stopId === 'rotterdam_centraal') && $tripId) {
-                $trainNumber = explode('-', $tripId)[0];
-                
-                // Platform assignments based on historical GTFS data patterns
-                $platformAssignments = [
-                    '9145' => '15', // NLAMA -> GBSPX
-                    '9167' => '15', // NLAMA -> GBSPX
-                    '9115' => '15', // NLAMA -> GBSPX
-                    '9106' => '8',  // GBSPX -> NLAMA
-                    '9126' => '8',  // GBSPX -> NLAMA
-                    '9152' => '8',  // GBSPX -> NLAMA
-                ];
-                
-                // Rotterdam Centraal platform assignments
-                $rotterdamPlatformAssignments = [
-                    '9145' => '2',  // NLAMA -> GBSPX
-                    '9167' => '2',  // NLAMA -> GBSPX
-                    '9115' => '2',  // NLAMA -> GBSPX
-                    '9106' => '13', // GBSPX -> NLAMA
-                    '9126' => '13', // GBSPX -> NLAMA
-                    '9152' => '13', // GBSPX -> NLAMA
-                ];
-                
-                if ($stopId === 'rotterdam_centraal' && isset($rotterdamPlatformAssignments[$trainNumber])) {
-                    return $rotterdamPlatformAssignments[$trainNumber];
-                }
-                
-                if (isset($platformAssignments[$trainNumber])) {
-                    return $platformAssignments[$trainNumber];
-                }
-            }
+        // Check for platform assignments in the train_platform_assignments table
+        if ($tripId) {
+            $platformAssignment = DB::table('train_platform_assignments')
+                ->where('trip_id', $tripId)
+                ->where('stop_id', $stopId)
+                ->first();
             
-            // Fallback: Look for platform-specific stops for this base stop
+            if ($platformAssignment && !empty($platformAssignment->platform_code) && $platformAssignment->platform_code !== 'TBD') {
+                return $platformAssignment->platform_code;
+            }
+        }
+        
+        // If the stop ID is a base stop (like amsterdam_centraal), look up the actual platform from GTFS data
+        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
+            // If the stop ID is a base stop (like amsterdam_centraal), look up available platform codes
+            // from the platform-specific stops in the GTFS data
             $platformStops = DB::table('gtfs_stops')
                 ->where('stop_id', 'LIKE', $stopId . '_%')
                 ->whereNotNull('platform_code')
                 ->where('platform_code', '!=', '')
                 ->orderBy('platform_code')
-                ->limit(1)
                 ->pluck('platform_code');
             
             if ($platformStops->isNotEmpty()) {
+                // Return the first available platform code
                 return $platformStops->first();
             }
+            
+            return 'TBD';
         }
         
         return 'TBD';

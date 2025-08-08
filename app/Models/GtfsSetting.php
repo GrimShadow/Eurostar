@@ -8,6 +8,10 @@ class GtfsSetting extends Model
 {
     protected $fillable = [
         'url',
+        'realtime_url',
+        'realtime_update_interval',
+        'last_realtime_update',
+        'realtime_status',
         'is_active',
         'last_download',
         'next_download',
@@ -22,7 +26,9 @@ class GtfsSetting extends Model
         'last_download' => 'datetime',
         'next_download' => 'datetime',
         'download_started_at' => 'datetime',
+        'last_realtime_update' => 'datetime',
         'is_downloading' => 'boolean',
-        'download_progress' => 'integer'
+        'download_progress' => 'integer',
+        'realtime_update_interval' => 'integer'
     ];
 }

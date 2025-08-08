@@ -165,15 +165,8 @@ class CreateAnnouncement extends Component
                     ->first();
 
                 if ($firstStop) {
-                    // Extract just the train number from trip_short_name or trip_headsign
-                    $trainNumber = $uniqueTrip->trip_short_name ?: $uniqueTrip->trip_headsign;
-                    
-                    // Extract only the numeric part or first part before space/arrow
-                    if (preg_match('/^(\d+)/', $trainNumber, $matches)) {
-                        $trainNumber = $matches[1];
-                    } elseif (strpos($trainNumber, ' ') !== false) {
-                        $trainNumber = explode(' ', $trainNumber)[0];
-                    }
+                    // Use the parsed train number from trip_id
+                    $trainNumber = $uniqueTrip->train_number ?? $uniqueTrip->trip_short_name;
                     
                     $trains[] = [
                         'number' => $trainNumber,

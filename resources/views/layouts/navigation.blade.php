@@ -19,6 +19,9 @@
                         <x-nav-link :href="route('group.announcements', request()->route('group'))" :active="request()->routeIs('group.announcements')">
                             {{ __('Announcements') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('group.train-info', request()->route('group'))" :active="request()->routeIs('group.train-info')">
+                            {{ __('Train Info') }}
+                        </x-nav-link>
                     @else
                         <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                             {{ __('Dashboard') }}
@@ -87,12 +90,24 @@
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
-            </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('announcements')" :active="request()->routeIs('announcements')">
-                {{ __('Announcements') }}
-            </x-responsive-nav-link>
+            @if(request()->routeIs('group.*'))
+                <x-responsive-nav-link :href="route('group.dashboard', request()->route('group'))" :active="request()->routeIs('group.dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('group.announcements', request()->route('group'))" :active="request()->routeIs('group.announcements')">
+                    {{ __('Announcements') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('group.train-info', request()->route('group'))" :active="request()->routeIs('group.train-info')">
+                    {{ __('Train Info') }}
+                </x-responsive-nav-link>
+            @else
+                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('announcements')" :active="request()->routeIs('announcements')">
+                    {{ __('Announcements') }}
+                </x-responsive-nav-link>
+            @endif
         </div>
 
         <!-- Responsive Settings Options -->

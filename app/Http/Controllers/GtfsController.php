@@ -36,14 +36,18 @@ class GtfsController extends Controller
     public function update(Request $request)
     {
         $validated = $request->validate([
-            'url' => 'required|url'
+            'url' => 'required|url',
+            'realtime_url' => 'nullable|url',
+            'realtime_update_interval' => 'nullable|integer|min:10|max:300'
         ]);
 
         $gtfsSettings = GtfsSetting::firstOrNew();
         $gtfsSettings->url = $validated['url'];
+        $gtfsSettings->realtime_url = $validated['realtime_url'];
+        $gtfsSettings->realtime_update_interval = $validated['realtime_update_interval'] ?? 30;
         $gtfsSettings->save();
 
-        return redirect()->route('settings.gtfs')->with('success', 'GTFS URL updated successfully.');
+        return redirect()->route('settings.gtfs')->with('success', 'GTFS settings updated successfully.');
     }
 
     public function download()
@@ -821,6 +825,61 @@ class GtfsController extends Controller
             'success' => true,
             'data' => $trainStatus
         ]);
+    }
+
+    public function testRealtime()
+    {
+        $gtfsSettings = GtfsSetting::first();
+        
+        if (!$gtfsSettings || !$gtfsSettings->realtime_url) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No realtime URL configured'
+            ], 400);
+        }
+
+        try {
+            $response = Http::timeout(30)->get($gtfsSettings->realtime_url);
+            
+            if (!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch realtime data: HTTP ' . $response->status()
+                ], 400);
+            }
+
+            $data = $response->json();
+            
+            if (!isset($data['entity'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid GTFS realtime format: missing entity array'
+                ], 400);
+            }
+
+            $entitiesCount = count($data['entity']);
+            
+            // Update the last realtime update timestamp
+            $gtfsSettings->last_realtime_update = now();
+            $gtfsSettings->realtime_status = 'Connected - ' . $entitiesCount . ' entities';
+            $gtfsSettings->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Realtime feed test successful',
+                'entities_count' => $entitiesCount
+            ]);
+
+        } catch (\Exception $e) {
+            // Update status with error
+            $gtfsSettings->realtime_status = 'Error: ' . $e->getMessage();
+            $gtfsSettings->save();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to test realtime feed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
 }

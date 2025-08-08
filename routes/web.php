@@ -103,6 +103,7 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
     Route::get('/settings/gtfs/progress', [GtfsController::class, 'progress'])->name('settings.gtfs.progress');
     Route::post('/settings/gtfs/reset', [GtfsController::class, 'resetDownload'])->name('settings.gtfs.reset');
     Route::post('/settings/gtfs/clear', [GtfsController::class, 'clear'])->name('settings.gtfs.clear');
+    Route::post('/settings/gtfs/test-realtime', [GtfsController::class, 'testRealtime'])->name('settings.gtfs.test-realtime');
 
     // Rules and triggers
     Route::get('/settings/rules', [RulesAndTriggersController::class, 'viewRulesAndTriggers'])->name('settings.rules');
@@ -163,6 +164,9 @@ Route::middleware(['auth', \App\Http\Middleware\GroupAccess::class])->group(func
     Route::get('/{group}/dashboard', [GroupDashboardController::class, 'index'])->name('group.dashboard');
     Route::get('/{group}/announcements', [GroupAnnouncementsController::class, 'index'])->name('group.announcements');
     Route::get('/{group}/routes', [GroupRouteSelectionController::class, 'index'])->name('group.routes');
+    Route::get('/{group}/train-info', function (\App\Models\Group $group) {
+        return view('group.train-info', compact('group'));
+    })->name('group.train-info');
 });
 
 require __DIR__.'/auth.php';
