@@ -7,6 +7,11 @@
                 {{ session('error') }}
             </div>
         @endif
+        @if (session()->has('message'))
+            <div class="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative">
+                {{ session('message') }}
+            </div>
+        @endif
         <form wire:submit="save" class="space-y-4">
             <div class="mt-8">
                 <div class="flex items-center justify-between mb-4">
@@ -128,7 +133,7 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Announcement Template</label>
-                                <select wire:model="selectedTemplate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                                <select wire:model.live="selectedTemplate" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                                     <option value="">Select Template</option>
                                     @foreach($availableTemplates as $template)
                                         <option value="{{ $template->id }}">{{ $template->friendly_name }}</option>
@@ -148,9 +153,13 @@
                                 @error('announcementZone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                             </div>
 
-                            @if($selectedTemplate && count($templateVariables) > 0)
-                                <div class="border-t pt-4">
-                                    <h4 class="text-sm font-medium text-gray-700 mb-2">Template Variables</h4>
+                        
+                            @if($selectedTemplate && !empty($templateVariables))
+                                <div class="border-t pt-4" wire:key="template-variables-{{ $selectedTemplate }}-{{ count($templateVariables) }}">
+                                    <h4 class="text-sm font-medium text-gray-700 mb-2">
+                                        Template Variables 
+                                        <span class="text-xs text-gray-500">(Template: {{ $selectedTemplate }}, Variables: {{ count($templateVariables) }})</span>
+                                    </h4>
                                     @foreach($templateVariables as $variable => $value)
                                         <div class="mb-4 p-4 bg-gray-50 rounded-lg">
                                             <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -213,7 +222,13 @@
                 </div>
             </div>
 
-            <div class="flex justify-end mt-6">
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" wire:click="resetForm" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Reset Form
+                </button>
                 <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
                     Create Rule
                 </button>
@@ -225,7 +240,7 @@
     <div class="p-6">
         <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Existing Rules</h3>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
+            <table class="min-w-full divide-y divide-gray-200" wire:key="rules-table-{{ $tableKey }}">
                 <thead class="bg-gray-50">
                     <tr>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condition</th>

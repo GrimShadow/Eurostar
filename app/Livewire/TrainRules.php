@@ -33,7 +33,9 @@ class TrainRules extends Component
     public $valueField = [];
     public $conditions = [];
     public $logicalOperators = ['and' => 'AND', 'or' => 'OR'];
-    public $refreshFlag = 0;
+    public $tableKey = 0;
+
+
 
     protected function rules()
     {
@@ -128,12 +130,18 @@ class TrainRules extends Component
     {
         if ($value) {
             $template = AviavoxTemplate::find($value);
-            if ($template) {
+            if ($template && !empty($template->variables)) {
                 // Initialize variables with empty values, excluding 'zone'
                 $variables = collect($template->variables)->filter(fn($var) => $var !== 'zone');
                 
                 $this->templateVariables = $variables->mapWithKeys(fn($var) => [$var => ''])->toArray();
                 $this->variableTypes = $variables->mapWithKeys(fn($var) => [$var => 'manual'])->toArray();
+                
+                // Force a re-render by updating a property that triggers reactivity
+                $this->tableKey++;
+            } else {
+                $this->templateVariables = [];
+                $this->variableTypes = [];
             }
         } else {
             $this->templateVariables = [];
@@ -141,9 +149,11 @@ class TrainRules extends Component
         }
     }
 
+
+
     public function updatedConditionType($value)
     {
-        $this->reset(['operator', 'value', 'action', 'actionValue', 'selectedTemplate', 'templateVariables', 'variableTypes']);
+        $this->reset(['operator', 'value', 'action', 'actionValue']);
         
         switch ($value) {
             case 'time_until_departure':
@@ -181,12 +191,13 @@ class TrainRules extends Component
 
     public function updatedAction($value)
     {
-        
-        // Reset the action-specific fields
-        $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables', 'variableTypes']);
-        
-        // Force a re-render
-        $this->dispatch('action-updated', action: $value);
+        if ($value === 'set_status') {
+            // Reset announcement-specific fields when switching to set_status
+            $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables', 'variableTypes']);
+        } elseif ($value === 'make_announcement') {
+            // Only reset status-specific fields when switching to make_announcement
+            $this->reset(['actionValue']);
+        }
     }
 
     public function save()
@@ -226,17 +237,9 @@ class TrainRules extends Component
         }
 
         // Reset form state and refresh the list
-        $this->reset([
-            'conditions',
-            'action',
-            'actionValue',
-            'selectedTemplate',
-            'announcementZone',
-            'templateVariables',
-            'variableTypes'
-        ]);
-        $this->addCondition();
+        $this->resetForm();
         $this->resetPage();
+        $this->tableKey++;
         session()->flash('message', 'Rule created successfully.');
     }
 
@@ -247,6 +250,9 @@ class TrainRules extends Component
         
         // Clear cache so rule status changes take effect immediately
         $this->clearTrainRulesCache();
+        
+        // Force table re-render by updating the key
+        $this->tableKey++;
     }
 
     public function deleteRule($ruleId)
@@ -259,10 +265,44 @@ class TrainRules extends Component
             // Clear cache so deleted rules are removed immediately
             $this->clearTrainRulesCache();
             
-            // Force component to refresh by updating state
-            $this->refreshFlag++;
-            $this->resetPage();
+            // Force table re-render by updating the key
+            $this->tableKey++;
         }
+    }
+
+    /**
+     * Reset all form fields to their initial state
+     */
+    public function resetForm()
+    {
+        // Reset all form-related properties
+        $this->reset([
+            'conditionType',
+            'operator', 
+            'value',
+            'action',
+            'actionValue',
+            'announcementText',
+            'isActive',
+            'selectedAnnouncement',
+            'selectedTemplate',
+            'announcementZone',
+            'templateVariables',
+            'variableTypes',
+            'conditions'
+        ]);
+
+        // Reset valueField to initial state
+        $this->valueField = [
+            'type' => 'text',
+            'label' => 'Value'
+        ];
+
+        // Add a fresh condition
+        $this->addCondition();
+
+        // Clear any validation errors
+        $this->resetValidation();
     }
 
     /**

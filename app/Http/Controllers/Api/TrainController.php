@@ -81,16 +81,16 @@ class TrainController extends Controller
 
     public function today()
     {
-        // Create a cache key based on current time (rounded to nearest 5 minutes)
-        $cacheKey = 'train_api_today_' . now()->format('Y-m-d_H:') . str_pad(floor(now()->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
+        // Create a cache key based on current time (rounded to nearest minute for more frequent updates)
+        $cacheKey = 'train_api_today_' . now()->format('Y-m-d_H:i');
         
-        // Cache the expensive query result for 5 minutes
-        $result = Cache::remember($cacheKey, now()->addMinutes(5), function () {
+        // Cache the expensive query result for 1 minute to allow minutes to update more frequently
+        $result = Cache::remember($cacheKey, now()->addMinute(), function () {
             return $this->getTrainsApiData();
         });
         
         return response()->json($result)
-            ->header('Cache-Control', 'public, max-age=300'); // 5 minutes client-side cache
+            ->header('Cache-Control', 'public, max-age=60'); // 1 minute client-side cache
     }
 
     private function getTrainsApiData()
@@ -104,6 +104,10 @@ class TrainController extends Controller
 
         // Get the global check-in offset from settings
         $globalCheckInOffset = Setting::where('key', 'global_check_in_offset')->value('value') ?? 90;
+
+        // Get specific train check-in times
+        $specificTrainTimes = Setting::where('key', 'specific_train_check_in_times')->value('value');
+        $specificTrainTimes = $specificTrainTimes ? json_decode($specificTrainTimes, true) : [];
 
         $selectedRoutes = DB::table('selected_routes')
             ->where('is_active', true)
@@ -230,14 +234,42 @@ class TrainController extends Controller
 
 
         // Map the trips with their stops
-        $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset) {
-            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset) {
+        $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset, $specificTrainTimes) {
+            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset, $specificTrainTimes) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
                 
+                // Determine check-in offset for this train
+                $trainNumber = $train->number;
+                $checkInOffset = (int)($specificTrainTimes[$trainNumber] ?? $globalCheckInOffset);
 
                 // Calculate check-in start time by subtracting check-in time from departure time
                 $departureTime = Carbon::createFromFormat('H:i:s', $stop->departure_time);
-                $checkInStarts = $departureTime->copy()->subMinutes($globalCheckInOffset)->format('H:i');
+                $checkInStarts = $departureTime->copy()->subMinutes($checkInOffset)->format('H:i');
+
+                // Calculate minutes until check-in starts
+                $now = Carbon::now();
+                $checkInStartTime = Carbon::createFromFormat('Y-m-d H:i', $now->format('Y-m-d') . ' ' . $checkInStarts);
+                
+                // If check-in start time is in the past for today, check if departure is also in the past
+                if ($checkInStartTime->isPast()) {
+                    $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d') . ' ' . $stop->departure_time);
+                    if ($departureTimeToday->isPast()) {
+                        // Both check-in and departure are in the past, so this is for tomorrow
+                        $checkInStartTime->addDay();
+                        $minutesUntilCheckInStarts = (int)round($now->diffInMinutes($checkInStartTime, false));
+                    } else {
+                        // Check-in is in the past but departure is in the future, so check-in has already started
+                        $minutesUntilCheckInStarts = 0;
+                    }
+                } else {
+                    // Check-in is in the future for today
+                    $minutesUntilCheckInStarts = (int)round($now->diffInMinutes($checkInStartTime, false));
+                }
+                
+                // Ensure we don't return negative values
+                if ($minutesUntilCheckInStarts < 0) {
+                    $minutesUntilCheckInStarts = 0;
+                }
 
                 // Calculate minutes difference if there's a new departure time
                 $newDepartMin = null;
@@ -268,8 +300,9 @@ class TrainController extends Controller
                     'status_updated_at' => $statusUpdatedAt,
                     'departure_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->departure_platform, $train->trip_id),
                     'arrival_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->arrival_platform, $train->trip_id),
-                    'check_in_time' => $globalCheckInOffset,
-                    'check_in_starts' => $checkInStarts
+                    'check_in_time' => (int)$checkInOffset,
+                    'check_in_starts' => $checkInStarts,
+                    'minutes_until_check_in_starts' => $minutesUntilCheckInStarts
                 ];
             })->values();
 

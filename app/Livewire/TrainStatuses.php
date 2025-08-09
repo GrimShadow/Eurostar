@@ -43,7 +43,7 @@ class TrainStatuses extends Component
     public function render()
     {
         return view('livewire.train-statuses', [
-            'statuses' => Status::orderBy('status')->paginate(10)
+            'statuses' => Status::orderByRaw('LOWER(status) ASC')->paginate(10)
         ]);
     }
 }
