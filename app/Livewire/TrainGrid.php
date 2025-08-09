@@ -68,11 +68,12 @@ class TrainGrid extends Component
     public function loadTrains()
     {
         try {
-            // Create a cache key based on group, selected date, and current time (rounded to nearest minute)
+            // Clear any existing cache for this group and date to ensure fresh data
             $cacheKey = "train_grid_group_{$this->group->id}_date_{$this->selectedDate}_" . now()->format('H:i');
+            Cache::forget($cacheKey);
             
-            // Cache the expensive query result for 5 minutes
-            $this->trains = Cache::remember($cacheKey, now()->addMinutes(5), function () {
+            // Cache the expensive query result for 1 minute to allow for more frequent updates
+            $this->trains = Cache::remember($cacheKey, now()->addMinute(), function () {
                 return $this->getTrainsData();
             });
 
@@ -103,8 +104,16 @@ class TrainGrid extends Component
 
             // Set time range based on selected date
             $isToday = $this->selectedDate === now()->format('Y-m-d');
-            $currentTime = $isToday ? now()->subMinutes(30)->format('H:i:s') : '00:00:00';
-            $endTime = '23:59:59';
+            
+            if ($isToday) {
+                // For today, only show trains that haven't departed yet OR departed within the last 30 minutes
+                $currentTime = now()->subMinutes(30)->format('H:i:s');
+                $endTime = '23:59:59';
+            } else {
+                // For other dates, show all trains
+                $currentTime = '00:00:00';
+                $endTime = '23:59:59';
+            }
 
                 // Get unique trips for today with optimized query
         $uniqueTrips = DB::table('gtfs_trips')
@@ -162,6 +171,25 @@ class TrainGrid extends Component
 
                 if ($stops->isEmpty()) {
                     continue;
+                }
+
+                // For today, check if the train has already departed (and not within the last 30 minutes)
+                if ($isToday) {
+                    $firstStop = $stops->first();
+                    $currentTime = now();
+                    
+                    // Create a full datetime for today with the departure time (using the same timezone as the application)
+                    $departureDateTime = Carbon::createFromFormat('Y-m-d H:i:s', $currentTime->format('Y-m-d') . ' ' . $firstStop->departure_time, $currentTime->timezone);
+                    
+                    // Check if the train has already departed
+                    if ($departureDateTime->isPast()) {
+                        $minutesSinceDeparture = abs($currentTime->diffInMinutes($departureDateTime, false));
+                        
+                        // If the train departed more than 30 minutes ago, skip it
+                        if ($minutesSinceDeparture > 30) {
+                            continue;
+                        }
+                    }
                 }
 
                 // Get all stop statuses for this trip
