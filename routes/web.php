@@ -1,20 +1,20 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\AnnouncementController;
-use App\Http\Controllers\SettingsController;
-use App\Http\Controllers\LogsController;
-use App\Http\Controllers\UserManagementController;
-use App\Http\Controllers\RulesAndTriggersController;
-use App\Http\Controllers\AviavoxController;
-use App\Http\Controllers\GtfsController;
-use App\Http\Controllers\TokenController;
-use App\Http\Controllers\SelectorController;
 use App\Http\Controllers\AdminSettingsController;
-use App\Http\Controllers\VariablesController;
-use App\Http\Controllers\GroupDashboardController;
+use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\AviavoxController;
 use App\Http\Controllers\GroupAnnouncementsController;
+use App\Http\Controllers\GroupDashboardController;
 use App\Http\Controllers\GroupRouteSelectionController;
+use App\Http\Controllers\GtfsController;
+use App\Http\Controllers\LogsController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RulesAndTriggersController;
+use App\Http\Controllers\SelectorController;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\TokenController;
+use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\VariablesController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -29,6 +29,11 @@ Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+// Documentation routes (public access)
+Route::get('/documentation', [App\Http\Controllers\DocumentationController::class, 'index'])->name('documentation.index');
+Route::get('/documentation/{category}', [App\Http\Controllers\DocumentationController::class, 'show'])->name('documentation.category');
+Route::get('/documentation/{category}/{page}', [App\Http\Controllers\DocumentationController::class, 'show'])->name('documentation.show');
+
 Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements');
     Route::post('/announcements', [AnnouncementController::class, 'store'])->name('announcements.store');
@@ -37,7 +42,7 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
     Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
     Route::delete('/announcements/clear', [AnnouncementController::class, 'clear'])->name('announcements.clear');
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
-   
+
     // Aviavox settings
     Route::get('/settings/aviavox', [AviavoxController::class, 'viewAviavox'])->name('settings.aviavox');
     Route::post('/settings/aviavox', [AviavoxController::class, 'updateAviavox'])->name('settings.aviavox.update');
@@ -64,7 +69,7 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
 
     // User management
     Route::get('/settings/users', [UserManagementController::class, 'viewUsers'])->name('settings.users');
-    
+
     // Logs
     Route::get('/settings/logs', [LogsController::class, 'viewLogs'])->name('settings.logs');
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
@@ -72,7 +77,6 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
 
     // Admin variables
     Route::get('/settings/variables', [VariablesController::class, 'index'])->name('settings.variables');
-    
 
 });
 
@@ -87,7 +91,7 @@ Route::middleware(['auth', 'update-activity'])->group(function () {
 Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
     // Admin settings
     Route::get('/settings/admin', [AdminSettingsController::class, 'index'])->name('settings.admin');
-    
+
     // Aviavox settings
     Route::get('/settings/aviavox', [AviavoxController::class, 'viewAviavox'])->name('settings.aviavox');
     Route::post('/settings/aviavox', [AviavoxController::class, 'updateAviavox'])->name('settings.aviavox.update');
@@ -110,7 +114,7 @@ Route::middleware(['auth', 'admin', 'update-activity'])->group(function () {
 
     // User management
     Route::get('/settings/users', [UserManagementController::class, 'viewUsers'])->name('settings.users');
-    
+
     // Logs
     Route::get('/settings/logs', [LogsController::class, 'viewLogs'])->name('settings.logs');
     Route::get('/settings/logs/export', [LogsController::class, 'exportLogs'])->name('settings.logs.export');
@@ -121,18 +125,18 @@ Route::delete('/settings/aviavox/template/{template}', [AviavoxController::class
 Route::get('/settings/aviavox/template/{template}/edit', [AviavoxController::class, 'editTemplate'])->name('settings.aviavox.editTemplate');
 Route::put('/settings/aviavox/template/{template}', [AviavoxController::class, 'updateTemplate'])->name('settings.aviavox.updateTemplate');
 
-Route::get('/test-platforms', function() {
+Route::get('/test-platforms', function () {
     $stops = \App\Models\GtfsStop::whereNotNull('platform_code')
         ->select('stop_id', 'stop_name', 'platform_code')
         ->limit(5)
         ->get();
-    
+
     return response()->json($stops);
 });
 
-Route::get('/debug-gtfs', function() {
+Route::get('/debug-gtfs', function () {
     $stopsFile = storage_path('app/gtfs/stops.txt');
-    if (!file_exists($stopsFile)) {
+    if (! file_exists($stopsFile)) {
         return response()->json(['error' => 'stops.txt not found']);
     }
 
@@ -141,21 +145,22 @@ Route::get('/debug-gtfs', function() {
     $data = [];
     $count = 0;
 
-    while (($row = fgetcsv($file)) !== FALSE && $count < 5) {
+    while (($row = fgetcsv($file)) !== false && $count < 5) {
         $data[] = array_combine($headers, $row);
         $count++;
     }
 
     fclose($file);
+
     return response()->json($data);
 });
 
-Route::get('/debug-db', function() {
+Route::get('/debug-db', function () {
     $stops = \App\Models\GtfsStop::whereNotNull('platform_code')
         ->select('stop_id', 'stop_name', 'platform_code')
         ->limit(5)
         ->get();
-    
+
     return response()->json($stops);
 });
 

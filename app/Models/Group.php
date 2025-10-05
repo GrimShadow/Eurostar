@@ -16,7 +16,7 @@ class Group extends Model
         'active',
         'image',
         'slug',
-        'created_by'
+        'created_by',
     ];
 
     protected static function boot()
@@ -61,6 +61,12 @@ class Group extends Model
         return $this->hasMany(GroupRouteStation::class);
     }
 
+    public function zones()
+    {
+        return $this->belongsToMany(Zone::class, 'group_zones')
+            ->withTimestamps();
+    }
+
     public function getRouteKeyName()
     {
         return 'slug';
@@ -75,4 +81,4 @@ class Group extends Model
     {
         return route('group.announcements', $this);
     }
-} 
+}

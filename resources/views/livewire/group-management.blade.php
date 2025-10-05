@@ -91,6 +91,37 @@
                             @error('selectedUsers') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                         </div>
 
+                        <div class="mb-4">
+                            <x-input-label for="zones" value="Zones" />
+                            <div class="mt-1 border border-gray-300 rounded-md p-4 max-h-[300px] overflow-y-auto">
+                                <div class="space-y-2">
+                                    @foreach($availableZones as $zone)
+                                        <div class="flex items-center">
+                                            <input 
+                                                type="checkbox" 
+                                                id="zone_{{ $zone->id }}"
+                                                value="{{ $zone->id }}"
+                                                wire:model.live="selectedZones"
+                                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                            >
+                                            <label for="zone_{{ $zone->id }}" class="ml-2 block text-sm text-gray-900">
+                                                {{ $zone->value }}
+                                            </label>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                            <div class="mt-2 flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Selected Zones: {{ count($selectedZones) }}</span>
+                                @if(count($selectedZones) > 0)
+                                    <button type="button" wire:click="clearZoneSelection" class="text-sm text-red-600 hover:text-red-800">
+                                        Clear Selection
+                                    </button>
+                                @endif
+                            </div>
+                            @error('selectedZones') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+
                         <div class="flex justify-end space-x-2">
                             <x-secondary-button wire:click="closeModal" type="button">Cancel</x-secondary-button>
                             <x-primary-button type="submit">{{ $isEditing ? 'Update' : 'Save' }} Group</x-primary-button>
@@ -115,6 +146,7 @@
                                 <th class="px-5 py-3 text-xs font-medium text-left uppercase">Description</th>
                                 <th class="px-5 py-3 text-xs font-medium text-left uppercase">Status</th>
                                 <th class="px-5 py-3 text-xs font-medium text-left uppercase">Users</th>
+                                <th class="px-5 py-3 text-xs font-medium text-left uppercase">Zones</th>
                                 <th class="px-5 py-3 text-xs font-medium text-right uppercase">Action</th>
                             </tr>
                         </thead>
@@ -149,6 +181,20 @@
                                                 <ul class="space-y-1">
                                                     @foreach($group->users as $user)
                                                         <li>{{ $user->name }} ({{ $user->email }})</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+                                    </div>
+                                </td>
+                                <td class="px-5 py-4 text-sm whitespace-nowrap">
+                                    <div class="group relative">
+                                        <span>{{ $group->zones->count() }} zones</span>
+                                        @if($group->zones->count() > 0)
+                                            <div class="hidden group-hover:block absolute z-10 bg-white border rounded-lg shadow-lg p-4 min-w-[200px]">
+                                                <ul class="space-y-1">
+                                                    @foreach($group->zones as $zone)
+                                                        <li>{{ $zone->value }}</li>
                                                     @endforeach
                                                 </ul>
                                             </div>

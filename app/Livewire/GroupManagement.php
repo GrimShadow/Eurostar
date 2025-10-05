@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Group;
 use App\Models\User;
+use App\Models\Zone;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -12,24 +13,39 @@ class GroupManagement extends Component
     use WithFileUploads;
 
     public $groups;
+
     public $name;
+
     public $description;
+
     public $selectedUsers = [];
+
+    public $selectedZones = [];
+
     public $editingGroupId;
+
     public $isEditing = false;
+
     public $showModal = false;
+
     public $availableUsers;
+
+    public $availableZones;
+
     public $image;
+
     public $active = true;
 
     protected function rules()
     {
         return [
-            'name' => ['required', 'min:2', 'unique:groups,name,' . $this->editingGroupId],
+            'name' => ['required', 'min:2', 'unique:groups,name,'.$this->editingGroupId],
             'description' => 'nullable|max:255',
             'selectedUsers' => 'array',
+            'selectedZones' => 'array',
+            'selectedZones.*' => 'exists:zones,id',
             'image' => 'nullable|image|max:2048',
-            'active' => 'boolean'
+            'active' => 'boolean',
         ];
     }
 
@@ -37,16 +53,22 @@ class GroupManagement extends Component
     {
         $this->loadGroups();
         $this->loadUsers();
+        $this->loadZones();
     }
 
     public function loadGroups()
     {
-        $this->groups = Group::with('users')->get();
+        $this->groups = Group::with(['users', 'zones'])->get();
     }
 
     public function loadUsers()
     {
         $this->availableUsers = User::orderBy('name')->get();
+    }
+
+    public function loadZones()
+    {
+        $this->availableZones = Zone::orderBy('value')->get();
     }
 
     public function openModal()
@@ -65,14 +87,15 @@ class GroupManagement extends Component
     {
         $this->isEditing = true;
         $this->editingGroupId = $groupId;
-        $group = Group::with('users')->find($groupId);
-        
+        $group = Group::with(['users', 'zones'])->find($groupId);
+
         $this->name = $group->name;
         $this->description = $group->description;
         $this->selectedUsers = $group->users->pluck('id')->toArray();
+        $this->selectedZones = $group->zones->pluck('id')->toArray();
         $this->image = null;
         $this->active = $group->active;
-        
+
         $this->showModal = true;
     }
 
@@ -94,10 +117,12 @@ class GroupManagement extends Component
             $group = Group::find($this->editingGroupId);
             $group->update($data);
             $group->users()->sync($this->selectedUsers);
+            $group->zones()->sync($this->selectedZones);
             session()->flash('success', 'Group updated successfully.');
         } else {
             $group = Group::create($data);
             $group->users()->attach($this->selectedUsers);
+            $group->zones()->attach($this->selectedZones);
             session()->flash('success', 'Group created successfully.');
         }
 
@@ -108,7 +133,7 @@ class GroupManagement extends Component
     public function toggleActive($groupId)
     {
         $group = Group::find($groupId);
-        $group->update(['active' => !$group->active]);
+        $group->update(['active' => ! $group->active]);
         $this->loadGroups();
     }
 
@@ -117,6 +142,7 @@ class GroupManagement extends Component
         $this->name = '';
         $this->description = '';
         $this->selectedUsers = [];
+        $this->selectedZones = [];
         $this->isEditing = false;
         $this->editingGroupId = null;
         $this->image = null;
@@ -141,8 +167,13 @@ class GroupManagement extends Component
         $this->selectedUsers = [];
     }
 
+    public function clearZoneSelection()
+    {
+        $this->selectedZones = [];
+    }
+
     public function render()
     {
         return view('livewire.group-management');
     }
-} 
+}

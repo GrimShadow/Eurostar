@@ -2,40 +2,58 @@
 
 namespace App\Livewire;
 
-use App\Models\TrainRule;
-use App\Models\Status;
 use App\Models\AviavoxTemplate;
-use App\Models\Zone;
 use App\Models\RuleCondition;
+use App\Models\Status;
+use App\Models\TrainRule;
+use App\Models\Zone;
+use Illuminate\Support\Facades\Log;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Log;
 
 class TrainRules extends Component
 {
     use WithPagination;
 
     public $conditionType = '';
+
     public $operator = '';
+
     public $value = '';
+
     public $action = '';
+
     public $actionValue = '';
+
     public $announcementText = '';
+
     public $isActive = true;
+
     public $statuses;
+
     public $selectedAnnouncement = '';
+
     public $selectedTemplate = '';
+
     public $announcementZone = '';
+
+    public $zoneSelectionStrategy = 'group_zones'; // New: 'group_zones' or 'specific_zone'
+
     public $templateVariables = [];
+
     public $variableTypes = []; // Track whether each variable is 'manual' or 'dynamic'
+
     public $availableTemplates;
+
     public $zones;
+
     public $valueField = [];
+
     public $conditions = [];
+
     public $logicalOperators = ['and' => 'AND', 'or' => 'OR'];
+
     public $tableKey = 0;
-
-
 
     protected function rules()
     {
@@ -52,11 +70,15 @@ class TrainRules extends Component
             $rules['actionValue'] = 'required|exists:statuses,id';
         } elseif ($this->action === 'make_announcement') {
             $rules['selectedTemplate'] = 'required|exists:aviavox_templates,id';
-            $rules['announcementZone'] = 'required';
+
+            // Zone validation depends on strategy
+            if ($this->zoneSelectionStrategy === 'specific_zone') {
+                $rules['announcementZone'] = 'required';
+            }
 
             if ($this->selectedTemplate) {
                 $template = AviavoxTemplate::find($this->selectedTemplate);
-                if ($template && !empty($template->variables)) {
+                if ($template && ! empty($template->variables)) {
                     foreach ($template->variables as $variable) {
                         if ($variable !== 'zone') {
                             // Only require validation for manual variables, not dynamic ones
@@ -78,9 +100,10 @@ class TrainRules extends Component
         $this->statuses = Status::orderBy('status')->get();
         $this->availableTemplates = AviavoxTemplate::all();
         $this->zones = Zone::orderBy('value')->get();
+        $this->zoneSelectionStrategy = 'group_zones'; // Default to using group zones
         $this->valueField = [
             'type' => 'text',
-            'label' => 'Value'
+            'label' => 'Value',
         ];
         $this->actionValue = '';
         $this->addCondition();
@@ -92,7 +115,7 @@ class TrainRules extends Component
             'condition_type' => '',
             'operator' => '',
             'value' => '',
-            'logical_operator' => 'and'
+            'logical_operator' => 'and',
         ];
     }
 
@@ -111,7 +134,7 @@ class TrainRules extends Component
         if ($field === 'condition_type') {
             $this->conditions[$index]['operator'] = '';
             $this->conditions[$index]['value'] = '';
-            
+
             // Update the value field based on the new condition type
             switch ($value) {
                 case 'time_until_departure':
@@ -130,13 +153,13 @@ class TrainRules extends Component
     {
         if ($value) {
             $template = AviavoxTemplate::find($value);
-            if ($template && !empty($template->variables)) {
+            if ($template && ! empty($template->variables)) {
                 // Initialize variables with empty values, excluding 'zone'
-                $variables = collect($template->variables)->filter(fn($var) => $var !== 'zone');
-                
-                $this->templateVariables = $variables->mapWithKeys(fn($var) => [$var => ''])->toArray();
-                $this->variableTypes = $variables->mapWithKeys(fn($var) => [$var => 'manual'])->toArray();
-                
+                $variables = collect($template->variables)->filter(fn ($var) => $var !== 'zone');
+
+                $this->templateVariables = $variables->mapWithKeys(fn ($var) => [$var => ''])->toArray();
+                $this->variableTypes = $variables->mapWithKeys(fn ($var) => [$var => 'manual'])->toArray();
+
                 // Force a re-render by updating a property that triggers reactivity
                 $this->tableKey++;
             } else {
@@ -149,12 +172,10 @@ class TrainRules extends Component
         }
     }
 
-
-
     public function updatedConditionType($value)
     {
         $this->reset(['operator', 'value', 'action', 'actionValue']);
-        
+
         switch ($value) {
             case 'time_until_departure':
             case 'time_after_departure':
@@ -164,27 +185,27 @@ class TrainRules extends Component
                     'type' => 'number',
                     'label' => 'Minutes',
                     'min' => 0,
-                    'step' => 1
+                    'step' => 1,
                 ];
                 break;
             case 'current_status':
                 $this->valueField = [
                     'type' => 'select',
                     'label' => 'Status',
-                    'options' => Status::pluck('status', 'id')->toArray()
+                    'options' => Status::pluck('status', 'id')->toArray(),
                 ];
                 break;
             case 'train_number':
                 $this->valueField = [
                     'type' => 'text',
                     'label' => 'Train Number',
-                    'placeholder' => 'Enter train number'
+                    'placeholder' => 'Enter train number',
                 ];
                 break;
             default:
                 $this->valueField = [
                     'type' => 'text',
-                    'label' => 'Value'
+                    'label' => 'Value',
                 ];
         }
     }
@@ -193,10 +214,12 @@ class TrainRules extends Component
     {
         if ($value === 'set_status') {
             // Reset announcement-specific fields when switching to set_status
-            $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'templateVariables', 'variableTypes']);
+            $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'zoneSelectionStrategy', 'templateVariables', 'variableTypes']);
         } elseif ($value === 'make_announcement') {
             // Only reset status-specific fields when switching to make_announcement
             $this->reset(['actionValue']);
+            // Set default zone strategy for announcements
+            $this->zoneSelectionStrategy = 'group_zones';
         }
     }
 
@@ -209,11 +232,12 @@ class TrainRules extends Component
             'action' => $this->action,
             'action_value' => $this->action === 'set_status' ? $this->actionValue : json_encode([
                 'template_id' => $this->selectedTemplate,
-                'zone' => !empty($this->announcementZone) ? $this->announcementZone : 'Terminal',
+                'zone_strategy' => $this->zoneSelectionStrategy,
+                'zone' => $this->zoneSelectionStrategy === 'specific_zone' ? $this->announcementZone : null,
                 'variables' => $this->processTemplateVariables(),
-                'variable_types' => $this->variableTypes
+                'variable_types' => $this->variableTypes,
             ]),
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         // Clear train rules cache to ensure new rules are loaded immediately
@@ -223,7 +247,7 @@ class TrainRules extends Component
         foreach ($this->conditions as $index => $condition) {
             // Calculate appropriate tolerance based on condition type and operator
             $tolerance = $this->calculateTolerance($condition);
-            
+
             $ruleCondition = new RuleCondition([
                 'train_rule_id' => $rule->id,
                 'condition_type' => $condition['condition_type'],
@@ -231,7 +255,7 @@ class TrainRules extends Component
                 'value' => $condition['value'],
                 'logical_operator' => $index > 0 ? $condition['logical_operator'] : null,
                 'order' => $index,
-                'tolerance_minutes' => $tolerance
+                'tolerance_minutes' => $tolerance,
             ]);
             $ruleCondition->save();
         }
@@ -246,11 +270,11 @@ class TrainRules extends Component
     public function toggleRule($ruleId)
     {
         $rule = TrainRule::find($ruleId);
-        $rule->update(['is_active' => !$rule->is_active]);
-        
+        $rule->update(['is_active' => ! $rule->is_active]);
+
         // Clear cache so rule status changes take effect immediately
         $this->clearTrainRulesCache();
-        
+
         // Force table re-render by updating the key
         $this->tableKey++;
     }
@@ -261,10 +285,10 @@ class TrainRules extends Component
         if ($rule) {
             $rule->delete();
             session()->flash('success', 'Rule deleted successfully.');
-            
+
             // Clear cache so deleted rules are removed immediately
             $this->clearTrainRulesCache();
-            
+
             // Force table re-render by updating the key
             $this->tableKey++;
         }
@@ -278,7 +302,7 @@ class TrainRules extends Component
         // Reset all form-related properties
         $this->reset([
             'conditionType',
-            'operator', 
+            'operator',
             'value',
             'action',
             'actionValue',
@@ -287,15 +311,16 @@ class TrainRules extends Component
             'selectedAnnouncement',
             'selectedTemplate',
             'announcementZone',
+            'zoneSelectionStrategy',
             'templateVariables',
             'variableTypes',
-            'conditions'
+            'conditions',
         ]);
 
         // Reset valueField to initial state
         $this->valueField = [
             'type' => 'text',
-            'label' => 'Value'
+            'label' => 'Value',
         ];
 
         // Add a fresh condition
@@ -314,17 +339,17 @@ class TrainRules extends Component
             // Clear active rules cache used by ProcessTrainRules command
             \Illuminate\Support\Facades\Cache::forget('active_train_rules');
             \Illuminate\Support\Facades\Cache::forget('active_train_rules_2min');
-            
+
             // Clear any time-based rule caches
             $now = now();
             for ($i = 0; $i < 5; $i++) {
-                $cacheKey = 'active_train_rules_' . $now->copy()->addMinutes($i)->format('Y-m-d_H:i');
+                $cacheKey = 'active_train_rules_'.$now->copy()->addMinutes($i)->format('Y-m-d_H:i');
                 \Illuminate\Support\Facades\Cache::forget($cacheKey);
             }
-            
+
             Log::info('Train rules cache cleared after rule modification');
         } catch (\Exception $e) {
-            Log::warning('Failed to clear train rules cache: ' . $e->getMessage());
+            Log::warning('Failed to clear train rules cache: '.$e->getMessage());
         }
     }
 
@@ -334,10 +359,10 @@ class TrainRules extends Component
     private function processTemplateVariables()
     {
         $processedVariables = [];
-        
+
         foreach ($this->templateVariables as $variable => $value) {
             $variableType = $this->variableTypes[$variable] ?? 'manual';
-            
+
             if ($variableType === 'dynamic') {
                 // Store a special marker for dynamic variables that will be replaced at runtime
                 $processedVariables[$variable] = "{{DYNAMIC_$variable}}";
@@ -346,7 +371,7 @@ class TrainRules extends Component
                 $processedVariables[$variable] = $value;
             }
         }
-        
+
         return $processedVariables;
     }
 
@@ -362,7 +387,7 @@ class TrainRules extends Component
                 return 1;
             }
         }
-        
+
         // For non-time conditions or non-equality operators, no tolerance needed
         return 0;
     }
@@ -370,11 +395,12 @@ class TrainRules extends Component
     public function render()
     {
         $rules = TrainRule::with(['conditions', 'status'])->orderBy('created_at', 'desc')->paginate(10);
+
         return view('livewire.train-rules', [
             'rules' => $rules,
             'statuses' => $this->statuses,
             'availableTemplates' => $this->availableTemplates,
-            'zones' => $this->zones
+            'zones' => $this->zones,
         ]);
     }
 }

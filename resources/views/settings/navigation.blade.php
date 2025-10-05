@@ -64,6 +64,9 @@
                         <x-dropdown-link :href="route('settings.logs')">
                             {{ __('View Logs') }}
                         </x-dropdown-link>
+                        <x-dropdown-link :href="route('documentation.index')">
+                            {{ __('Documentation') }}
+                        </x-dropdown-link> 
 
                         <!-- Authentication -->
                         <form method="POST" action="{{ route('logout') }}">

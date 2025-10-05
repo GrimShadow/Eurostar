@@ -144,13 +144,52 @@
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Announcement Zone</label>
-                                <select wire:model="announcementZone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
-                                    <option value="">Select Zone</option>
-                                    @foreach($zones as $zone)
-                                        <option value="{{ $zone->value }}">{{ $zone->value }}</option>
-                                    @endforeach
-                                </select>
-                                @error('announcementZone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                
+                                <!-- Zone Selection Strategy -->
+                                <div class="mb-3">
+                                    <div class="flex space-x-4">
+                                        <label class="inline-flex items-center">
+                                            <input 
+                                                type="radio" 
+                                                wire:model.live="zoneSelectionStrategy" 
+                                                value="group_zones" 
+                                                class="form-radio text-neutral-600 focus:ring-neutral-500"
+                                            />
+                                            <span class="ml-2 text-sm text-gray-700">Use Group Zones (Dynamic)</span>
+                                        </label>
+                                        <label class="inline-flex items-center">
+                                            <input 
+                                                type="radio" 
+                                                wire:model.live="zoneSelectionStrategy" 
+                                                value="specific_zone" 
+                                                class="form-radio text-neutral-600 focus:ring-neutral-500"
+                                            />
+                                            <span class="ml-2 text-sm text-gray-700">Use Specific Zone</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Zone Selection (only shown for specific zone strategy) -->
+                                @if($zoneSelectionStrategy === 'specific_zone')
+                                    <select wire:model="announcementZone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                                        <option value="">Select Zone</option>
+                                        @foreach($zones as $zone)
+                                            <option value="{{ $zone->value }}">{{ $zone->value }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('announcementZone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                @else
+                                    <div class="mt-1 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                        <div class="flex items-center">
+                                            <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                            <span class="text-sm text-blue-700">
+                                                Announcements will automatically play in the zones associated with the train's group
+                                            </span>
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
 
                         
@@ -282,12 +321,19 @@
                                     @php
                                         $announcementData = json_decode($rule->action_value, true);
                                         $template = \App\Models\AviavoxTemplate::find($announcementData['template_id']);
+                                        $zoneStrategy = $announcementData['zone_strategy'] ?? 'specific_zone';
                                         $zone = $announcementData['zone'] ?? 'unknown';
                                         $variables = $announcementData['variables'] ?? [];
                                         $variableTypes = $announcementData['variable_types'] ?? [];
                                     @endphp
                                     Make announcement: {{ $template->friendly_name ?? $template->name }} 
-                                    <span class="text-gray-500">({{ $zone }})</span>
+                                    <span class="text-gray-500">
+                                        @if($zoneStrategy === 'group_zones')
+                                            (Dynamic: Group Zones)
+                                        @else
+                                            ({{ $zone }})
+                                        @endif
+                                    </span>
                                     @if(count($variables) > 0)
                                         <div class="text-xs text-gray-500 mt-1">
                                             Variables: 

@@ -88,6 +88,14 @@
                     <livewire:active-users />
                 </div>
             </div>
+
+            <!-- Group Management Card -->
+            <div class="bg-white shadow-sm sm:rounded-xl p-6">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Group Management</h3>
+                <div class="space-y-4">
+                    <livewire:group-management />
+                </div>
+            </div>
         </div>
     </div>
 </x-admin-layout>
