@@ -18,7 +18,8 @@ class StopStatus extends Model
         'actual_departure_time',
         'platform_code',
         'departure_platform',
-        'arrival_platform'
+        'arrival_platform',
+        'is_realtime_update',
     ];
 
     protected $casts = [
@@ -43,18 +44,18 @@ class StopStatus extends Model
         parent::boot();
 
         static::creating(function ($stopStatus) {
-            if (!$stopStatus->status_color) {
+            if (! $stopStatus->status_color) {
                 $stopStatus->status_color = '156,163,175';
             }
-            if (!$stopStatus->status_color_hex) {
+            if (! $stopStatus->status_color_hex) {
                 $stopStatus->status_color_hex = '#9CA3AF';
             }
-            if (!$stopStatus->departure_platform) {
+            if (! $stopStatus->departure_platform) {
                 $stopStatus->departure_platform = 'TBD';
             }
-            if (!$stopStatus->arrival_platform) {
+            if (! $stopStatus->arrival_platform) {
                 $stopStatus->arrival_platform = 'TBD';
             }
         });
     }
-} 
+}

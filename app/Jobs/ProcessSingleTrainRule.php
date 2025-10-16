@@ -10,6 +10,7 @@ use App\Models\StopStatus;
 use App\Models\TrainRule;
 use App\Models\TrainRuleExecution;
 use App\Models\TrainStatus;
+use App\Services\LogHelper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -53,17 +54,17 @@ class ProcessSingleTrainRule implements ShouldQueue
             $rule = TrainRule::with('conditions')->find($this->ruleId);
 
             if (! $rule) {
-                Log::info("Rule {$this->ruleId} not found (possibly deleted), skipping job execution");
+                LogHelper::rulesInfo("Rule {$this->ruleId} not found (possibly deleted), skipping job execution");
 
                 return;
             }
 
             if (! $rule->is_active) {
-                //Log::info("Rule {$this->ruleId} is inactive, skipping");
+                //LogHelper::rulesInfo("Rule {$this->ruleId} is inactive, skipping");
                 return;
             }
 
-            //Log::info("Processing rule {$rule->id} - Action: {$rule->action}");
+            //LogHelper::rulesInfo("Processing rule {$rule->id} - Action: {$rule->action}");
 
             // Get trains that are visible in train grids (filtered by group configurations)
             $trains = $this->getRelevantTrains();
@@ -73,7 +74,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             }
 
         } catch (\Exception $e) {
-            Log::error("Error processing train rule {$this->ruleId}: ".$e->getMessage(), [
+            LogHelper::rulesError("Error processing train rule {$this->ruleId}: ".$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
             throw $e; // Re-throw to trigger job retry mechanism
@@ -213,11 +214,11 @@ class ProcessSingleTrainRule implements ShouldQueue
             $configuredStops = $this->getConfiguredStopsForTrain($train);
 
             if ($configuredStops->isEmpty()) {
-                //Log::info("Train {$train->trip_id} has no configured stops, skipping");
+                //LogHelper::rulesInfo("Train {$train->trip_id} has no configured stops, skipping");
                 return;
             }
 
-            //Log::info("Checking rule {$rule->id} for train {$train->trip_id} at " . $configuredStops->count() . " configured stops");
+            //LogHelper::rulesInfo("Checking rule {$rule->id} for train {$train->trip_id} at " . $configuredStops->count() . " configured stops");
 
             $stopsToUpdate = [];
 
@@ -226,12 +227,12 @@ class ProcessSingleTrainRule implements ShouldQueue
                 // First check if this rule has already been executed for this train/stop combination
                 try {
                     if (TrainRuleExecution::hasBeenExecuted($rule->id, $train->trip_id, $stopTime->stop_id)) {
-                        //Log::info("Rule {$rule->id} already executed for train {$train->trip_id} at stop {$stopTime->stop_id}, skipping");
+                        //LogHelper::rulesInfo("Rule {$rule->id} already executed for train {$train->trip_id} at stop {$stopTime->stop_id}, skipping");
                         continue;
                     }
                 } catch (\Illuminate\Database\QueryException $e) {
                     // Handle the case where the rule might have been deleted
-                    Log::warning("Error checking rule execution for rule {$rule->id}: ".$e->getMessage());
+                    LogHelper::rulesDebug("Error checking rule execution for rule {$rule->id}: ".$e->getMessage());
 
                     continue;
                 }
@@ -244,7 +245,7 @@ class ProcessSingleTrainRule implements ShouldQueue
                 // Check if rule condition is met for this specific stop
                 $conditionMet = $this->shouldTriggerForStop($rule, $train, $stopTime->stop_id);
 
-                //Log::info("Stop {$stopTime->stop_id}: status='{$currentStatus}', condition " . ($conditionMet ? 'MET' : 'NOT MET'));
+                //LogHelper::rulesInfo("Stop {$stopTime->stop_id}: status='{$currentStatus}', condition " . ($conditionMet ? 'MET' : 'NOT MET'));
 
                 if ($conditionMet) {
                     $stopsToUpdate[] = $stopTime->stop_id;
@@ -252,13 +253,13 @@ class ProcessSingleTrainRule implements ShouldQueue
             }
 
             if (! empty($stopsToUpdate)) {
-                //Log::info("Rule {$rule->id} condition met for train {$train->trip_id} at stops: " . implode(', ', $stopsToUpdate) . ", applying action: {$rule->action}");
+                //LogHelper::rulesInfo("Rule {$rule->id} condition met for train {$train->trip_id} at stops: " . implode(', ', $stopsToUpdate) . ", applying action: {$rule->action}");
                 $this->applyActionToStops($rule, $train, $stopsToUpdate);
             } else {
-                //Log::info("Rule {$rule->id} condition NOT met for train {$train->trip_id} at any configured stops");
+                //LogHelper::rulesInfo("Rule {$rule->id} condition NOT met for train {$train->trip_id} at any configured stops");
             }
         } catch (\Exception $e) {
-            Log::error("Error processing rule {$rule->id} for train {$train->trip_id}: ".$e->getMessage());
+            LogHelper::rulesError("Error processing rule {$rule->id} for train {$train->trip_id}: ".$e->getMessage());
             // Don't re-throw here to continue processing other trains
         }
     }
@@ -317,7 +318,7 @@ class ProcessSingleTrainRule implements ShouldQueue
 
             // If recording failed due to deleted rule, exit early
             if ($execution === null) {
-                Log::info("Rule {$rule->id} was deleted during execution, stopping further processing");
+                LogHelper::rulesInfo("Rule {$rule->id} was deleted during execution, stopping further processing");
 
                 return;
             }
@@ -351,7 +352,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         // Get the status text from the statuses table
         $status = Status::find($rule->action_value);
         if (! $status) {
-            Log::error("Status with ID {$rule->action_value} not found for rule {$rule->id}");
+            LogHelper::rulesError("Status with ID {$rule->action_value} not found for rule {$rule->id}");
 
             return;
         }
@@ -395,17 +396,17 @@ class ProcessSingleTrainRule implements ShouldQueue
 
                 DB::commit();
 
-                //Log::info("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
+                //LogHelper::rulesInfo("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
 
                 // Broadcast the status change event after successful commit
                 event(new TrainStatusUpdated($train->trip_id, $status->status));
             } else {
                 DB::commit();
-                //Log::info("Train {$train->trip_id} already has status {$status->status} at specified stops, skipping");
+                //LogHelper::rulesInfo("Train {$train->trip_id} already has status {$status->status} at specified stops, skipping");
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Failed to update train status at stops for train {$train->trip_id}", [
+            LogHelper::rulesError("Failed to update train status at stops for train {$train->trip_id}", [
                 'rule_id' => $rule->id,
                 'error' => $e->getMessage(),
             ]);
@@ -418,7 +419,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         // Get the status text from the statuses table
         $status = Status::find($rule->action_value);
         if (! $status) {
-            Log::error("Status with ID {$rule->action_value} not found for rule {$rule->id}");
+            LogHelper::rulesError("Status with ID {$rule->action_value} not found for rule {$rule->id}");
 
             return;
         }
@@ -427,7 +428,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         $allConfiguredStops = $this->getConfiguredStopsForTrain($train);
 
         if ($allConfiguredStops->isEmpty()) {
-            Log::warning("No configured stops found for train {$train->trip_id}");
+            LogHelper::rulesDebug("No configured stops found for train {$train->trip_id}");
 
             return;
         }
@@ -471,17 +472,17 @@ class ProcessSingleTrainRule implements ShouldQueue
 
                 DB::commit();
 
-                //Log::info("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
+                //LogHelper::rulesInfo("Set status for train {$train->trip_id} to {$status->status} at stops: " . implode(', ', $updatedStops));
 
                 // Broadcast the status change event after successful commit
                 event(new TrainStatusUpdated($train->trip_id, $status->status));
             } else {
                 DB::commit();
-                //Log::info("Train {$train->trip_id} already has status {$status->status} at all configured stops, skipping");
+                //LogHelper::rulesInfo("Train {$train->trip_id} already has status {$status->status} at all configured stops, skipping");
             }
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Failed to update train status for train {$train->trip_id}", [
+            LogHelper::rulesError("Failed to update train status for train {$train->trip_id}", [
                 'rule_id' => $rule->id,
                 'error' => $e->getMessage(),
             ]);
@@ -550,7 +551,7 @@ class ProcessSingleTrainRule implements ShouldQueue
                 $group = Group::with('zones')->find($groupSelection->id);
                 if ($group && $group->zones->isNotEmpty()) {
                     $zones = $group->zones->pluck('value')->toArray();
-                    Log::info("Found group zones for train {$train->trip_id}", [
+                    LogHelper::rulesInfo("Found group zones for train {$train->trip_id}", [
                         'group_id' => $group->id,
                         'group_name' => $group->name,
                         'zones' => $zones,
@@ -561,7 +562,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             }
 
             // If no group found or no zones configured, return default zone
-            Log::warning("Could not determine group zones for train {$train->trip_id}, using default zone", [
+            LogHelper::rulesDebug("Could not determine group zones for train {$train->trip_id}, using default zone", [
                 'train_id' => $train->trip_id,
                 'route_id' => $train->route_id,
                 'group_found' => $groupSelection ? true : false,
@@ -570,7 +571,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             return ['Terminal']; // Default fallback
 
         } catch (\Exception $e) {
-            Log::error("Error resolving group zones for train {$train->trip_id}: ".$e->getMessage());
+            LogHelper::rulesError("Error resolving group zones for train {$train->trip_id}: ".$e->getMessage());
 
             return ['Terminal']; // Default fallback
         }
@@ -581,14 +582,14 @@ class ProcessSingleTrainRule implements ShouldQueue
         $announcementData = json_decode($rule->action_value, true);
 
         if (! $announcementData || ! isset($announcementData['template_id'])) {
-            Log::error("Invalid announcement data for rule {$rule->id}");
+            LogHelper::rulesError("Invalid announcement data for rule {$rule->id}");
 
             return;
         }
 
         $template = AviavoxTemplate::find($announcementData['template_id']);
         if (! $template) {
-            Log::error("Template {$announcementData['template_id']} not found for rule {$rule->id}");
+            LogHelper::rulesError("Template {$announcementData['template_id']} not found for rule {$rule->id}");
 
             return;
         }
@@ -600,7 +601,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         $zones = $this->resolveAnnouncementZones($announcementData, $train);
 
         if (empty($zones)) {
-            Log::warning('No zones resolved for train rule announcement', [
+            LogHelper::rulesDebug('No zones resolved for train rule announcement', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'zone_strategy' => $announcementData['zone_strategy'] ?? 'unknown',
@@ -617,7 +618,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             ->exists();
 
         if ($recentAnnouncement) {
-            Log::info("Recent announcement for template '{$templateName}' in zones '{$zones}' already exists, skipping");
+            LogHelper::rulesInfo("Recent announcement for template '{$templateName}' in zones '{$zones}' already exists, skipping");
 
             return;
         }
@@ -633,7 +634,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             'recurrence' => null,
         ]);
 
-        Log::info("Train rule announcement created for train {$train->trip_id} using template '{$templateName}' in zones '{$zones}'", [
+        LogHelper::rulesInfo("Train rule announcement created for train {$train->trip_id} using template '{$templateName}' in zones '{$zones}'", [
             'rule_id' => $rule->id,
             'template_id' => $announcementData['template_id'],
             'zones' => $zones,
@@ -650,7 +651,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             } catch (\Exception $e) {
                 $announcement->update(['status' => 'Failed']);
 
-                Log::error('Failed to send train rule announcement to Aviavox', [
+                LogHelper::rulesError('Failed to send train rule announcement to Aviavox', [
                     'rule_id' => $rule->id,
                     'train_id' => $train->trip_id,
                     'template_name' => $templateName,
@@ -661,7 +662,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             // No Aviavox settings configured - still log the announcement but mark as finished
             $announcement->update(['status' => 'Finished']);
 
-            Log::info('Train rule announcement logged (Aviavox not configured)', [
+            LogHelper::rulesInfo('Train rule announcement logged (Aviavox not configured)', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'template_name' => $templateName,
@@ -676,7 +677,7 @@ class ProcessSingleTrainRule implements ShouldQueue
     private function sendToAviavox($template, $announcementData, $settings, $rule, $train, $zones): void
     {
         // Generate XML from template and variables
-        Log::info('About to generate XML for train rule', [
+        LogHelper::rulesInfo('About to generate XML for train rule', [
             'rule_id' => $rule->id,
             'template_id' => $template->id,
             'template_name' => $template->name,
@@ -684,13 +685,13 @@ class ProcessSingleTrainRule implements ShouldQueue
 
         $xml = $this->generateXmlForTrainRule($template, $announcementData, $train);
 
-        Log::info('Generated XML for train rule', [
+        LogHelper::rulesInfo('Generated XML for train rule', [
             'rule_id' => $rule->id,
             'template_id' => $template->id,
             'final_xml' => $xml,
         ]);
 
-        Log::info('Train Rule Announcement - Starting Aviavox transmission', [
+        LogHelper::rulesInfo('Train Rule Announcement - Starting Aviavox transmission', [
             'rule_id' => $rule->id,
             'train_id' => $train->trip_id,
             'train_number' => $train->trip_short_name ?? $train->trip_id,
@@ -711,7 +712,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             // Authentication flow (same as existing system)
             // Step 1: Send challenge request
             $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
-            Log::debug('Train Rule Announcement - Sending challenge request', [
+            LogHelper::rulesDebug('Train Rule Announcement - Sending challenge request', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'challenge_xml' => $challengeRequest,
@@ -720,7 +721,7 @@ class ProcessSingleTrainRule implements ShouldQueue
 
             // Step 2: Read challenge response
             $response = fread($socket, 1024);
-            Log::debug('Train Rule Announcement - Received challenge response', [
+            LogHelper::rulesDebug('Train Rule Announcement - Received challenge response', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'challenge_response' => $response,
@@ -730,7 +731,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             $challenge = $matches[1] ?? null;
 
             if (! $challenge) {
-                Log::error('Train Rule Announcement - Invalid challenge received', [
+                LogHelper::rulesError('Train Rule Announcement - Invalid challenge received', [
                     'rule_id' => $rule->id,
                     'train_id' => $train->trip_id,
                     'response' => $response,
@@ -745,7 +746,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             $saltedPassword = $password.$salt.strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
 
-            Log::debug('Train Rule Announcement - Authentication details', [
+            LogHelper::rulesDebug('Train Rule Announcement - Authentication details', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'username' => $settings->username,
@@ -756,7 +757,7 @@ class ProcessSingleTrainRule implements ShouldQueue
 
             // Step 4: Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            Log::debug('Train Rule Announcement - Sending auth request', [
+            LogHelper::rulesDebug('Train Rule Announcement - Sending auth request', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'auth_xml' => $authRequest,
@@ -765,14 +766,14 @@ class ProcessSingleTrainRule implements ShouldQueue
 
             // Step 5: Read authentication response
             $authResponse = fread($socket, 1024);
-            Log::debug('Train Rule Announcement - Received auth response', [
+            LogHelper::rulesDebug('Train Rule Announcement - Received auth response', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'auth_response' => $authResponse,
             ]);
 
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
-                Log::error('Train Rule Announcement - Authentication failed', [
+                LogHelper::rulesError('Train Rule Announcement - Authentication failed', [
                     'rule_id' => $rule->id,
                     'train_id' => $train->trip_id,
                     'auth_response' => $authResponse,
@@ -781,7 +782,7 @@ class ProcessSingleTrainRule implements ShouldQueue
             }
 
             // Step 6: Send the announcement
-            Log::info('Train Rule Announcement - Sending announcement XML to Aviavox', [
+            LogHelper::rulesInfo('Train Rule Announcement - Sending announcement XML to Aviavox', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'final_xml' => $xml,
@@ -790,7 +791,7 @@ class ProcessSingleTrainRule implements ShouldQueue
 
             // Step 7: Read final response
             $finalResponse = fread($socket, 1024);
-            Log::info('Train Rule Announcement - Received final response from Aviavox', [
+            LogHelper::rulesInfo('Train Rule Announcement - Received final response from Aviavox', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
                 'final_response' => $finalResponse,
@@ -799,7 +800,7 @@ class ProcessSingleTrainRule implements ShouldQueue
 
         } finally {
             fclose($socket);
-            Log::debug('Train Rule Announcement - Connection closed', [
+            LogHelper::rulesDebug('Train Rule Announcement - Connection closed', [
                 'rule_id' => $rule->id,
                 'train_id' => $train->trip_id,
             ]);
@@ -811,14 +812,14 @@ class ProcessSingleTrainRule implements ShouldQueue
      */
     private function generateXmlForTrainRule($template, $announcementData, $train): string
     {
-        Log::info('NEW XML GENERATION METHOD CALLED - Building XML from scratch', [
+        LogHelper::rulesInfo('NEW XML GENERATION METHOD CALLED - Building XML from scratch', [
             'rule_id' => $announcementData['rule_id'] ?? 'unknown',
             'template_id' => $template->id,
             'template_name' => $template->name,
         ]);
 
         // Log the original template for debugging
-        Log::debug('Original XML template for rule', [
+        LogHelper::rulesDebug('Original XML template for rule', [
             'rule_id' => $announcementData['rule_id'] ?? 'unknown',
             'template_id' => $template->id,
             'original_xml' => $template->xml_template,
@@ -876,7 +877,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         $xml .= '</MessageData>';
         $xml .= '</AIP>';
 
-        Log::debug('Generated XML for rule', [
+        LogHelper::rulesDebug('Generated XML for rule', [
             'rule_id' => $announcementData['rule_id'] ?? 'unknown',
             'template_id' => $template->id,
             'generated_xml' => $xml,
@@ -987,7 +988,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         $trainNumber = preg_replace('/[^0-9]/', '', $train->trip_short_name ?? $train->trip_id);
 
         // Log the XML before cleanup for debugging
-        Log::debug('XML before cleanup', [
+        LogHelper::rulesDebug('XML before cleanup', [
             'xml' => $xml,
             'train_number' => $trainNumber,
         ]);
@@ -1056,7 +1057,7 @@ class ProcessSingleTrainRule implements ShouldQueue
         $xml = preg_replace('/\s+/', ' ', $xml);
 
         // Log the XML after cleanup for debugging
-        Log::debug('XML after cleanup', [
+        LogHelper::rulesDebug('XML after cleanup', [
             'xml' => $xml,
             'train_number' => $trainNumber,
         ]);
@@ -1069,7 +1070,7 @@ class ProcessSingleTrainRule implements ShouldQueue
      */
     public function failed(\Throwable $exception): void
     {
-        Log::error("Train rule job failed for rule {$this->ruleId}: ".$exception->getMessage(), [
+        LogHelper::rulesError("Train rule job failed for rule {$this->ruleId}: ".$exception->getMessage(), [
             'trace' => $exception->getTraceAsString(),
         ]);
     }

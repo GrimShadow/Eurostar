@@ -2,13 +2,14 @@
 
 namespace App\Console\Commands;
 
-use App\Models\AutomatedAnnouncementRule;
 use App\Models\Announcement;
+use App\Models\AutomatedAnnouncementRule;
 use App\Models\AviavoxSetting;
+use App\Services\LogHelper;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
-use Carbon\Carbon;
 
 Schedule::command(ProcessAutomatedAnnouncements::class)->everyMinute();
 
@@ -37,6 +38,7 @@ class ProcessAutomatedAnnouncements extends Command
             if ($this->option('debug')) {
                 $this->info('No active automated announcement rules found');
             }
+
             return;
         }
 
@@ -48,19 +50,18 @@ class ProcessAutomatedAnnouncements extends Command
                     $this->triggerAnnouncement($rule);
                     $rule->markAsTriggered();
                     $triggered++;
-                    
+
                     if ($this->option('debug')) {
                         $this->info("Triggered announcement: {$rule->name}");
                     }
-                    
-                    
+
                 } catch (\Exception $e) {
-                    Log::error("Failed to trigger automated announcement", [
+                    LogHelper::announcementError('Failed to trigger automated announcement', [
                         'rule_id' => $rule->id,
                         'rule_name' => $rule->name,
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
                     ]);
-                    
+
                     if ($this->option('debug')) {
                         $this->error("Failed to trigger {$rule->name}: {$e->getMessage()}");
                     }
@@ -90,7 +91,7 @@ class ProcessAutomatedAnnouncements extends Command
             'author' => 'System (Automated)',
             'area' => $rule->zone,
             'status' => 'Pending',
-            'recurrence' => "Every {$rule->interval_minutes} min"
+            'recurrence' => "Every {$rule->interval_minutes} min",
         ]);
 
         // Update last triggered time
@@ -102,28 +103,27 @@ class ProcessAutomatedAnnouncements extends Command
             try {
                 $this->sendToAviavox($rule, $settings);
                 $announcement->update(['status' => 'Finished']);
-                
-                
+
             } catch (\Exception $e) {
                 $announcement->update(['status' => 'Failed']);
-                
-                Log::error("Failed to trigger automated announcement", [
+
+                LogHelper::announcementError('Failed to trigger automated announcement', [
                     'rule_id' => $rule->id,
                     'rule_name' => $rule->name,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
-                
+
                 // Don't re-throw the exception - we want to continue processing other rules
                 // and still log the announcement attempt in the database
             }
         } else {
             // No Aviavox settings configured - still log the announcement but mark as finished
             $announcement->update(['status' => 'Finished']);
-            
-            Log::info("Automated announcement logged (Aviavox not configured)", [
+
+            LogHelper::announcementInfo('Automated announcement logged (Aviavox not configured)', [
                 'rule_id' => $rule->id,
                 'rule_name' => $rule->name,
-                'zone' => $rule->zone
+                'zone' => $rule->zone,
             ]);
         }
     }
@@ -135,46 +135,46 @@ class ProcessAutomatedAnnouncements extends Command
     {
         // Generate XML from template and variables
         $xml = $this->generateXml($rule);
-        
-        Log::info("Automated Announcement - Starting Aviavox transmission", [
+
+        LogHelper::announcementInfo('Automated Announcement - Starting Aviavox transmission', [
             'rule_id' => $rule->id,
             'rule_name' => $rule->name,
-            'aviavox_server' => $settings->ip_address . ':' . $settings->port,
+            'aviavox_server' => $settings->ip_address.':'.$settings->port,
             'template_id' => $rule->aviavox_template_id,
             'zone' => $rule->zone,
-            'xml_to_send' => $xml
+            'xml_to_send' => $xml,
         ]);
-        
+
         // Connect to Aviavox server using the same method as existing system
         $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 30);
-        if (!$socket) {
+        if (! $socket) {
             throw new \Exception("Failed to connect to Aviavox: $errstr ($errno)");
         }
 
         try {
             // Authentication flow (same as existing system)
             // Step 1: Send challenge request
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            Log::debug("Automated Announcement - Sending challenge request", [
+            $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
+            LogHelper::announcementDebug('Automated Announcement - Sending challenge request', [
                 'rule_id' => $rule->id,
-                'challenge_xml' => $challengeRequest
+                'challenge_xml' => $challengeRequest,
             ]);
-            fwrite($socket, chr(2) . $challengeRequest . chr(3));
-            
+            fwrite($socket, chr(2).$challengeRequest.chr(3));
+
             // Step 2: Read challenge response
             $response = fread($socket, 1024);
-            Log::debug("Automated Announcement - Received challenge response", [
+            LogHelper::announcementDebug('Automated Announcement - Received challenge response', [
                 'rule_id' => $rule->id,
-                'challenge_response' => $response
+                'challenge_response' => $response,
             ]);
-            
+
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
-            
-            if (!$challenge) {
-                Log::error("Automated Announcement - Invalid challenge received", [
+
+            if (! $challenge) {
+                LogHelper::announcementError('Automated Announcement - Invalid challenge received', [
                     'rule_id' => $rule->id,
-                    'response' => $response
+                    'response' => $response,
                 ]);
                 throw new \Exception('Invalid challenge received from Aviavox');
             }
@@ -183,59 +183,59 @@ class ProcessAutomatedAnnouncements extends Command
             $password = $settings->password;
             $passwordLength = strlen($password);
             $salt = $passwordLength ^ $challenge;
-            $saltedPassword = $password . $salt . strrev($password);
+            $saltedPassword = $password.$salt.strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
-            
-            Log::debug("Automated Announcement - Authentication details", [
+
+            LogHelper::announcementDebug('Automated Announcement - Authentication details', [
                 'rule_id' => $rule->id,
                 'username' => $settings->username,
                 'challenge' => $challenge,
                 'password_length' => $passwordLength,
-                'salt' => $salt
+                'salt' => $salt,
             ]);
 
             // Step 4: Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            Log::debug("Automated Announcement - Sending auth request", [
+            LogHelper::announcementDebug('Automated Announcement - Sending auth request', [
                 'rule_id' => $rule->id,
-                'auth_xml' => $authRequest
+                'auth_xml' => $authRequest,
             ]);
-            fwrite($socket, chr(2) . $authRequest . chr(3));
+            fwrite($socket, chr(2).$authRequest.chr(3));
 
             // Step 5: Read authentication response
             $authResponse = fread($socket, 1024);
-            Log::debug("Automated Announcement - Received auth response", [
+            LogHelper::announcementDebug('Automated Announcement - Received auth response', [
                 'rule_id' => $rule->id,
-                'auth_response' => $authResponse
+                'auth_response' => $authResponse,
             ]);
 
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
-                Log::error("Automated Announcement - Authentication failed", [
+                LogHelper::announcementError('Automated Announcement - Authentication failed', [
                     'rule_id' => $rule->id,
-                    'auth_response' => $authResponse
+                    'auth_response' => $authResponse,
                 ]);
                 throw new \Exception('Authentication failed');
             }
 
             // Step 6: Send the announcement
-            Log::info("Automated Announcement - Sending announcement XML to Aviavox", [
+            LogHelper::announcementInfo('Automated Announcement - Sending announcement XML to Aviavox', [
                 'rule_id' => $rule->id,
-                'final_xml' => $xml
+                'final_xml' => $xml,
             ]);
-            fwrite($socket, chr(2) . $xml . chr(3));
-            
+            fwrite($socket, chr(2).$xml.chr(3));
+
             // Step 7: Read final response
             $finalResponse = fread($socket, 1024);
-            Log::info("Automated Announcement - Received final response from Aviavox", [
+            LogHelper::announcementInfo('Automated Announcement - Received final response from Aviavox', [
                 'rule_id' => $rule->id,
                 'final_response' => $finalResponse,
-                'xml_sent' => $xml
+                'xml_sent' => $xml,
             ]);
 
         } finally {
             fclose($socket);
-            Log::debug("Automated Announcement - Connection closed", [
-                'rule_id' => $rule->id
+            LogHelper::announcementDebug('Automated Announcement - Connection closed', [
+                'rule_id' => $rule->id,
             ]);
         }
     }
@@ -246,25 +246,25 @@ class ProcessAutomatedAnnouncements extends Command
     private function generateXml(AutomatedAnnouncementRule $rule): string
     {
         $template = $rule->aviavoxTemplate;
-        
+
         // Build XML dynamically like the manual announcement system
-        $xml = "<AIP>";
-        $xml .= "<MessageID>AnnouncementTriggerRequest</MessageID>";
-        $xml .= "<MessageData>";
-        $xml .= "<AnnouncementData>";
-        $xml .= '<Item ID="MessageName" Value="' . htmlspecialchars($template->name) . '"/>';
+        $xml = '<AIP>';
+        $xml .= '<MessageID>AnnouncementTriggerRequest</MessageID>';
+        $xml .= '<MessageData>';
+        $xml .= '<AnnouncementData>';
+        $xml .= '<Item ID="MessageName" Value="'.htmlspecialchars($template->name).'"/>';
 
         // Process template variables
         if ($template->variables && is_array($template->variables)) {
             foreach ($template->variables as $id => $type) {
                 $value = $this->getVariableValueForAutomated($id, $type, $rule);
-                $xml .= '<Item ID="' . htmlspecialchars($id) . '" Value="' . htmlspecialchars($value) . '"/>';
+                $xml .= '<Item ID="'.htmlspecialchars($id).'" Value="'.htmlspecialchars($value).'"/>';
             }
         }
 
-        $xml .= "</AnnouncementData>";
-        $xml .= "</MessageData>";
-        $xml .= "</AIP>";
+        $xml .= '</AnnouncementData>';
+        $xml .= '</MessageData>';
+        $xml .= '</AIP>';
 
         return $xml;
     }
@@ -275,7 +275,7 @@ class ProcessAutomatedAnnouncements extends Command
     private function getVariableValueForAutomated($id, $type, AutomatedAnnouncementRule $rule): string
     {
         $ruleVariables = $rule->template_variables ?? [];
-        
+
         switch ($type) {
             case 'zone':
                 return $rule->zone;

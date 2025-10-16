@@ -2,29 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\GtfsSetting;
 use App\Models\Group;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
-use ZipArchive;
-use Illuminate\Support\Facades\Log;
-use App\Models\GtfsTrip;
-use Illuminate\Support\Facades\DB;
 use App\Models\GtfsCalendarDate;
 use App\Models\GtfsRoute;
-use App\Models\GtfsStopTime;
+use App\Models\GtfsSetting;
 use App\Models\GtfsStop;
-use App\Models\GtfsHeartbeat;
-use Illuminate\Support\Facades\Auth;
-use App\Jobs\DownloadAndProcessGtfs;
+use App\Models\GtfsStopTime;
+use App\Models\GtfsTrip;
 use App\Models\StopStatus;
 use App\Models\TrainStatus;
+use App\Services\LogHelper;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class GtfsController extends Controller
 {
-
     public function index()
     {
         $gtfsSettings = GtfsSetting::first();
@@ -38,7 +32,7 @@ class GtfsController extends Controller
         $validated = $request->validate([
             'url' => 'required|url',
             'realtime_url' => 'nullable|url',
-            'realtime_update_interval' => 'nullable|integer|min:10|max:300'
+            'realtime_update_interval' => 'nullable|integer|min:10|max:300',
         ]);
 
         $gtfsSettings = GtfsSetting::firstOrNew();
@@ -53,23 +47,23 @@ class GtfsController extends Controller
     public function download()
     {
         $gtfsSettings = GtfsSetting::first();
-        
-        if (!$gtfsSettings) {
+
+        if (! $gtfsSettings) {
             return response()->json(['error' => 'GTFS settings not found'], 404);
         }
 
         // Check if download has been stuck for more than 1 hour
         if ($gtfsSettings->is_downloading) {
             $elapsedTime = $gtfsSettings->download_started_at->diffInSeconds(now());
-            
+
             // If stuck for more than 1 hour, reset the state
             if ($elapsedTime > 3600) {
-                Log::warning('GTFS download appears stuck, resetting state', [
+                LogHelper::gtfsDebug('GTFS download appears stuck, resetting state', [
                     'elapsed_time' => $elapsedTime,
                     'started_at' => $gtfsSettings->download_started_at,
-                    'progress' => $gtfsSettings->download_progress
+                    'progress' => $gtfsSettings->download_progress,
                 ]);
-                
+
                 $gtfsSettings->is_downloading = false;
                 $gtfsSettings->download_progress = 0;
                 $gtfsSettings->download_status = null;
@@ -78,7 +72,7 @@ class GtfsController extends Controller
                 return response()->json([
                     'status' => 'in_progress',
                     'elapsed_time' => $elapsedTime,
-                    'progress' => $gtfsSettings->download_progress ?? 0
+                    'progress' => $gtfsSettings->download_progress ?? 0,
                 ]);
             }
         }
@@ -91,7 +85,7 @@ class GtfsController extends Controller
         $gtfsSettings->save();
 
         // Dispatch the download job
-        dispatch(new \App\Jobs\DownloadAndProcessGtfs());
+        dispatch(new \App\Jobs\DownloadAndProcessGtfs);
 
         return response()->json(['status' => 'started']);
     }
@@ -99,8 +93,8 @@ class GtfsController extends Controller
     public function resetDownload()
     {
         $gtfsSettings = GtfsSetting::first();
-        
-        if (!$gtfsSettings) {
+
+        if (! $gtfsSettings) {
             return response()->json(['error' => 'GTFS settings not found'], 404);
         }
 
@@ -109,7 +103,7 @@ class GtfsController extends Controller
         $gtfsSettings->download_status = null;
         $gtfsSettings->save();
 
-        Log::info('GTFS download state manually reset');
+        LogHelper::gtfsInfo('GTFS download state manually reset');
 
         return response()->json(['status' => 'reset', 'message' => 'Download state has been reset']);
     }
@@ -117,8 +111,8 @@ class GtfsController extends Controller
     public function progress()
     {
         $gtfsSettings = GtfsSetting::first();
-        
-        if (!$gtfsSettings) {
+
+        if (! $gtfsSettings) {
             return response()->json(['error' => 'GTFS settings not found'], 404);
         }
 
@@ -127,25 +121,26 @@ class GtfsController extends Controller
             'progress' => $gtfsSettings->download_progress ?? 0,
             'status' => $gtfsSettings->download_status,
             'started_at' => $gtfsSettings->download_started_at?->format('Y-m-d H:i:s'),
-            'elapsed_time' => $gtfsSettings->download_started_at ? $gtfsSettings->download_started_at->diffInSeconds(now()) : 0
+            'elapsed_time' => $gtfsSettings->download_started_at ? $gtfsSettings->download_started_at->diffInSeconds(now()) : 0,
         ]);
     }
 
     public function clear()
     {
         $gtfsSettings = GtfsSetting::first();
-        
-        if (!$gtfsSettings) {
+
+        if (! $gtfsSettings) {
             error_log('GTFS settings not found');
+
             return redirect()->route('settings.gtfs')->with('error', 'GTFS settings not found.');
         }
 
         try {
             error_log('Starting GTFS data clear');
-            
+
             // Disable foreign key checks
             DB::statement('SET FOREIGN_KEY_CHECKS=0');
-            
+
             // Clear tables using query builder
             $tables = [
                 'gtfs_stop_times',
@@ -154,7 +149,7 @@ class GtfsController extends Controller
                 'gtfs_stops',
                 'gtfs_calendar_dates',
                 'stop_statuses',
-                'train_statuses'
+                'train_statuses',
             ];
 
             foreach ($tables as $table) {
@@ -164,14 +159,14 @@ class GtfsController extends Controller
                         // Get count before clearing
                         $count = DB::table($table)->count();
                         error_log("Table {$table} has {$count} records before clearing");
-                        
+
                         // Clear the table
                         DB::table($table)->truncate();
-                        
+
                         // Verify it's empty
                         $newCount = DB::table($table)->count();
                         error_log("Table {$table} has {$newCount} records after clearing");
-                        
+
                         if ($newCount > 0) {
                             throw new \Exception("Table {$table} still has {$newCount} records after truncate");
                         }
@@ -179,7 +174,7 @@ class GtfsController extends Controller
                         throw new \Exception("Table {$table} does not exist");
                     }
                 } catch (\Exception $e) {
-                    error_log("Error clearing table {$table}: " . $e->getMessage());
+                    error_log("Error clearing table {$table}: ".$e->getMessage());
                     throw $e;
                 }
             }
@@ -197,23 +192,26 @@ class GtfsController extends Controller
             $gtfsSettings->save();
 
             error_log('GTFS data cleared successfully');
+
             return redirect()->route('settings.gtfs')->with('success', 'GTFS data cleared successfully.');
         } catch (\Exception $e) {
             // Re-enable foreign key checks in case of error
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            
-            $error = 'Failed to clear GTFS data: ' . $e->getMessage();
+
+            $error = 'Failed to clear GTFS data: '.$e->getMessage();
             error_log($error);
+
             return redirect()->route('settings.gtfs')->with('error', $error);
         }
     }
 
-    private function removeDirectory($path) {
-        if (!file_exists($path)) {
+    private function removeDirectory($path)
+    {
+        if (! file_exists($path)) {
             return;
         }
 
-        $files = glob($path . '/*');
+        $files = glob($path.'/*');
         foreach ($files as $file) {
             if (is_dir($file)) {
                 $this->removeDirectory($file);
@@ -224,24 +222,24 @@ class GtfsController extends Controller
         rmdir($path);
     }
 
-    public function syncTripsData($extractPath) 
+    public function syncTripsData($extractPath)
     {
-        $tripsFile = $extractPath . '/trips.txt';
-        if (!file_exists($tripsFile)) {
+        $tripsFile = $extractPath.'/trips.txt';
+        if (! file_exists($tripsFile)) {
             throw new \Exception('trips.txt not found in GTFS data');
         }
 
-        Log::info('Starting GTFS trips sync');
+        LogHelper::gtfsInfo('Starting GTFS trips sync');
 
         // Read trips.txt file
         $file = fopen($tripsFile, 'r');
-        if (!$file) {
+        if (! $file) {
             throw new \Exception('Unable to open trips.txt');
         }
 
         // Read headers
         $headers = fgetcsv($file);
-        if (!$headers) {
+        if (! $headers) {
             throw new \Exception('Unable to read trips.txt headers');
         }
 
@@ -255,7 +253,7 @@ class GtfsController extends Controller
             $unchanged = 0;
 
             // Process each line
-            while (($data = fgetcsv($file)) !== FALSE) {
+            while (($data = fgetcsv($file)) !== false) {
                 $tripData = array_combine($headers, $data);
                 $tripId = $tripData['trip_id'];
                 $processedTripIds[] = $tripId;
@@ -267,16 +265,16 @@ class GtfsController extends Controller
                     'trip_id' => $tripId,
                     'trip_headsign' => $tripData['trip_headsign'],
                     'trip_short_name' => $tripData['trip_short_name'],
-                    'direction_id' => (int)$tripData['direction_id'],
+                    'direction_id' => (int) $tripData['direction_id'],
                     'shape_id' => $tripData['shape_id'],
-                    'wheelchair_accessible' => (bool)$tripData['wheelchair_accessible'],
-                    'updated_at' => now()
+                    'wheelchair_accessible' => (bool) $tripData['wheelchair_accessible'],
+                    'updated_at' => now(),
                 ];
 
                 // Check if trip exists and if it needs updating
                 $existingTrip = GtfsTrip::where('trip_id', $tripId)->first();
-                
-                if (!$existingTrip) {
+
+                if (! $existingTrip) {
                     // Create new trip
                     GtfsTrip::create($formattedData);
                     $created++;
@@ -284,7 +282,7 @@ class GtfsController extends Controller
                     // Check if data is different
                     $needsUpdate = false;
                     foreach ($formattedData as $key => $value) {
-                        if ($existingTrip->$key != $value && $key !== 'updated_at') {
+                        if ($value != $existingTrip->$key && $key !== 'updated_at') {
                             $needsUpdate = true;
                             break;
                         }
@@ -304,11 +302,11 @@ class GtfsController extends Controller
 
             DB::commit();
 
-            Log::info('GTFS trips sync completed', [
+            LogHelper::gtfsInfo('GTFS trips sync completed', [
                 'created' => $created,
                 'updated' => $updated,
                 'unchanged' => $unchanged,
-                'deleted' => $deleted
+                'deleted' => $deleted,
             ]);
 
         } catch (\Exception $e) {
@@ -319,38 +317,38 @@ class GtfsController extends Controller
         }
     }
 
-    public function syncCalendarDatesData($extractPath) 
+    public function syncCalendarDatesData($extractPath)
     {
-        $calendarDatesFile = $extractPath . '/calendar_dates.txt';
-        if (!file_exists($calendarDatesFile)) {
+        $calendarDatesFile = $extractPath.'/calendar_dates.txt';
+        if (! file_exists($calendarDatesFile)) {
             throw new \Exception('calendar_dates.txt not found in GTFS data');
         }
 
-        Log::info('Starting GTFS calendar dates sync');
-        
+        LogHelper::gtfsInfo('Starting GTFS calendar dates sync');
+
         $file = fopen($calendarDatesFile, 'r');
-        if (!$file) {
+        if (! $file) {
             throw new \Exception('Unable to open calendar_dates.txt');
         }
 
         try {
             $headers = fgetcsv($file);
-            if (!$headers) {
+            if (! $headers) {
                 throw new \Exception('Unable to read calendar_dates.txt headers');
             }
 
             DB::beginTransaction();
-            
+
             // Use delete instead of truncate to avoid implicit commit
             GtfsCalendarDate::query()->delete();
-            
+
             $created = 0;
             $batch = [];
             $batchSize = 1000;
 
-            while (($data = fgetcsv($file)) !== FALSE) {
+            while (($data = fgetcsv($file)) !== false) {
                 $calendarData = array_combine($headers, $data);
-                
+
                 // Convert YYYYMMDD to Y-m-d format
                 $dateString = $calendarData['date'];
                 $year = substr($dateString, 0, 4);
@@ -361,11 +359,11 @@ class GtfsController extends Controller
                 $batch[] = [
                     'service_id' => $calendarData['service_id'],
                     'date' => $formattedDate,
-                    'exception_type' => (int)$calendarData['exception_type'],
+                    'exception_type' => (int) $calendarData['exception_type'],
                     'created_at' => now(),
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ];
-                
+
                 $created++;
 
                 if (count($batch) >= $batchSize) {
@@ -375,14 +373,14 @@ class GtfsController extends Controller
             }
 
             // Insert any remaining records
-            if (!empty($batch)) {
+            if (! empty($batch)) {
                 GtfsCalendarDate::insert($batch);
             }
 
             DB::commit();
-            
-            Log::info('GTFS calendar dates sync completed', [
-                'created' => $created
+
+            LogHelper::gtfsInfo('GTFS calendar dates sync completed', [
+                'created' => $created,
             ]);
 
         } catch (\Exception $e) {
@@ -395,24 +393,24 @@ class GtfsController extends Controller
         }
     }
 
-    public function syncRoutesData($extractPath) 
+    public function syncRoutesData($extractPath)
     {
-        $routesFile = $extractPath . '/routes.txt';
-        if (!file_exists($routesFile)) {
+        $routesFile = $extractPath.'/routes.txt';
+        if (! file_exists($routesFile)) {
             throw new \Exception('routes.txt not found in GTFS data');
         }
 
-        Log::info('Starting GTFS routes sync');
+        LogHelper::gtfsInfo('Starting GTFS routes sync');
 
         // Read routes.txt file
         $file = fopen($routesFile, 'r');
-        if (!$file) {
+        if (! $file) {
             throw new \Exception('Unable to open routes.txt');
         }
 
         // Read headers
         $headers = fgetcsv($file);
-        if (!$headers) {
+        if (! $headers) {
             throw new \Exception('Unable to read routes.txt headers');
         }
 
@@ -426,7 +424,7 @@ class GtfsController extends Controller
             $unchanged = 0;
 
             // Process each line
-            while (($data = fgetcsv($file)) !== FALSE) {
+            while (($data = fgetcsv($file)) !== false) {
                 $routeData = array_combine($headers, $data);
                 $routeId = $routeData['route_id'];
                 $processedRouteIds[] = $routeId;
@@ -437,16 +435,16 @@ class GtfsController extends Controller
                     'agency_id' => $routeData['agency_id'],
                     'route_short_name' => $routeData['route_short_name'],
                     'route_long_name' => $routeData['route_long_name'],
-                    'route_type' => (int)$routeData['route_type'],
+                    'route_type' => (int) $routeData['route_type'],
                     'route_color' => $routeData['route_color'] ?? null,
                     'route_text_color' => $routeData['route_text_color'] ?? null,
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ];
 
                 // Check if route exists and if it needs updating
                 $existingRoute = GtfsRoute::where('route_id', $routeId)->first();
-                
-                if (!$existingRoute) {
+
+                if (! $existingRoute) {
                     // Create new route
                     GtfsRoute::create($formattedData);
                     $created++;
@@ -454,7 +452,7 @@ class GtfsController extends Controller
                     // Check if data is different
                     $needsUpdate = false;
                     foreach ($formattedData as $key => $value) {
-                        if ($existingRoute->$key != $value && $key !== 'updated_at') {
+                        if ($value != $existingRoute->$key && $key !== 'updated_at') {
                             $needsUpdate = true;
                             break;
                         }
@@ -474,11 +472,11 @@ class GtfsController extends Controller
 
             DB::commit();
 
-            Log::info('GTFS routes sync completed', [
+            LogHelper::gtfsInfo('GTFS routes sync completed', [
                 'created' => $created,
                 'updated' => $updated,
                 'unchanged' => $unchanged,
-                'deleted' => $deleted
+                'deleted' => $deleted,
             ]);
 
         } catch (\Exception $e) {
@@ -491,20 +489,21 @@ class GtfsController extends Controller
 
     public function syncStopTimesData($extractPath)
     {
-        $filePath = $extractPath . '/stop_times.txt';
-        if (!file_exists($filePath)) {
+        $filePath = $extractPath.'/stop_times.txt';
+        if (! file_exists($filePath)) {
             return;
         }
 
         $handle = fopen($filePath, 'r');
-        if (!$handle) {
+        if (! $handle) {
             return;
         }
 
         // Read header
         $header = fgetcsv($handle);
-        if (!$header) {
+        if (! $header) {
             fclose($handle);
+
             return;
         }
 
@@ -515,7 +514,7 @@ class GtfsController extends Controller
         $batch = [];
         $processedStopStatuses = [];
 
-        while (($data = fgetcsv($handle)) !== FALSE) {
+        while (($data = fgetcsv($handle)) !== false) {
             $stopTime = [
                 'trip_id' => $data[$columns['trip_id']],
                 'arrival_time' => $data[$columns['arrival_time']],
@@ -531,8 +530,8 @@ class GtfsController extends Controller
             $batch[] = $stopTime;
 
             // Create or update stop status
-            $stopStatusKey = $data[$columns['trip_id']] . '-' . $data[$columns['stop_id']];
-            if (!in_array($stopStatusKey, $processedStopStatuses)) {
+            $stopStatusKey = $data[$columns['trip_id']].'-'.$data[$columns['stop_id']];
+            if (! in_array($stopStatusKey, $processedStopStatuses)) {
                 StopStatus::updateOrCreate(
                     [
                         'trip_id' => $data[$columns['trip_id']],
@@ -558,7 +557,7 @@ class GtfsController extends Controller
             }
         }
 
-        if (!empty($batch)) {
+        if (! empty($batch)) {
             GtfsStopTime::insert($batch);
         }
 
@@ -583,6 +582,7 @@ class GtfsController extends Controller
         foreach ($rgbArray as $component) {
             $hex .= str_pad(dechex(trim($component)), 2, '0', STR_PAD_LEFT);
         }
+
         return strtoupper($hex);
     }
 
@@ -596,14 +596,14 @@ class GtfsController extends Controller
             'actual_departure_time' => 'nullable|date_format:H:i:s',
             'platform_code' => 'nullable|string',
             'departure_platform' => 'nullable|string',
-            'arrival_platform' => 'nullable|string'
+            'arrival_platform' => 'nullable|string',
         ]);
 
         DB::beginTransaction();
         try {
             // Get the status object to retrieve color information
             $statusObj = \App\Models\Status::where('status', $request->status)->first();
-            
+
             $stopStatus = StopStatus::updateOrCreate(
                 [
                     'trip_id' => $request->trip_id,
@@ -628,19 +628,19 @@ class GtfsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $stopStatus
+                'data' => $stopStatus,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to update stop status', [
+            LogHelper::gtfsError('Failed to update stop status', [
                 'trip_id' => $request->trip_id,
                 'stop_id' => $request->stop_id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to update stop status'
+                'error' => 'Failed to update stop status',
             ], 500);
         }
     }
@@ -654,28 +654,28 @@ class GtfsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $stopStatuses
+            'data' => $stopStatuses,
         ]);
     }
 
-    public function syncStopsData($extractPath) 
+    public function syncStopsData($extractPath)
     {
-        $stopsFile = $extractPath . '/stops.txt';
-        if (!file_exists($stopsFile)) {
+        $stopsFile = $extractPath.'/stops.txt';
+        if (! file_exists($stopsFile)) {
             throw new \Exception('stops.txt not found in GTFS data');
         }
 
-        Log::info('Starting GTFS stops sync');
+        LogHelper::gtfsInfo('Starting GTFS stops sync');
 
         // Read stops.txt file
         $file = fopen($stopsFile, 'r');
-        if (!$file) {
+        if (! $file) {
             throw new \Exception('Unable to open stops.txt');
         }
 
         // Read headers
         $headers = fgetcsv($file);
-        if (!$headers) {
+        if (! $headers) {
             throw new \Exception('Unable to read stops.txt headers');
         }
 
@@ -689,7 +689,7 @@ class GtfsController extends Controller
             $unchanged = 0;
 
             // Process each line
-            while (($data = fgetcsv($file)) !== FALSE) {
+            while (($data = fgetcsv($file)) !== false) {
                 $stopData = array_combine($headers, $data);
                 $stopId = $stopData['stop_id'];
                 $processedStopIds[] = $stopId;
@@ -699,18 +699,18 @@ class GtfsController extends Controller
                     'stop_id' => $stopId,
                     'stop_code' => $stopData['stop_code'] ?: null,
                     'stop_name' => $stopData['stop_name'],
-                    'stop_lon' => (float)$stopData['stop_lon'],
-                    'stop_lat' => (float)$stopData['stop_lat'],
+                    'stop_lon' => (float) $stopData['stop_lon'],
+                    'stop_lat' => (float) $stopData['stop_lat'],
                     'stop_timezone' => $stopData['stop_timezone'] ?: null,
-                    'location_type' => (int)($stopData['location_type'] ?? 0),
+                    'location_type' => (int) ($stopData['location_type'] ?? 0),
                     'platform_code' => $stopData['platform_code'] ?? null,
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ];
 
                 // Check if stop exists and if it needs updating
                 $existingStop = GtfsStop::where('stop_id', $stopId)->first();
-                
-                if (!$existingStop) {
+
+                if (! $existingStop) {
                     // Create new stop
                     GtfsStop::create($formattedData);
                     $created++;
@@ -718,7 +718,7 @@ class GtfsController extends Controller
                     // Check if data is different
                     $needsUpdate = false;
                     foreach ($formattedData as $key => $value) {
-                        if ($existingStop->$key != $value && $key !== 'updated_at') {
+                        if ($value != $existingStop->$key && $key !== 'updated_at') {
                             $needsUpdate = true;
                             break;
                         }
@@ -738,11 +738,11 @@ class GtfsController extends Controller
 
             DB::commit();
 
-            Log::info('GTFS stops sync completed', [
+            LogHelper::gtfsInfo('GTFS stops sync completed', [
                 'created' => $created,
                 'updated' => $updated,
                 'unchanged' => $unchanged,
-                'deleted' => $deleted
+                'deleted' => $deleted,
             ]);
 
         } catch (\Exception $e) {
@@ -757,8 +757,8 @@ class GtfsController extends Controller
     {
         // Handle times that might go beyond 24 hours
         $parts = explode(':', $time);
-        $hours = (int)$parts[0];
-        
+        $hours = (int) $parts[0];
+
         // If hours are greater than 23, adjust to fit within 24-hour format
         // This might not be ideal for all use cases, but prevents database errors
         if ($hours > 23) {
@@ -766,7 +766,7 @@ class GtfsController extends Controller
             $parts[0] = str_pad($hours, 2, '0', STR_PAD_LEFT);
             $time = implode(':', $parts);
         }
-        
+
         return $time;
     }
 
@@ -774,14 +774,14 @@ class GtfsController extends Controller
     {
         $request->validate([
             'trip_id' => 'required|string',
-            'status' => 'required|string'
+            'status' => 'required|string',
         ]);
 
         DB::beginTransaction();
         try {
             // Get the status object to retrieve color information
             $statusObj = \App\Models\Status::where('status', $request->status)->first();
-            
+
             $trainStatus = TrainStatus::updateOrCreate(
                 ['trip_id' => $request->trip_id],
                 ['status' => $request->status]
@@ -801,18 +801,18 @@ class GtfsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $trainStatus
+                'data' => $trainStatus,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to update train status', [
+            LogHelper::gtfsError('Failed to update train status', [
                 'trip_id' => $request->trip_id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to update train status'
+                'error' => 'Failed to update train status',
             ], 500);
         }
     }
@@ -823,63 +823,62 @@ class GtfsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $trainStatus
+            'data' => $trainStatus,
         ]);
     }
 
     public function testRealtime()
     {
         $gtfsSettings = GtfsSetting::first();
-        
-        if (!$gtfsSettings || !$gtfsSettings->realtime_url) {
+
+        if (! $gtfsSettings || ! $gtfsSettings->realtime_url) {
             return response()->json([
                 'success' => false,
-                'message' => 'No realtime URL configured'
+                'message' => 'No realtime URL configured',
             ], 400);
         }
 
         try {
             $response = Http::timeout(30)->get($gtfsSettings->realtime_url);
-            
-            if (!$response->successful()) {
+
+            if (! $response->successful()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to fetch realtime data: HTTP ' . $response->status()
+                    'message' => 'Failed to fetch realtime data: HTTP '.$response->status(),
                 ], 400);
             }
 
             $data = $response->json();
-            
-            if (!isset($data['entity'])) {
+
+            if (! isset($data['entity'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid GTFS realtime format: missing entity array'
+                    'message' => 'Invalid GTFS realtime format: missing entity array',
                 ], 400);
             }
 
             $entitiesCount = count($data['entity']);
-            
+
             // Update the last realtime update timestamp
             $gtfsSettings->last_realtime_update = now();
-            $gtfsSettings->realtime_status = 'Connected - ' . $entitiesCount . ' entities';
+            $gtfsSettings->realtime_status = 'Connected - '.$entitiesCount.' entities';
             $gtfsSettings->save();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Realtime feed test successful',
-                'entities_count' => $entitiesCount
+                'entities_count' => $entitiesCount,
             ]);
 
         } catch (\Exception $e) {
             // Update status with error
-            $gtfsSettings->realtime_status = 'Error: ' . $e->getMessage();
+            $gtfsSettings->realtime_status = 'Error: '.$e->getMessage();
             $gtfsSettings->save();
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to test realtime feed: ' . $e->getMessage()
+                'message' => 'Failed to test realtime feed: '.$e->getMessage(),
             ], 500);
         }
     }
-
 }

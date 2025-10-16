@@ -3,64 +3,77 @@
 namespace App\Livewire;
 
 use App\Models\Announcement;
-use App\Models\AviavoxAnnouncement;
 use App\Models\AviavoxSetting;
 use App\Models\AviavoxTemplate;
-use App\Models\Zone;
-use App\Models\GtfsTrip;
-use App\Models\PendingAnnouncement;
-use App\Models\Reason;
 use App\Models\Group;
-use Livewire\Component;
-use Illuminate\Support\Facades\Log;
+use App\Models\GtfsTrip;
+use App\Models\Reason;
+use App\Models\Zone;
+use App\Services\LogHelper;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Livewire\Component;
 
 class CreateAnnouncement extends Component
 {
     public $type = 'audio';
+
     public $selectedAnnouncement = '';
+
     public $variables = [];
+
     public $zones;
+
     public $trains = [];
+
     public $selectedZone = '';
+
     public $selectedTrain = '';
+
     public $scheduledTime = '';
+
     public $selectedRoute = '';
+
     public $textInput = '';
+
     public $selectedReason = '';
+
     public $templates = [];
+
     public $reasons = [];
+
     public $group = null;
+
     public $selectedStations = [];
 
-    public function mount(Group $group = null)
+    public function mount(?Group $group = null)
     {
         $this->group = $group;
         $this->zones = Zone::orderBy('value')->get();
         $this->reasons = Reason::orderBy('code')->get();
-        
+
         // Load selected stations if we have a group
         if ($this->group) {
             $this->loadSelectedStations();
         }
-        
+
         $this->loadTrains();
         $this->templates = AviavoxTemplate::all()->mapWithKeys(function ($template) {
             return [$template->name => [
                 'friendly_name' => $template->friendly_name ?? $template->name,
                 'variables' => $template->variables,
-                'xml_template' => $template->xml_template
+                'xml_template' => $template->xml_template,
             ]];
         })->toArray();
     }
 
     public function loadSelectedStations()
     {
-        if (!$this->group) {
+        if (! $this->group) {
             $this->selectedStations = [];
+
             return;
         }
 
@@ -76,15 +89,16 @@ class CreateAnnouncement extends Component
 
     private function loadTrains()
     {
-        if (!$this->group) {
+        if (! $this->group) {
             // Fallback to original logic if no group (for backwards compatibility)
             $this->loadTrainsOriginal();
+
             return;
         }
 
         // Create a cache key based on group and current time (rounded to nearest minute)
-        $cacheKey = "create_announcement_trains_group_{$this->group->id}_" . now()->format('Y-m-d_H:i');
-        
+        $cacheKey = "create_announcement_trains_group_{$this->group->id}_".now()->format('Y-m-d_H:i');
+
         // Cache the expensive query result for 5 minutes
         $this->trains = Cache::remember($cacheKey, now()->addMinutes(5), function () {
             return $this->getTrainsData();
@@ -122,7 +136,7 @@ class CreateAnnouncement extends Component
                     'gtfs_trips.trip_id',
                     'gtfs_trips.route_id',
                     'gtfs_trips.trip_short_name',
-                    'gtfs_trips.trip_headsign'
+                    'gtfs_trips.trip_headsign',
                 ])
                 ->whereIn('gtfs_trips.route_id', $selectedRoutes)
                 ->whereExists(function ($query) {
@@ -153,7 +167,7 @@ class CreateAnnouncement extends Component
                     ->whereIn('gtfs_stop_times.stop_id', $this->selectedStations[$uniqueTrip->route_id] ?? [])
                     ->exists();
 
-                if (!$hasValidStops) {
+                if (! $hasValidStops) {
                     continue;
                 }
 
@@ -167,12 +181,12 @@ class CreateAnnouncement extends Component
                 if ($firstStop) {
                     // Use the parsed train number from trip_id
                     $trainNumber = $uniqueTrip->train_number ?? $uniqueTrip->trip_short_name;
-                    
+
                     $trains[] = [
                         'number' => $trainNumber,
                         'trip_id' => $uniqueTrip->trip_id,
                         'departure' => substr($firstStop->departure_time, 0, 5),
-                        'route_id' => $uniqueTrip->route_id
+                        'route_id' => $uniqueTrip->route_id,
                     ];
                 }
             }
@@ -185,10 +199,11 @@ class CreateAnnouncement extends Component
             return array_slice($trains, 0, 6);
 
         } catch (\Exception $e) {
-            Log::error('CreateAnnouncement - Error loading trains:', [
+            LogHelper::announcementError('CreateAnnouncement - Error loading trains:', [
                 'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return [];
         }
     }
@@ -203,7 +218,7 @@ class CreateAnnouncement extends Component
             ->join('gtfs_stop_times', 'gtfs_trips.trip_id', '=', 'gtfs_stop_times.trip_id')
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
             ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
-            ->whereIn('gtfs_trips.route_id', function($query) {
+            ->whereIn('gtfs_trips.route_id', function ($query) {
                 $query->select('route_id')
                     ->from('selected_routes')
                     ->where('is_active', true);
@@ -217,7 +232,7 @@ class CreateAnnouncement extends Component
                 'gtfs_trips.trip_id',
                 'gtfs_stop_times.departure_time as departure',
                 'gtfs_routes.route_long_name',
-                'gtfs_trips.trip_headsign as destination'
+                'gtfs_trips.trip_headsign as destination',
             ])
             ->orderBy('gtfs_stop_times.departure_time')
             ->limit(6)
@@ -230,12 +245,12 @@ class CreateAnnouncement extends Component
                 } elseif (strpos($trainNumber, ' ') !== false) {
                     $trainNumber = explode(' ', $trainNumber)[0];
                 }
-                
+
                 return [
                     'number' => $trainNumber,
                     'departure' => substr($train->departure, 0, 5),
                     'route_name' => $train->route_long_name,
-                    'destination' => $train->destination
+                    'destination' => $train->destination,
                 ];
             })
             ->toArray();
@@ -267,8 +282,7 @@ class CreateAnnouncement extends Component
 
         $xml .= "\t\t</AnnouncementData>\n";
         $xml .= "\t</MessageData>\n";
-        $xml .= "</AIP>";
-
+        $xml .= '</AIP>';
 
         return $xml;
     }
@@ -287,8 +301,10 @@ class CreateAnnouncement extends Component
                     $localTime = Carbon::parse($this->scheduledTime, 'Europe/Amsterdam');
                     // Get the current timezone offset (UTC+1 or UTC+2)
                     $offset = $localTime->format('P'); // This will give us +01:00 or +02:00
-                    return $localTime->format('Y-m-d\TH:i:s') . $offset;
+
+                    return $localTime->format('Y-m-d\TH:i:s').$offset;
                 }
+
                 return '';
             case 'route':
                 return $this->selectedRoute ?? 'GBR_LON'; // Default to London
@@ -303,30 +319,30 @@ class CreateAnnouncement extends Component
 
     public function authenticateAndSendMessage($server, $port, $username, $password, $xml)
     {
-        Log::info("Manual Announcement - Starting Aviavox transmission", [
+        LogHelper::announcementInfo('Manual Announcement - Starting Aviavox transmission', [
             'user_id' => Auth::id(),
             'user_name' => Auth::user()->name,
-            'aviavox_server' => $server . ':' . $port,
+            'aviavox_server' => $server.':'.$port,
             'selected_announcement' => $this->selectedAnnouncement,
             'zone' => $this->selectedZone,
-            'xml_to_send' => $xml
+            'xml_to_send' => $xml,
         ]);
 
         // Step 1: Create a TCP socket to connect to the server
         $socket = fsockopen($server, $port, $errno, $errstr, 30);
-        if (!$socket) {
-            Log::error('Manual Announcement - Failed to create socket', [
+        if (! $socket) {
+            LogHelper::announcementError('Manual Announcement - Failed to create socket', [
                 'user_id' => Auth::id(),
                 'server' => $server,
                 'port' => $port,
-                'error' => "$errstr ($errno)"
+                'error' => "$errstr ($errno)",
             ]);
             throw new \Exception("Failed to connect to server: $errstr ($errno)");
         }
 
-        Log::debug("Manual Announcement - Socket connected successfully", [
+        LogHelper::announcementDebug('Manual Announcement - Socket connected successfully', [
             'user_id' => Auth::id(),
-            'server' => $server . ':' . $port
+            'server' => $server.':'.$port,
         ]);
 
         // Set stream timeout
@@ -334,123 +350,124 @@ class CreateAnnouncement extends Component
 
         try {
             // Step 2: Send AuthenticationChallengeRequest
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            Log::debug("Manual Announcement - Sending challenge request", [
+            $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
+            LogHelper::announcementDebug('Manual Announcement - Sending challenge request', [
                 'user_id' => Auth::id(),
-                'challenge_xml' => $challengeRequest
+                'challenge_xml' => $challengeRequest,
             ]);
-            fwrite($socket, chr(2) . $challengeRequest . chr(3));
+            fwrite($socket, chr(2).$challengeRequest.chr(3));
 
             // Step 3: Read AuthenticationChallengeResponse
             $response = fread($socket, 1024);
             if (stream_get_meta_data($socket)['timed_out']) {
-                Log::error('Manual Announcement - Stream timed out while waiting for AuthenticationChallengeResponse', [
-                    'user_id' => Auth::id()
+                LogHelper::announcementError('Manual Announcement - Stream timed out while waiting for AuthenticationChallengeResponse', [
+                    'user_id' => Auth::id(),
                 ]);
                 throw new \Exception('Stream timed out while waiting for response');
             }
 
-            Log::debug("Manual Announcement - Received challenge response", [
+            LogHelper::announcementDebug('Manual Announcement - Received challenge response', [
                 'user_id' => Auth::id(),
-                'challenge_response' => $response
+                'challenge_response' => $response,
             ]);
 
             // Step 4: Extract challenge from response and generate password hash
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
-            if (!$challenge) {
-                Log::error('Manual Announcement - Invalid challenge received', [
+            if (! $challenge) {
+                LogHelper::announcementError('Manual Announcement - Invalid challenge received', [
                     'user_id' => Auth::id(),
-                    'response' => $response
+                    'response' => $response,
                 ]);
                 throw new \Exception('Invalid challenge received from server');
             }
 
             $passwordLength = strlen($password);
             $salt = $passwordLength ^ $challenge;
-            $saltedPassword = $password . $salt . strrev($password);
+            $saltedPassword = $password.$salt.strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
 
-            Log::debug("Manual Announcement - Authentication details", [
+            LogHelper::announcementDebug('Manual Announcement - Authentication details', [
                 'user_id' => Auth::id(),
                 'username' => $username,
                 'challenge' => $challenge,
                 'password_length' => $passwordLength,
-                'salt' => $salt
+                'salt' => $salt,
             ]);
 
             // Step 5: Send AuthenticationRequest
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            Log::debug("Manual Announcement - Sending auth request", [
+            LogHelper::announcementDebug('Manual Announcement - Sending auth request', [
                 'user_id' => Auth::id(),
-                'auth_xml' => $authRequest
+                'auth_xml' => $authRequest,
             ]);
-            fwrite($socket, chr(2) . $authRequest . chr(3));
+            fwrite($socket, chr(2).$authRequest.chr(3));
 
             // Step 5: Read AuthenticationResponse
             $authResponse = fread($socket, 1024);
             if (stream_get_meta_data($socket)['timed_out']) {
-                Log::error('Stream timed out while waiting for AuthenticationResponse');
+                LogHelper::announcementError('Stream timed out while waiting for AuthenticationResponse');
                 throw new \Exception('Stream timed out while waiting for response');
             }
 
-            Log::debug("Manual Announcement - Received auth response", [
+            LogHelper::announcementDebug('Manual Announcement - Received auth response', [
                 'user_id' => Auth::id(),
-                'auth_response' => $authResponse
+                'auth_response' => $authResponse,
             ]);
 
-            if (strpos($authResponse, "<Authenticated>1</Authenticated>") === false) {
-                Log::error("Manual Announcement - Authentication failed", [
+            if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
+                LogHelper::announcementError('Manual Announcement - Authentication failed', [
                     'user_id' => Auth::id(),
-                    'auth_response' => $authResponse
+                    'auth_response' => $authResponse,
                 ]);
-                throw new \Exception("Authentication failed.");
+                throw new \Exception('Authentication failed.');
             }
 
-            Log::info("Manual Announcement - Authentication successful, sending announcement", [
-                'user_id' => Auth::id()
+            LogHelper::announcementInfo('Manual Announcement - Authentication successful, sending announcement', [
+                'user_id' => Auth::id(),
             ]);
 
             // Step 7: Send the XML announcement message
-            Log::info("Manual Announcement - Sending announcement XML to Aviavox", [
+            LogHelper::announcementInfo('Manual Announcement - Sending announcement XML to Aviavox', [
                 'user_id' => Auth::id(),
-                'final_xml' => $xml
+                'final_xml' => $xml,
             ]);
-            fwrite($socket, chr(2) . $xml . chr(3));
+            fwrite($socket, chr(2).$xml.chr(3));
 
             // Step 8: Read the final response
             $finalResponse = fread($socket, 1024);
             if (stream_get_meta_data($socket)['timed_out']) {
-                Log::error('Stream timed out while waiting for AnnouncementTriggerResponse');
+                LogHelper::announcementError('Stream timed out while waiting for AnnouncementTriggerResponse');
                 throw new \Exception('Stream timed out while waiting for response');
             }
-            
-            Log::info("Manual Announcement - Received final response from Aviavox", [
+
+            LogHelper::announcementInfo('Manual Announcement - Received final response from Aviavox', [
                 'user_id' => Auth::id(),
                 'final_response' => $finalResponse,
-                'xml_sent' => $xml
+                'xml_sent' => $xml,
             ]);
-            
+
             fclose($socket);
-            
+
         } catch (\Exception $e) {
-            Log::error('Error during AviaVox communication', ['error' => $e->getMessage()]);
-            session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
+            LogHelper::announcementError('Error during AviaVox communication', ['error' => $e->getMessage()]);
+            session()->flash('error', 'Failed to send announcement: '.$e->getMessage());
         }
     }
 
     public function save()
     {
         $settings = AviavoxSetting::first();
-        if (!$settings) {
+        if (! $settings) {
             session()->flash('error', 'Aviavox settings not configured');
+
             return;
         }
 
         try {
             // Generate XML from template
             $xml = $this->generateXml();
-            
+
             // Send the announcement via TCP
             $this->authenticateAndSendMessage(
                 $settings->ip_address,
@@ -481,13 +498,13 @@ class CreateAnnouncement extends Component
             $this->dispatch('announcement-sent');
 
             session()->flash('success', 'Announcement sent successfully');
-            
+
             // Schedule the page refresh to happen after a short delay
             $this->js('setTimeout(() => window.location.reload(), 100)');
 
         } catch (\Exception $e) {
-            Log::error('Failed to send announcement: ' . $e->getMessage());
-            session()->flash('error', 'Failed to send announcement: ' . $e->getMessage());
+            LogHelper::announcementError('Failed to send announcement: '.$e->getMessage());
+            session()->flash('error', 'Failed to send announcement: '.$e->getMessage());
         }
     }
 
@@ -499,6 +516,7 @@ class CreateAnnouncement extends Component
     private function extractChallengeFromResponse($response)
     {
         preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
+
         return $matches[1] ?? null;
     }
 }

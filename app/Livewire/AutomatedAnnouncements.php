@@ -5,33 +5,44 @@ namespace App\Livewire;
 use App\Models\AutomatedAnnouncementRule;
 use App\Models\AviavoxTemplate;
 use App\Models\Zone;
+use App\Services\LogHelper;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Log;
 
 class AutomatedAnnouncements extends Component
 {
     use WithPagination;
 
     public $name = '';
+
     public $startTime = '08:00';
+
     public $endTime = '20:00';
+
     public $intervalMinutes = 40;
+
     public $daysOfWeek = ['1', '2', '3', '4', '5', '6', '7']; // Default to all days
+
     public $selectedTemplate = '';
+
     public $zone = '';
+
     public $templateVariables = [];
+
     public $isActive = true;
+
     public $availableTemplates;
+
     public $zones;
+
     public $dayOptions = [
         '1' => 'Monday',
-        '2' => 'Tuesday', 
+        '2' => 'Tuesday',
         '3' => 'Wednesday',
         '4' => 'Thursday',
         '5' => 'Friday',
         '6' => 'Saturday',
-        '7' => 'Sunday'
+        '7' => 'Sunday',
     ];
 
     protected function rules()
@@ -43,13 +54,13 @@ class AutomatedAnnouncements extends Component
             'intervalMinutes' => 'required|integer|min:1|max:1440', // Max 24 hours
             'daysOfWeek' => 'required|array|min:1',
             'selectedTemplate' => 'required|exists:aviavox_templates,id',
-            'zone' => 'required|string'
+            'zone' => 'required|string',
         ];
 
         // Add template variable validation
         if ($this->selectedTemplate) {
             $template = AviavoxTemplate::find($this->selectedTemplate);
-            if ($template && !empty($template->variables)) {
+            if ($template && ! empty($template->variables)) {
                 foreach ($template->variables as $variable) {
                     if ($variable !== 'zone') {
                         $rules["templateVariables.$variable"] = 'required';
@@ -74,8 +85,8 @@ class AutomatedAnnouncements extends Component
             if ($template) {
                 // Initialize variables with empty values, excluding 'zone'
                 $this->templateVariables = collect($template->variables)
-                    ->filter(fn($var) => $var !== 'zone')
-                    ->mapWithKeys(fn($var) => [$var => ''])
+                    ->filter(fn ($var) => $var !== 'zone')
+                    ->mapWithKeys(fn ($var) => [$var => ''])
                     ->toArray();
             }
         } else {
@@ -97,14 +108,14 @@ class AutomatedAnnouncements extends Component
                 'aviavox_template_id' => $this->selectedTemplate,
                 'zone' => $this->zone,
                 'template_variables' => $this->templateVariables,
-                'is_active' => $this->isActive
+                'is_active' => $this->isActive,
             ]);
 
             $this->reset([
-                'name', 'startTime', 'endTime', 'intervalMinutes', 
-                'selectedTemplate', 'zone', 'templateVariables'
+                'name', 'startTime', 'endTime', 'intervalMinutes',
+                'selectedTemplate', 'zone', 'templateVariables',
             ]);
-            
+
             $this->startTime = '08:00';
             $this->endTime = '20:00';
             $this->intervalMinutes = 40;
@@ -112,10 +123,10 @@ class AutomatedAnnouncements extends Component
             $this->isActive = true;
 
             session()->flash('success', 'Automated announcement rule created successfully.');
-            
+
         } catch (\Exception $e) {
-            Log::error('Error creating automated announcement rule: ' . $e->getMessage());
-            session()->flash('error', 'Failed to create rule: ' . $e->getMessage());
+            LogHelper::announcementError('Error creating automated announcement rule: '.$e->getMessage());
+            session()->flash('error', 'Failed to create rule: '.$e->getMessage());
         }
     }
 
@@ -123,7 +134,7 @@ class AutomatedAnnouncements extends Component
     {
         $rule = AutomatedAnnouncementRule::find($ruleId);
         if ($rule) {
-            $rule->update(['is_active' => !$rule->is_active]);
+            $rule->update(['is_active' => ! $rule->is_active]);
         }
     }
 
@@ -140,7 +151,7 @@ class AutomatedAnnouncements extends Component
             ->paginate(10);
 
         return view('livewire.automated-announcements', [
-            'rules' => $rules
+            'rules' => $rules,
         ]);
     }
 }

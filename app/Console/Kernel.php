@@ -12,12 +12,18 @@ class Kernel extends ConsoleKernel
      *
      * These cron jobs are run in the background by a process manager like Supervisor or Laravel Horizon.
      *
-     * @param  \Illuminate\Console\Scheduling\Schedule  $schedule
      * @return void
      */
     protected function schedule(Schedule $schedule)
     {
-        // Schedules are defined in individual command files
+        // Schedule GTFS Realtime updates based on configured interval
+        $schedule->command('gtfs:fetch-realtime')
+            ->everyThirtySeconds()
+            ->withoutOverlapping()
+            ->runInBackground()
+            ->onFailure(function () {
+                \Log::error('GTFS Realtime command failed');
+            });
     }
 
     /**
@@ -36,4 +42,4 @@ class Kernel extends ConsoleKernel
         Commands\ProcessTrainRules::class,
         Commands\ImportPlatformAssignments::class,
     ];
-} 
+}

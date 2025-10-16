@@ -3,28 +3,32 @@
 namespace App\Livewire;
 
 use App\Models\GtfsTrip;
-use App\Models\Setting;
-use App\Models\SelectedRoute;
-use Livewire\Component;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
+use Livewire\Component;
 
 class TrainTable extends Component
 {
     public $trains = [];
+
     public $selectedRoutes = [];
+
     public $date;
+
     public $time;
+
     public $page = 1;
+
     public $perPage = 8;
+
     public $total = 0;
+
     public $group;
 
     protected $listeners = [
-        'echo:train-statuses,TrainStatusUpdated' => 'handleTrainStatusUpdated'
+        'echo:train-statuses,TrainStatusUpdated' => 'handleTrainStatusUpdated',
     ];
 
     public function handleTrainStatusUpdated($event)
@@ -45,9 +49,10 @@ class TrainTable extends Component
 
     public function loadSelectedRoutes()
     {
-        if (!$this->group) {
+        if (! $this->group) {
             Log::info('TrainTable - No group provided');
             $this->selectedRoutes = [];
+
             return;
         }
 
@@ -69,13 +74,13 @@ class TrainTable extends Component
     public function loadTrains()
     {
         // Create a cache key based on group, page, and current time (rounded to nearest minute)
-        $cacheKey = "train_table_group_{$this->group->id}_page_{$this->page}_" . now()->format('Y-m-d_H:i');
-        
+        $cacheKey = "train_table_group_{$this->group->id}_page_{$this->page}_".now()->format('Y-m-d_H:i');
+
         // Cache the expensive query result for 5 minutes
         $results = Cache::remember($cacheKey, now()->addMinutes(5), function () {
             return $this->getTrainsData();
         });
-        
+
         $this->trains = $results['trains'];
         $this->total = $results['total'];
     }
@@ -83,11 +88,11 @@ class TrainTable extends Component
     private function getTrainsData()
     {
         $query = $this->getTrainsQuery();
-        
+
         // Optimize count query separately to avoid GROUP BY overhead
         $countQuery = $this->getTrainsCountQuery();
         $total = $countQuery->count();
-        
+
         // Get paginated results with proper limits
         $trains = $query->skip(($this->page - 1) * $this->perPage)
             ->take($this->perPage)
@@ -101,13 +106,14 @@ class TrainTable extends Component
                 'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
                 'status_color' => $train->color_rgb ?? '156,163,175',
                 'departure_platform' => $train->departure_platform ?? 'TBD',
-                'arrival_platform' => $train->arrival_platform ?? 'TBD'
+                'arrival_platform' => $train->arrival_platform ?? 'TBD',
+                'is_realtime_update' => false,
             ];
         });
 
         return [
             'trains' => $processedTrains,
-            'total' => $total
+            'total' => $total,
         ];
     }
 
@@ -117,7 +123,7 @@ class TrainTable extends Component
         $currentTime = Carbon::now()->format('H:i:s');
         $endTime = Carbon::now()->addHours(4)->format('H:i:s');
 
-        if (!$this->group) {
+        if (! $this->group) {
             return GtfsTrip::query()->whereRaw('1 = 0');
         }
 
@@ -155,8 +161,9 @@ class TrainTable extends Component
         $currentTime = Carbon::now()->format('H:i:s');
         $endTime = Carbon::now()->addHours(4)->format('H:i:s');
 
-        if (!$this->group) {
+        if (! $this->group) {
             Log::info('TrainTable - No group provided');
+
             return GtfsTrip::query()->whereRaw('1 = 0');
         }
 
@@ -167,6 +174,7 @@ class TrainTable extends Component
 
         if (empty($selectedRoutes)) {
             Log::info('TrainTable - No routes selected, returning empty query');
+
             return GtfsTrip::query()->whereRaw('1 = 0');
         }
 
@@ -185,7 +193,7 @@ class TrainTable extends Component
                 'statuses.status as status_text',
                 'statuses.color_rgb',
                 'departure_platform.platform_code as departure_platform',
-                'arrival_platform.platform_code as arrival_platform'
+                'arrival_platform.platform_code as arrival_platform',
             ])
             ->join('gtfs_stop_times as first_stop', function ($join) {
                 $join->on('gtfs_trips.trip_id', '=', 'first_stop.trip_id')
@@ -220,10 +228,10 @@ class TrainTable extends Component
                     ->where('gtfs_calendar_dates.date', now()->format('Y-m-d'))
                     ->where('gtfs_calendar_dates.exception_type', 1);
             })
-            ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.trip_id', 'gtfs_trips.route_id', 
-                     'first_stop.departure_time', 'last_stop.arrival_time', 'gtfs_routes.route_long_name',
-                     'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
-                     'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code')
+            ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.trip_id', 'gtfs_trips.route_id',
+                'first_stop.departure_time', 'last_stop.arrival_time', 'gtfs_routes.route_long_name',
+                'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
+                'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code')
             ->orderBy('first_stop.departure_time')
             ->limit(500); // Add safety limit to prevent scanning entire day
 
@@ -251,13 +259,13 @@ class TrainTable extends Component
     {
         // Clear cache for this group when routes change
         $this->clearTrainTableCache();
-        
+
         $route = DB::table('selected_routes')
             ->where('route_id', $routeId)
             ->first();
 
         if ($route) {
-            $newStatus = !$route->is_active;
+            $newStatus = ! $route->is_active;
             DB::table('selected_routes')
                 ->where('route_id', $routeId)
                 ->update(['is_active' => $newStatus]);
@@ -267,7 +275,7 @@ class TrainTable extends Component
                     'route_id' => $routeId,
                     'is_active' => true,
                     'created_at' => now(),
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ]);
         }
 
@@ -282,14 +290,14 @@ class TrainTable extends Component
     {
         // Clear current minute cache for all pages
         for ($page = 1; $page <= 10; $page++) { // Clear up to 10 pages
-            $currentCacheKey = "train_table_group_{$this->group->id}_page_{$page}_" . now()->format('Y-m-d_H:i');
+            $currentCacheKey = "train_table_group_{$this->group->id}_page_{$page}_".now()->format('Y-m-d_H:i');
             Cache::forget($currentCacheKey);
-            
+
             // Also clear the previous minute cache in case we're at the boundary
-            $previousMinuteCacheKey = "train_table_group_{$this->group->id}_page_{$page}_" . now()->subMinute()->format('Y-m-d_H:i');
+            $previousMinuteCacheKey = "train_table_group_{$this->group->id}_page_{$page}_".now()->subMinute()->format('Y-m-d_H:i');
             Cache::forget($previousMinuteCacheKey);
         }
-        
+
         // Clear API cache as well to ensure consistency
         $this->clearApiCache();
     }
@@ -300,11 +308,11 @@ class TrainTable extends Component
     private function clearApiCache()
     {
         // Clear current 5-minute interval API cache
-        $currentApiCacheKey = 'train_api_today_' . now()->format('Y-m-d_H:') . str_pad(floor(now()->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
+        $currentApiCacheKey = 'train_api_today_'.now()->format('Y-m-d_H:').str_pad(floor(now()->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
         Cache::forget($currentApiCacheKey);
-        
+
         // Also clear the previous 5-minute interval in case we're at the boundary
-        $previousApiCacheKey = 'train_api_today_' . now()->subMinutes(5)->format('Y-m-d_H:') . str_pad(floor(now()->subMinutes(5)->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
+        $previousApiCacheKey = 'train_api_today_'.now()->subMinutes(5)->format('Y-m-d_H:').str_pad(floor(now()->subMinutes(5)->minute / 5) * 5, 2, '0', STR_PAD_LEFT);
         Cache::forget($previousApiCacheKey);
     }
 
@@ -314,7 +322,7 @@ class TrainTable extends Component
             'trains' => $this->trains,
             'total' => $this->total,
             'page' => $this->page,
-            'perPage' => $this->perPage
+            'perPage' => $this->perPage,
         ]);
     }
-} 
+}

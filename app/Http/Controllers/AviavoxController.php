@@ -2,16 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AviavoxSetting;
 use App\Models\AviavoxAnnouncement;
-use Illuminate\Http\Request;
-use Exception;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Response;
-use App\Models\AviavoxTemplate;
 use App\Models\AviavoxResponse;
+use App\Models\AviavoxSetting;
+use App\Models\AviavoxTemplate;
+use App\Services\LogHelper;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Response;
 
 class AviavoxController extends Controller
 {
@@ -22,24 +23,24 @@ class AviavoxController extends Controller
         $templates = AviavoxTemplate::orderBy('created_at', 'desc')->get();
         $responses = AviavoxResponse::orderBy('created_at', 'desc')
             ->paginate(10, ['*'], 'responses-page');
-        
+
         // Load predefined messages from the text file
         $messagesFile = storage_path('app/aviavox/Eurostar - AviaVox AIP Message Triggers.txt');
         $predefinedMessages = [];
         $availableMessageNames = [];
-        
+
         if (File::exists($messagesFile)) {
             $content = File::get($messagesFile);
             preg_match_all('/<Item ID="MessageName" Value="([^"]+)"/', $content, $matches);
             $availableMessageNames = array_unique($matches[1]);
-            
+
             foreach ($availableMessageNames as $name) {
                 preg_match_all('/<Item ID="([^"]+)" Value="[^"]+"\/>/', $content, $paramMatches);
                 $parameters = array_diff($paramMatches[1], ['MessageName', 'Zones']);
                 $predefinedMessages[$name] = array_values(array_unique($parameters));
             }
         }
-        
+
         return view('settings.aviavox', compact('aviavoxSettings', 'announcements', 'predefinedMessages', 'availableMessageNames', 'templates', 'responses'));
     }
 
@@ -68,18 +69,19 @@ class AviavoxController extends Controller
             // Create a TCP/IP socket
             $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
 
-            if (!$socket) {
-                Log::error("Connection failed: $errstr ($errno)");
+            if (! $socket) {
+                LogHelper::aviavoxError("Connection failed: $errstr ($errno)");
+
                 return redirect()->route('settings.aviavox')->with('error', "Connection failed: $errstr ($errno)");
             }
 
             // Step 1: Send AuthenticationChallengeRequest
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            fwrite($socket, chr(2) . $challengeRequest . chr(3)); // Wrap in STX and ETX
+            $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
+            fwrite($socket, chr(2).$challengeRequest.chr(3)); // Wrap in STX and ETX
 
             // Step 2: Read AuthenticationChallengeResponse
             $response = fread($socket, 1024);
-            
+
             if (strpos($response, '<MessageID>AuthenticationChallengeResponse</MessageID>') === false) {
                 return redirect()->route('settings.aviavox')->with('error', 'Authentication challenge failed.');
             }
@@ -87,7 +89,7 @@ class AviavoxController extends Controller
             // Extract challenge from response
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
-            if (!$challenge) {
+            if (! $challenge) {
                 return redirect()->route('settings.aviavox')->with('error', 'Invalid challenge received.');
             }
 
@@ -95,12 +97,12 @@ class AviavoxController extends Controller
             $password = $settings->password;
             $passwordLength = strlen($password);
             $salt = $passwordLength ^ $challenge;
-            $saltedPassword = $password . $salt . strrev($password);
+            $saltedPassword = $password.$salt.strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
 
             // Step 4: Send AuthenticationRequest
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            fwrite($socket, chr(2) . $authRequest . chr(3)); // Wrap in STX and ETX
+            fwrite($socket, chr(2).$authRequest.chr(3)); // Wrap in STX and ETX
 
             // Step 5: Read AuthenticationResponse
             $authResponse = fread($socket, 1024);
@@ -113,7 +115,7 @@ class AviavoxController extends Controller
                 return redirect()->route('settings.aviavox')->with('error', 'Authentication failed.');
             }
         } catch (Exception $e) {
-            return redirect()->route('settings.aviavox')->with('error', 'An error occurred: ' . $e->getMessage());
+            return redirect()->route('settings.aviavox')->with('error', 'An error occurred: '.$e->getMessage());
         }
     }
 
@@ -151,7 +153,7 @@ class AviavoxController extends Controller
     {
         $logFilePath = storage_path('logs/laravel.log');
 
-        if (!File::exists($logFilePath)) {
+        if (! File::exists($logFilePath)) {
             return redirect()->route('settings.logs')->with('error', 'Log file does not exist.');
         }
 
@@ -169,28 +171,28 @@ class AviavoxController extends Controller
 
     public function handleResponse(Request $request)
     {
-   
+
         // Parse the XML response
         $xml = simplexml_load_string($request->getContent());
         if ($xml) {
             // Store or process the announcement status
             if (isset($xml->Announcement)) {
                 $announcement = $xml->Announcement;
-                Log::info('Announcement status update', [
-                    'id' => (string)$announcement->ID,
-                    'status' => (string)$announcement->Status,
-                    'message_name' => (string)$announcement->MessageName
+                LogHelper::aviavoxInfo('Announcement status update', [
+                    'id' => (string) $announcement->ID,
+                    'status' => (string) $announcement->Status,
+                    'message_name' => (string) $announcement->MessageName,
                 ]);
             }
         }
-        
+
         return response()->json(['status' => 'success']);
     }
 
     public function deleteAnnouncement(AviavoxAnnouncement $announcement)
     {
         $announcement->delete();
-        
+
         return redirect()->back()->with('success', 'Announcement deleted successfully');
     }
 
@@ -200,19 +202,19 @@ class AviavoxController extends Controller
 
         try {
             $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
-            if (!$socket) {
+            if (! $socket) {
                 throw new \Exception("Failed to connect: $errstr ($errno)");
             }
 
             // Authentication steps (reusing from testConnection method)
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            fwrite($socket, chr(2) . $challengeRequest . chr(3));
-            
+            $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
+            fwrite($socket, chr(2).$challengeRequest.chr(3));
+
             $response = fread($socket, 1024);
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
-            
-            if (!$challenge) {
+
+            if (! $challenge) {
                 throw new \Exception('Invalid challenge received.');
             }
 
@@ -220,12 +222,12 @@ class AviavoxController extends Controller
             $password = $settings->password;
             $passwordLength = strlen($password);
             $salt = $passwordLength ^ $challenge;
-            $saltedPassword = $password . $salt . strrev($password);
+            $saltedPassword = $password.$salt.strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
 
             // Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            fwrite($socket, chr(2) . $authRequest . chr(3));
+            fwrite($socket, chr(2).$authRequest.chr(3));
 
             $authResponse = fread($socket, 1024);
 
@@ -234,23 +236,23 @@ class AviavoxController extends Controller
             }
 
             // Send the specific announcement message
-            $announcementMessage = "<AIP>
+            $announcementMessage = '<AIP>
                 <MessageID>AnnouncementTriggerRequest</MessageID>
                 <MessageData>
                     <AnnouncementData>
-                        <Item ID=\"MessageName\" Value=\"CHECKIN_AWARE_FAULT\"/>
-                        <Item ID=\"Zones\" Value=\"Terminal\"/>
+                        <Item ID="MessageName" Value="CHECKIN_AWARE_FAULT"/>
+                        <Item ID="Zones" Value="Terminal"/>
                     </AnnouncementData>
                 </MessageData>
-            </AIP>";
+            </AIP>';
 
-            fwrite($socket, chr(2) . $announcementMessage . chr(3));
+            fwrite($socket, chr(2).$announcementMessage.chr(3));
             $finalResponse = fread($socket, 1024);
             fclose($socket);
 
             return redirect()->back()->with('success', 'Check-in aware fault announcement sent successfully');
         } catch (Exception $e) {
-            return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send announcement: '.$e->getMessage());
         }
     }
 
@@ -260,18 +262,18 @@ class AviavoxController extends Controller
             $request->validate([
                 'message_name' => 'required|string',
                 'zones' => 'required|string',
-                'parameters' => 'array|nullable'
+                'parameters' => 'array|nullable',
             ]);
 
             // Get Aviavox settings
             $settings = AviavoxSetting::first();
-            if (!$settings) {
+            if (! $settings) {
                 throw new Exception('Aviavox settings not configured');
             }
 
             // Connect to Aviavox server
             $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 30);
-            if (!$socket) {
+            if (! $socket) {
                 throw new Exception("Failed to connect: $errstr ($errno)");
             }
 
@@ -286,7 +288,7 @@ class AviavoxController extends Controller
             // Add any parameters if they exist
             if ($request->parameters) {
                 foreach ($request->parameters as $key => $value) {
-                    if (!empty($value)) {
+                    if (! empty($value)) {
                         // Format datetime parameters
                         if (in_array($key, ['ScheduledTime', 'PublicTime']) && $value) {
                             $datetime = new \DateTime($value);
@@ -300,10 +302,10 @@ class AviavoxController extends Controller
             $xml .= "\t\t\t<Item ID=\"Zones\" Value=\"{$request->zones}\"/>\n";
             $xml .= "\t\t</AnnouncementData>\n";
             $xml .= "\t</MessageData>\n";
-            $xml .= "</AIP>";
+            $xml .= '</AIP>';
 
             // Send the announcement
-            fwrite($socket, chr(2) . $xml . chr(3));
+            fwrite($socket, chr(2).$xml.chr(3));
             $response = fread($socket, 1024);
             fclose($socket);
 
@@ -314,26 +316,26 @@ class AviavoxController extends Controller
                 'type' => 'audio',
                 'user_id' => Auth::id(),
                 'item_id' => 'MessageName',
-                'value' => $request->message_name
+                'value' => $request->message_name,
             ]);
 
             return redirect()->back()->with('success', 'Announcement sent and stored successfully');
         } catch (Exception $e) {
-            return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send announcement: '.$e->getMessage());
         }
     }
 
     public function sendCustomAnnouncement(Request $request)
     {
         $request->validate([
-            'custom_xml' => 'required|string'
+            'custom_xml' => 'required|string',
         ]);
 
         $settings = AviavoxSetting::first();
 
         try {
             $socket = fsockopen($settings->ip_address, $settings->port, $errno, $errstr, 5);
-            if (!$socket) {
+            if (! $socket) {
                 throw new \Exception("Failed to connect: $errstr ($errno)");
             }
 
@@ -341,9 +343,9 @@ class AviavoxController extends Controller
             stream_set_timeout($socket, 20);
 
             // Authentication steps
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            fwrite($socket, chr(2) . $challengeRequest . chr(3));
-            
+            $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
+            fwrite($socket, chr(2).$challengeRequest.chr(3));
+
             $response = fread($socket, 1024);
             if (stream_get_meta_data($socket)['timed_out']) {
                 throw new \Exception('Stream timed out while waiting for challenge response');
@@ -351,21 +353,21 @@ class AviavoxController extends Controller
 
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
-            
-            if (!$challenge) {
+
+            if (! $challenge) {
                 throw new \Exception('Invalid challenge received.');
             }
 
             // Hash password
-            $saltedPassword = $settings->password . ($challenge ^ strlen($settings->password)) . strrev($settings->password);
+            $saltedPassword = $settings->password.($challenge ^ strlen($settings->password)).strrev($settings->password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
 
             // Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$settings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            fwrite($socket, chr(2) . $authRequest . chr(3));
+            fwrite($socket, chr(2).$authRequest.chr(3));
 
             $authResponse = fread($socket, 1024);
-            
+
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
                 throw new \Exception('Authentication failed.');
             }
@@ -374,16 +376,16 @@ class AviavoxController extends Controller
             $cleanXml = preg_replace('/>\s+</', '><', trim($request->custom_xml));
 
             // Send the custom announcement with STX/ETX characters
-            fwrite($socket, chr(2) . $cleanXml . chr(3));
-            
+            fwrite($socket, chr(2).$cleanXml.chr(3));
+
             // Wait for response
             $finalResponse = fread($socket, 1024);
-            
+
             fclose($socket);
 
             return redirect()->back()->with('success', 'Custom announcement sent successfully');
         } catch (Exception $e) {
-            return redirect()->back()->with('error', 'Failed to send announcement: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send announcement: '.$e->getMessage());
         }
     }
 
@@ -393,31 +395,32 @@ class AviavoxController extends Controller
             'name' => 'required|string|unique:aviavox_templates,name',
             'friendly_name' => 'nullable|string',
             'xml_template' => 'required|string',
-            'variables' => 'required|array'
+            'variables' => 'required|array',
         ]);
 
         try {
             // Parse XML to validate format
             $xml = simplexml_load_string($request->xml_template);
-            
+
             AviavoxTemplate::create([
                 'name' => $request->name,
                 'friendly_name' => $request->friendly_name,
                 'xml_template' => $request->xml_template,
-                'variables' => $request->variables
+                'variables' => $request->variables,
             ]);
 
             return redirect()->back()->with('success', 'Announcement template added successfully');
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Invalid XML format: ' . $e->getMessage());
+                ->with('error', 'Invalid XML format: '.$e->getMessage());
         }
     }
 
     public function deleteTemplate(AviavoxTemplate $template)
     {
         $template->delete();
+
         return redirect()->route('settings.aviavox')->with('success', 'Template deleted successfully.');
     }
 
@@ -432,14 +435,14 @@ class AviavoxController extends Controller
             'friendly_name' => 'required|string|max:255',
             'name' => 'required|string|max:255',
             'xml_template' => 'required|string',
-            'variables' => 'array'
+            'variables' => 'array',
         ]);
 
         $template->update([
             'friendly_name' => $validated['friendly_name'],
             'name' => $validated['name'],
             'xml_template' => $validated['xml_template'],
-            'variables' => $validated['variables'] ?? []
+            'variables' => $validated['variables'] ?? [],
         ]);
 
         return redirect()->route('settings.aviavox')->with('success', 'Template updated successfully.');
@@ -465,7 +468,7 @@ class AviavoxController extends Controller
 
         // Paginate results
         $responses = $query->orderBy('created_at', 'desc')
-                         ->paginate($request->per_page ?? 10);
+            ->paginate($request->per_page ?? 10);
 
         // Transform the responses to include extracted text content
         $transformedResponses = $responses->getCollection()->map(function ($response) {
@@ -473,7 +476,7 @@ class AviavoxController extends Controller
             try {
                 $xml = simplexml_load_string($response->raw_response);
                 if ($xml && isset($xml->Announcement->Text)) {
-                    $textContent = (string)$xml->Announcement->Text;
+                    $textContent = (string) $xml->Announcement->Text;
                     // Remove newlines and trim the text content
                     $textContent = str_replace(["\n", "\r"], ' ', trim($textContent));
                 }
@@ -488,7 +491,7 @@ class AviavoxController extends Controller
                 'message_name' => $response->message_name,
                 'text_content' => $textContent,
                 'created_at' => $response->created_at,
-                'raw_response' => $response->raw_response
+                'raw_response' => $response->raw_response,
             ];
         });
 
@@ -499,66 +502,69 @@ class AviavoxController extends Controller
                 'last_page' => $responses->lastPage(),
                 'per_page' => $responses->perPage(),
                 'total' => $responses->total(),
-            ]
+            ],
         ]);
     }
 
     private function sendMessage($xml)
     {
         $aviavoxSettings = AviavoxSetting::first();
-        
-        if (!$aviavoxSettings) {
-            Log::error('Controller Announcement - No Aviavox settings found');
+
+        if (! $aviavoxSettings) {
+            LogHelper::aviavoxError('Controller Announcement - No Aviavox settings found');
+
             return;
         }
 
-        Log::info("Controller Announcement - Starting Aviavox transmission", [
+        LogHelper::aviavoxInfo('Controller Announcement - Starting Aviavox transmission', [
             'user_id' => Auth::id(),
             'user_name' => Auth::user()?->name ?? 'System',
-            'aviavox_server' => $aviavoxSettings->ip_address . ':' . $aviavoxSettings->port,
-            'xml_to_send' => $xml
+            'aviavox_server' => $aviavoxSettings->ip_address.':'.$aviavoxSettings->port,
+            'xml_to_send' => $xml,
         ]);
 
         $socket = fsockopen($aviavoxSettings->ip_address, $aviavoxSettings->port, $errno, $errstr, 30);
-        if (!$socket) {
-            Log::error('Controller Announcement - Failed to create socket', [
+        if (! $socket) {
+            LogHelper::aviavoxError('Controller Announcement - Failed to create socket', [
                 'user_id' => Auth::id(),
                 'server' => $aviavoxSettings->ip_address,
                 'port' => $aviavoxSettings->port,
-                'error' => "$errstr ($errno)"
+                'error' => "$errstr ($errno)",
             ]);
+
             return;
         }
 
-        Log::debug("Controller Announcement - Socket connected successfully", [
+        LogHelper::aviavoxDebug('Controller Announcement - Socket connected successfully', [
             'user_id' => Auth::id(),
-            'server' => $aviavoxSettings->ip_address . ':' . $aviavoxSettings->port
+            'server' => $aviavoxSettings->ip_address.':'.$aviavoxSettings->port,
         ]);
 
         try {
             // Step 1: Send challenge request
-            $challengeRequest = "<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>";
-            Log::debug("Controller Announcement - Sending challenge request", [
+            $challengeRequest = '<AIP><MessageID>AuthenticationChallengeRequest</MessageID><ClientID>1234567</ClientID></AIP>';
+            LogHelper::aviavoxDebug('Controller Announcement - Sending challenge request', [
                 'user_id' => Auth::id(),
-                'challenge_xml' => $challengeRequest
+                'challenge_xml' => $challengeRequest,
             ]);
-            fwrite($socket, chr(2) . $challengeRequest . chr(3));
+            fwrite($socket, chr(2).$challengeRequest.chr(3));
 
             // Step 2: Read challenge response
             $response = fread($socket, 1024);
-            Log::debug("Controller Announcement - Received challenge response", [
+            LogHelper::aviavoxDebug('Controller Announcement - Received challenge response', [
                 'user_id' => Auth::id(),
-                'challenge_response' => $response
+                'challenge_response' => $response,
             ]);
 
             preg_match('/<Challenge>(\d+)<\/Challenge>/', $response, $matches);
             $challenge = $matches[1] ?? null;
 
-            if (!$challenge) {
-                Log::error("Controller Announcement - Invalid challenge received", [
+            if (! $challenge) {
+                LogHelper::aviavoxError('Controller Announcement - Invalid challenge received', [
                     'user_id' => Auth::id(),
-                    'response' => $response
+                    'response' => $response,
                 ]);
+
                 return;
             }
 
@@ -566,59 +572,60 @@ class AviavoxController extends Controller
             $password = $aviavoxSettings->password;
             $passwordLength = strlen($password);
             $salt = $passwordLength ^ $challenge;
-            $saltedPassword = $password . $salt . strrev($password);
+            $saltedPassword = $password.$salt.strrev($password);
             $hash = strtoupper(hash('sha512', $saltedPassword));
 
-            Log::debug("Controller Announcement - Authentication details", [
+            LogHelper::aviavoxDebug('Controller Announcement - Authentication details', [
                 'user_id' => Auth::id(),
                 'username' => $aviavoxSettings->username,
                 'challenge' => $challenge,
                 'password_length' => $passwordLength,
-                'salt' => $salt
+                'salt' => $salt,
             ]);
 
             // Step 4: Send authentication request
             $authRequest = "<AIP><MessageID>AuthenticationRequest</MessageID><ClientID>1234567</ClientID><MessageData><Username>{$aviavoxSettings->username}</Username><PasswordHash>{$hash}</PasswordHash></MessageData></AIP>";
-            Log::debug("Controller Announcement - Sending auth request", [
+            LogHelper::aviavoxDebug('Controller Announcement - Sending auth request', [
                 'user_id' => Auth::id(),
-                'auth_xml' => $authRequest
+                'auth_xml' => $authRequest,
             ]);
-            fwrite($socket, chr(2) . $authRequest . chr(3));
+            fwrite($socket, chr(2).$authRequest.chr(3));
 
             // Step 5: Read authentication response
             $authResponse = fread($socket, 1024);
-            Log::debug("Controller Announcement - Received auth response", [
+            LogHelper::aviavoxDebug('Controller Announcement - Received auth response', [
                 'user_id' => Auth::id(),
-                'auth_response' => $authResponse
+                'auth_response' => $authResponse,
             ]);
 
             if (strpos($authResponse, '<Authenticated>1</Authenticated>') === false) {
-                Log::error("Controller Announcement - Authentication failed", [
+                LogHelper::aviavoxError('Controller Announcement - Authentication failed', [
                     'user_id' => Auth::id(),
-                    'auth_response' => $authResponse
+                    'auth_response' => $authResponse,
                 ]);
+
                 return;
             }
 
             // Step 6: Send the announcement
-            Log::info("Controller Announcement - Sending announcement XML to Aviavox", [
+            LogHelper::aviavoxInfo('Controller Announcement - Sending announcement XML to Aviavox', [
                 'user_id' => Auth::id(),
-                'final_xml' => $xml
+                'final_xml' => $xml,
             ]);
-            fwrite($socket, chr(2) . $xml . chr(3));
+            fwrite($socket, chr(2).$xml.chr(3));
 
             // Step 7: Read final response
             $finalResponse = fread($socket, 1024);
-            Log::info("Controller Announcement - Received final response from Aviavox", [
+            LogHelper::aviavoxInfo('Controller Announcement - Received final response from Aviavox', [
                 'user_id' => Auth::id(),
                 'final_response' => $finalResponse,
-                'xml_sent' => $xml
+                'xml_sent' => $xml,
             ]);
 
         } finally {
             fclose($socket);
-            Log::debug("Controller Announcement - Connection closed", [
-                'user_id' => Auth::id()
+            LogHelper::aviavoxDebug('Controller Announcement - Connection closed', [
+                'user_id' => Auth::id(),
             ]);
         }
     }

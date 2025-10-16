@@ -127,19 +127,29 @@
                                     <div>
                                         <div class="text-sm text-gray-500 mb-1">Arrival</div>
                                         <div class="text-2xl font-bold">{{ \Carbon\Carbon::parse($train['arrival_time'])->format('H:i') }}</div>
-                                        <div class="text-sm text-gray-500">Platform {{ $train['arrival_platform'] }}</div>
+                                        <div class="text-sm text-gray-500">
+                                            Platform 
+                                            <span class="{{ $train['is_realtime_update'] ? 'text-orange-500 font-semibold' : '' }}">
+                                                {{ $train['arrival_platform'] }}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div class="text-right">
                                         <div class="text-sm text-gray-500 mb-1">Departure</div>
                                         <div class="text-2xl font-bold">
                                             @if($train['new_departure_time'])
                                                 <span class="line-through text-gray-400">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</span>
-                                                <span class="ml-2">{{ \Carbon\Carbon::parse($train['new_departure_time'])->format('H:i') }}</span>
+                                                <span class="ml-2 {{ $train['is_realtime_update'] ? 'text-orange-500' : '' }}">{{ \Carbon\Carbon::parse($train['new_departure_time'])->format('H:i') }}</span>
                                             @else
-                                                {{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}
+                                                <span class="{{ $train['is_realtime_update'] ? 'text-orange-500' : '' }}">{{ \Carbon\Carbon::parse($train['departure_time'])->format('H:i') }}</span>
                                             @endif
                                         </div>
-                                        <div class="text-sm text-gray-500">Platform {{ $train['departure_platform'] }}</div>
+                                        <div class="text-sm text-gray-500">
+                                            Platform 
+                                            <span class="{{ $train['is_realtime_update'] ? 'text-orange-500 font-semibold' : '' }}">
+                                                {{ $train['departure_platform'] }}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
