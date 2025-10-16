@@ -23,8 +23,8 @@
                             {{ __('Train Info') }}
                         </x-nav-link>
                     @else
-                        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                            {{ __('Dashboard') }}
+                        <x-nav-link :href="route('selector')" :active="request()->routeIs('selector')">
+                            {{ __('Selector') }}
                         </x-nav-link>
                         <x-nav-link :href="route('announcements')" :active="request()->routeIs('announcements')">
                             {{ __('Announcements') }}
@@ -104,8 +104,8 @@
                     {{ __('Train Info') }}
                 </x-responsive-nav-link>
             @else
-                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                    {{ __('Dashboard') }}
+                <x-responsive-nav-link :href="route('selector')" :active="request()->routeIs('selector')">
+                    {{ __('Selector') }}
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('announcements')" :active="request()->routeIs('announcements')">
                     {{ __('Announcements') }}

@@ -26,7 +26,7 @@ Route::get('/selector', [SelectorController::class, 'index'])
     ->name('selector');
 
 Route::get('/dashboard', function () {
-    return view('dashboard');
+    return redirect()->route('selector');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Documentation routes (public access)

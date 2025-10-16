@@ -30,7 +30,7 @@
         @if (Route::has('login'))
             <div class="absolute top-0 right-0 p-4">
                 @auth
-                    <a href="{{ url('/dashboard') }}" class="text-black">Dashboard</a>
+                    <a href="{{ route('selector') }}" class="text-black">Selector</a>
                 @else
                     <a href="{{ route('login') }}" class="text-black">Log in</a>
                 @endauth

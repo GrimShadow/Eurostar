@@ -1,95 +1,179 @@
 # Aviavox Settings
-Configure and manage all settings related to the Aviavox connection and audio tempalte management. 
+
+The **Aviavox Settings** section allows you to configure and manage all settings related to the **Aviavox connection** and **audio template management**.
+These settings enable seamless communication between the **SignaRail server** and the **Aviavox controller**, allowing the system to generate and play audio announcements across stations and platforms.
+
+---
 
 ## Configuration
-In this section, you are able to configure and manage the connection settings of the Aviavox server to enable communication from the SignaRail server to the Aviavox controller. 
 
+In this section, you can set up and manage the **Aviavox server connection**.
+A valid connection ensures that SignaRail can send announcement messages directly to the Aviavox controller.
 
 ### Aviavox Connection Details
 
-For the connection to be set and configured between Aviavox and SignaRail you will need to supply the following information in this section which can be obtained from Aviavox or your IT Administrator:
+To configure the connection between **Aviavox** and **SignaRail**, provide the following information (obtainable from your IT Administrator or Aviavox representative):
 
-- **IP Address**
-- **Port**
-- **Username**
-- **Password**
+* **IP Address**
+* **Port**
+* **Username**
+* **Password**
 
-Once the information has been supplied, you will need to click Save Settings to save this connection information to the SignaRail database.
+Once all details are entered, click **Save Settings** to store the connection details in the SignaRail database.
 
+---
 
 ### Test Connection
-Once you have configured your Aviavox connection details, you can confirm if the binding between Aviavox and SignaRail is working by selecting the Test Connection button. 
 
-If the test fails, please consult the Logs in the Settings Menu or contact your IT Administrator. 
+After saving your configuration, verify that the SignaRail–Aviavox connection is active by selecting **Test Connection**.
 
+* If the test is successful, the connection is properly configured.
+* If the test fails, review the **Logs** (found under the *Settings* menu) or contact your **IT Administrator** for assistance.
+
+---
 
 ## Zones
-When making use of Avaivox to make Audio announcements in the terminals and platforms, you would need to speceify the Zones in which the announcement will be made
+
+Zones define where audio announcements will be played within a terminal or platform.
+You must specify these zones to ensure Aviavox sends announcements to the correct areas.
 
 ### What is a Zone?
-A Zone is a set location in a termnial or platform to which the Aviavox controller will treat as an isolated are to make the audio announcements.
 
-You can bind multiple zones to an Announcement depending on the objective of the announcement
+A **Zone** represents a defined location—such as a terminal, concourse, or platform—treated as an **isolated audio area** by the Aviavox controller.
+Multiple zones can be linked to a single announcement, depending on its intended scope.
 
-### Addind Zones
-To add a Zone, input the Zone Value supplied to you from Aviavox and select Add Zone.
+---
 
-THis will add the Zone to the SignaRail platform to be used in the Announcement Wizard or with Automated Rules and Triggers that will make announcements automatically. 
+### Adding Zones
+
+To add a new zone:
+
+1. Enter the **Zone Value** provided by Aviavox.
+2. Click **Add Zone**.
+
+The new zone will be added to the SignaRail platform and can be used in:
+
+* The **Announcement Wizard**, or
+* **Automated Rules and Triggers** for scheduled or rule-based announcements.
+
+---
 
 ### Deleting Zones
-To Delete a Zone, you can select an announcment in the Existing Zones table and select the Delete action on the right side of the table.
 
+To delete a zone:
 
+1. Locate the zone in the **Existing Zones** table.
+2. Click the **Delete** action on the right-hand side.
+
+---
 
 ## Announcement History
-Each announcement that is made using the SignaRail platform will display in the Announcement Histry table.
 
-Users are able to see the following infomration in the table:
-- **Type**: The type of announcement that was made. For example Manual or Automatic announcement. 
-- **Message**: The Friendly name of the announcement that was made.
-- **Time**: The date and time that the announcement was triggered.
-- **Author**: The Author of the announcement. System if automatic. User if it was manually troggered. 
-- **Zone**: The zones that played the audio announcement. 
-- **Status**: The status of the announcement such as in progress or completed. 
+The **Announcement History** table displays all announcements triggered via SignaRail, whether manually or automatically.
+It provides a complete record of announcement activity for reference and auditing.
 
+The table includes the following information:
+
+* **Type** – Indicates if the announcement was *Manual* or *Automatic*.
+* **Message** – The friendly name or title of the announcement.
+* **Time** – The date and time the announcement was triggered.
+* **Author** – The user who made the announcement (or *System* if automatic).
+* **Zone** – The zones in which the announcement was played.
+* **Status** – The current state of the announcement (*In Progress*, *Completed*, etc.).
+
+---
 
 ## Announcement Templates
-An Announcement template is the structured message that will be sent to the Aviavox controller to execute and audio message.
+
+An **Announcement Template** defines the structure and content of an audio message that will be sent to the Aviavox controller for playback.
 
 ### Adding Announcement Templates
-To add an announcement template, you would need to supply the relevant information that structures the meesage that will be sent to the Aviavix controller. 
-THis information will include the following:
-- **Friendly Name**
-- **Template Name**
-- **XML Template**
 
+To add a new template, provide the required information used to generate the Aviavox message:
 
-Below is and example of a message that would be sent to the Aviavox controller:
+* **Friendly Name**
+* **Template Name**
+* **XML Template**
 
-'code'<AIP>
-<MessageID>AnnouncementTriggerRequest</MessageID>
-<MessageData>
-<AnnouncementData>
-<Item ID="MessageName" Value
+Example XML message:
 
-"CHECKING_WELCOME_CLOSED"/>
+```xml
+<AIP>
+  <MessageID>AnnouncementTriggerRequest</MessageID>
+  <MessageData>
+    <AnnouncementData>
+      <Item ID="MessageName" Value="CHECKING_WELCOME_CLOSED"/>
+      <Item ID="TrainNumber" Value="1234"/>
+      <Item ID="Route" Value="GBR_LON"/>
+      <Item ID="ScheduledTime" Value="2024-08-22T07:45:00Z"/>
+      <Item ID="Zones" Value="Terminal"/>
+    </AnnouncementData>
+  </MessageData>
+</AIP>
+```
 
-<Item ID="TrainNumber" Value="1234"/>
-<Item ID="Route" Value="GBR_LON"/>
-<Item ID="ScheduledTime" Value="2024-08-22T07:45:00Z"/>
+After inputting the XML template and clicking outside the input box, **SignaRail** automatically detects and displays the available **variables** within the template.
+These appear as **dropdown selectors**.
 
-<Item ID="Zones" Value="Terminal"/>
+---
 
-</AnnouncementData>
-</MessageData>
-</AIP>'code'
+### Template Variables
 
+Each template variable corresponds to a dynamic data point that can be updated automatically or manually.
+Common variables include:
 
-## Existing Announcements
+* **Route**
+* **Zone**
+* **Train Number**
+* **Date and Time**
 
+Variables can be automatically assigned using **Rules and Triggers**, or manually configured through the **Announcement Wizard**.
+
+---
+
+## Existing Announcement Templates
+
+The **Existing Announcement Templates** table lists all templates currently configured in the system.
+This table provides the following details:
+
+* **Friendly Name**
+* **Template Name**
+* **Variables**
+* **Created At**
+* **Actions**
+
+### View XML
+
+Click **View XML** to display the full XML structure of the selected template.
+
+### Edit
+
+Click **Edit** to modify an existing announcement template.
+
+### Delete
+
+Click **Delete** to remove outdated or unused templates.
+
+---
 
 ## Aviavox Responses
 
+When an announcement is triggered, the **Aviavox controller** sends a response containing the generated **audio message in text form**.
+You can view these responses in the **Aviavox Announcements** table, which includes:
 
+* **Announcement ID**
+* **Status**
+* **Message Name**
+* **Received At**
+* **Actions**
 
-## Custome Announcements
+These response messages can also be retrieved via the **SignaRail API**, enabling integration with **digital signage systems** to display the audio message text visually.
+
+---
+
+## Custom Announcements
+
+The **Custom Announcements** feature allows advanced users to design and send **bespoke audio messages** outside of predefined templates.
+This is ideal for special events, service disruptions, or one-off announcements that fall outside regular automated operations.
+
+---
