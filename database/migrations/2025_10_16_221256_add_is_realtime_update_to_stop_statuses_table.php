@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('stop_statuses', function (Blueprint $table) {
-            $table->boolean('is_realtime_update')->default(false)->after('arrival_platform');
+            if (!Schema::hasColumn('stop_statuses', 'is_realtime_update')) {
+                $table->boolean('is_realtime_update')->default(false)->after('arrival_platform');
+            }
         });
     }
 
@@ -22,7 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('stop_statuses', function (Blueprint $table) {
-            $table->dropColumn('is_realtime_update');
+            if (Schema::hasColumn('stop_statuses', 'is_realtime_update')) {
+                $table->dropColumn('is_realtime_update');
+            }
         });
     }
 };
