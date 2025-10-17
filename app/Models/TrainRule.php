@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Carbon\Carbon;
 
 class TrainRule extends Model
 {
@@ -13,12 +12,15 @@ class TrainRule extends Model
     protected $fillable = [
         'action',
         'action_value',
-        'is_active'
+        'is_active',
+        'priority',
+        'execution_mode',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'action_value' => 'array'
+        'action' => 'array',
+        'action_value' => 'array',
     ];
 
     public function conditions()
@@ -31,16 +33,24 @@ class TrainRule extends Model
         return $this->belongsTo(Status::class, 'action_value');
     }
 
+    /**
+     * Get actions array, supporting both old single action and new array format
+     */
+    public function getActions()
+    {
+        return is_array($this->action) ? $this->action : [$this->action];
+    }
+
     public function shouldTrigger($train)
     {
         $conditions = $this->conditions;
-        
+
         if ($conditions->isEmpty()) {
             return false;
         }
 
         $result = $conditions->first()->evaluate($train);
-        
+
         foreach ($conditions->skip(1) as $condition) {
             if ($condition->logical_operator === 'and') {
                 $result = $result && $condition->evaluate($train);

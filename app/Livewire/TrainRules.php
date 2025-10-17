@@ -29,6 +29,14 @@ class TrainRules extends Component
 
     public $isActive = true;
 
+    public $priority = 0;
+
+    public $executionMode = 'first_match';
+
+    public $actions = [];
+
+    public $actionValues = [];
+
     public $statuses;
 
     public $selectedAnnouncement = '';
@@ -59,10 +67,10 @@ class TrainRules extends Component
     {
         $rules = [
             'conditions' => 'required|array|min:1',
-            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,current_status,train_number',
+            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible',
             'conditions.*.operator' => 'required',
             'conditions.*.value' => 'required',
-            'action' => 'required|in:set_status,make_announcement',
+            'action' => 'required|in:set_status,make_announcement,update_platform',
         ];
 
         // Add action-specific validation
@@ -181,6 +189,8 @@ class TrainRules extends Component
             case 'time_after_departure':
             case 'time_until_arrival':
             case 'time_after_arrival':
+            case 'delay_minutes':
+            case 'delay_percentage':
                 $this->valueField = [
                     'type' => 'number',
                     'label' => 'Minutes',
@@ -200,6 +210,48 @@ class TrainRules extends Component
                     'type' => 'text',
                     'label' => 'Train Number',
                     'placeholder' => 'Enter train number',
+                ];
+                break;
+            case 'platform_changed':
+            case 'is_cancelled':
+            case 'has_realtime_update':
+            case 'is_peak_time':
+            case 'wheelchair_accessible':
+                $this->valueField = [
+                    'type' => 'boolean',
+                    'label' => 'Value',
+                ];
+                break;
+            case 'specific_platform':
+            case 'route_id':
+            case 'direction_id':
+            case 'destination_station':
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Value',
+                    'placeholder' => 'Enter value',
+                ];
+                break;
+            case 'time_range':
+                $this->valueField = [
+                    'type' => 'range',
+                    'label' => 'Time Range',
+                    'placeholder' => 'Start time - End time',
+                ];
+                break;
+            case 'day_of_week':
+                $this->valueField = [
+                    'type' => 'select',
+                    'label' => 'Days',
+                    'options' => [
+                        '1' => 'Monday',
+                        '2' => 'Tuesday',
+                        '3' => 'Wednesday',
+                        '4' => 'Thursday',
+                        '5' => 'Friday',
+                        '6' => 'Saturday',
+                        '0' => 'Sunday',
+                    ],
                 ];
                 break;
             default:
@@ -237,7 +289,9 @@ class TrainRules extends Component
                 'variables' => $this->processTemplateVariables(),
                 'variable_types' => $this->variableTypes,
             ]),
-            'is_active' => true,
+            'is_active' => $this->isActive,
+            'priority' => $this->priority,
+            'execution_mode' => $this->executionMode,
         ]);
 
         // Clear train rules cache to ensure new rules are loaded immediately

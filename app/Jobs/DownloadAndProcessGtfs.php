@@ -194,12 +194,13 @@ class DownloadAndProcessGtfs implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            $processedTripIds = [];
+            // Delete all existing trips first
+            GtfsTrip::query()->delete();
+
             $batchSize = 1000;
             $batch = [];
             $currentLine = 0;
             $created = 0;
-            $updated = 0;
 
             while (($data = fgetcsv($file)) !== false) {
                 $currentLine++;
@@ -210,7 +211,6 @@ class DownloadAndProcessGtfs implements ShouldQueue
                 try {
                     $tripData = array_combine($headers, $data);
                     $tripId = $tripData['trip_id'];
-                    $processedTripIds[] = $tripId;
 
                     $formattedData = [
                         'route_id' => $tripData['route_id'],
@@ -221,13 +221,14 @@ class DownloadAndProcessGtfs implements ShouldQueue
                         'direction_id' => (int) $tripData['direction_id'],
                         'shape_id' => $tripData['shape_id'],
                         'wheelchair_accessible' => (bool) $tripData['wheelchair_accessible'],
+                        'created_at' => now(),
                         'updated_at' => now(),
                     ];
 
                     $batch[] = $formattedData;
 
                     if (count($batch) >= $batchSize) {
-                        $this->processBatch($batch, 'trips');
+                        GtfsTrip::insert($batch);
                         $created += count($batch);
                         $batch = [];
                     }
@@ -242,17 +243,15 @@ class DownloadAndProcessGtfs implements ShouldQueue
             }
 
             if (! empty($batch)) {
-                $this->processBatch($batch, 'trips');
+                GtfsTrip::insert($batch);
                 $created += count($batch);
             }
 
-            GtfsTrip::whereNotIn('trip_id', $processedTripIds)->delete();
             DB::commit();
 
             Log::info('GTFS trips sync completed', [
                 'total_lines' => $totalLines,
                 'created' => $created,
-                'updated' => $updated,
             ]);
 
         } catch (\Exception $e) {
@@ -389,17 +388,17 @@ class DownloadAndProcessGtfs implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            $processedRouteIds = [];
+            // Delete all existing routes first
+            GtfsRoute::query()->delete();
+
             $batchSize = 1000;
             $batch = [];
             $created = 0;
-            $updated = 0;
 
             while (($data = fgetcsv($file)) !== false) {
                 try {
                     $routeData = array_combine($headers, $data);
                     $routeId = $routeData['route_id'];
-                    $processedRouteIds[] = $routeId;
 
                     $formattedData = [
                         'route_id' => $routeId,
@@ -409,13 +408,14 @@ class DownloadAndProcessGtfs implements ShouldQueue
                         'route_type' => (int) $routeData['route_type'],
                         'route_color' => $routeData['route_color'] ?? null,
                         'route_text_color' => $routeData['route_text_color'] ?? null,
+                        'created_at' => now(),
                         'updated_at' => now(),
                     ];
 
                     $batch[] = $formattedData;
 
                     if (count($batch) >= $batchSize) {
-                        $this->processBatch($batch, 'routes');
+                        GtfsRoute::insert($batch);
                         $created += count($batch);
                         $batch = [];
                     }
@@ -430,16 +430,14 @@ class DownloadAndProcessGtfs implements ShouldQueue
             }
 
             if (! empty($batch)) {
-                $this->processBatch($batch, 'routes');
+                GtfsRoute::insert($batch);
                 $created += count($batch);
             }
 
-            GtfsRoute::whereNotIn('route_id', $processedRouteIds)->delete();
             DB::commit();
 
             Log::info('GTFS routes sync completed', [
                 'created' => $created,
-                'updated' => $updated,
             ]);
 
         } catch (\Exception $e) {
@@ -545,15 +543,16 @@ class DownloadAndProcessGtfs implements ShouldQueue
 
         DB::beginTransaction();
         try {
-            $processedStopIds = [];
+            // Delete all existing stops first
+            GtfsStop::query()->delete();
+
             $created = 0;
-            $updated = 0;
-            $unchanged = 0;
+            $batch = [];
+            $batchSize = 1000;
 
             while (($data = fgetcsv($file)) !== false) {
                 $stopData = array_combine($headers, $data);
                 $stopId = $stopData['stop_id'];
-                $processedStopIds[] = $stopId;
 
                 $formattedData = [
                     'stop_id' => $stopId,
@@ -564,45 +563,28 @@ class DownloadAndProcessGtfs implements ShouldQueue
                     'stop_timezone' => $stopData['stop_timezone'] ?: null,
                     'location_type' => (int) ($stopData['location_type'] ?? 0),
                     'platform_code' => isset($stopData['platform_code']) && $stopData['platform_code'] !== '' ? $stopData['platform_code'] : null,
+                    'created_at' => now(),
                     'updated_at' => now(),
                 ];
 
-                // Check if stop exists and if it needs updating
-                $existingStop = GtfsStop::where('stop_id', $stopId)->first();
+                $batch[] = $formattedData;
+                $created++;
 
-                if (! $existingStop) {
-                    // Create new stop
-                    GtfsStop::create($formattedData);
-                    $created++;
-                } else {
-                    // Check if data is different
-                    $needsUpdate = false;
-                    foreach ($formattedData as $key => $value) {
-                        if ($value != $existingStop->$key && $key !== 'updated_at') {
-                            $needsUpdate = true;
-                            break;
-                        }
-                    }
-
-                    if ($needsUpdate) {
-                        $existingStop->update($formattedData);
-                        $updated++;
-                    } else {
-                        $unchanged++;
-                    }
+                if (count($batch) >= $batchSize) {
+                    GtfsStop::insert($batch);
+                    $batch = [];
                 }
             }
 
-            // Remove stops that no longer exist in the file
-            $deleted = GtfsStop::whereNotIn('stop_id', $processedStopIds)->delete();
+            // Insert any remaining records
+            if (! empty($batch)) {
+                GtfsStop::insert($batch);
+            }
 
             DB::commit();
 
             Log::info('GTFS stops sync completed', [
                 'created' => $created,
-                'updated' => $updated,
-                'unchanged' => $unchanged,
-                'deleted' => $deleted,
             ]);
 
         } catch (\Exception $e) {
@@ -627,50 +609,5 @@ class DownloadAndProcessGtfs implements ShouldQueue
         }
 
         return $time;
-    }
-
-    private function processBatch($batch, $type)
-    {
-        try {
-            switch ($type) {
-                case 'trips':
-                    foreach ($batch as $data) {
-                        $existingTrip = GtfsTrip::where('trip_id', $data['trip_id'])->first();
-                        if (! $existingTrip) {
-                            GtfsTrip::create($data);
-                        } else {
-                            $existingTrip->update($data);
-                        }
-                    }
-                    break;
-                case 'routes':
-                    foreach ($batch as $data) {
-                        $existingRoute = GtfsRoute::where('route_id', $data['route_id'])->first();
-                        if (! $existingRoute) {
-                            GtfsRoute::create($data);
-                        } else {
-                            $existingRoute->update($data);
-                        }
-                    }
-                    break;
-                case 'stops':
-                    foreach ($batch as $data) {
-                        $existingStop = GtfsStop::where('stop_id', $data['stop_id'])->first();
-                        if (! $existingStop) {
-                            GtfsStop::create($data);
-                        } else {
-                            $existingStop->update($data);
-                        }
-                    }
-                    break;
-            }
-        } catch (\Exception $e) {
-            Log::error('Error processing batch for '.$type, [
-                'error' => $e->getMessage(),
-                'batch_size' => count($batch),
-                'first_item' => $batch[0] ?? null,
-            ]);
-            throw $e;
-        }
     }
 }

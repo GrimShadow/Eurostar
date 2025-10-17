@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class GtfsTrip extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'route_id',
         'service_id',
@@ -15,12 +18,12 @@ class GtfsTrip extends Model
         'trip_short_name',
         'direction_id',
         'shape_id',
-        'wheelchair_accessible'
+        'wheelchair_accessible',
     ];
 
     protected $casts = [
         'direction_id' => 'integer',
-        'wheelchair_accessible' => 'boolean'
+        'wheelchair_accessible' => 'boolean',
     ];
 
     /**
@@ -31,6 +34,7 @@ class GtfsTrip extends Model
         if (strpos($this->trip_id, '-') !== false) {
             return explode('-', $this->trip_id)[0];
         }
+
         return $this->trip_short_name;
     }
 
@@ -45,6 +49,7 @@ class GtfsTrip extends Model
                 return $parts[1];
             }
         }
+
         return null;
     }
 
@@ -59,6 +64,7 @@ class GtfsTrip extends Model
                 return $parts[1];
             }
         }
+
         return null;
     }
 
@@ -71,8 +77,10 @@ class GtfsTrip extends Model
         if ($date && strlen($date) === 4) {
             $month = substr($date, 0, 2);
             $day = substr($date, 2, 2);
+
             return "{$month}-{$day}";
         }
+
         return $date;
     }
 
@@ -86,11 +94,13 @@ class GtfsTrip extends Model
             try {
                 $currentYear = Carbon::now()->year;
                 $dateObj = Carbon::createFromFormat('m-d', $date)->year($currentYear);
+
                 return $dateObj->format('M j');
             } catch (\Exception $e) {
                 return $date;
             }
         }
+
         return null;
     }
 

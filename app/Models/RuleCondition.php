@@ -2,10 +2,9 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class RuleCondition extends Model
 {
@@ -18,7 +17,13 @@ class RuleCondition extends Model
         'value',
         'logical_operator',
         'order',
-        'tolerance_minutes'
+        'tolerance_minutes',
+        'group_id',
+        'group_operator',
+        'nesting_level',
+        'value_secondary',
+        'threshold_type',
+        'reference_field',
     ];
 
     public function rule()
@@ -36,19 +41,21 @@ class RuleCondition extends Model
                 } else {
                     $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
                 }
-                if (!$stopTime) return false;
-                
+                if (! $stopTime) {
+                    return false;
+                }
+
                 $now = Carbon::now();
                 $today = $now->format('Y-m-d');
-                
+
                 // Create departure time for today
-                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today . ' ' . $stopTime->departure_time);
-                
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->departure_time);
+
                 // Calculate minutes until departure (positive = future, negative = past)
                 $minutesUntilDeparture = $now->diffInMinutes($departureTime, false);
-                
+
                 return $this->compare($minutesUntilDeparture, $this->value);
-            
+
             case 'time_after_departure':
                 // Get the first stop's departure time (or specific stop if provided)
                 if ($specificStopId) {
@@ -56,19 +63,21 @@ class RuleCondition extends Model
                 } else {
                     $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
                 }
-                if (!$stopTime) return false;
-                
+                if (! $stopTime) {
+                    return false;
+                }
+
                 $now = Carbon::now();
                 $today = $now->format('Y-m-d');
-                
+
                 // Create departure time for today
-                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today . ' ' . $stopTime->departure_time);
-                
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->departure_time);
+
                 // Calculate minutes after departure (positive = departed, negative = not yet departed)
                 $minutesAfterDeparture = $departureTime->diffInMinutes($now, false);
-                
+
                 return $this->compare($minutesAfterDeparture, $this->value);
-            
+
             case 'time_until_arrival':
                 // Get the last stop's arrival time (or specific stop if provided)
                 if ($specificStopId) {
@@ -76,19 +85,21 @@ class RuleCondition extends Model
                 } else {
                     $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
                 }
-                if (!$stopTime) return false;
-                
+                if (! $stopTime) {
+                    return false;
+                }
+
                 $now = Carbon::now();
                 $today = $now->format('Y-m-d');
-                
+
                 // Create arrival time for today
-                $arrivalTime = Carbon::createFromFormat('Y-m-d H:i:s', $today . ' ' . $stopTime->arrival_time);
-                
+                $arrivalTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->arrival_time);
+
                 // Calculate minutes until arrival (positive = future, negative = past)
                 $minutesUntilArrival = $now->diffInMinutes($arrivalTime, false);
-                
+
                 return $this->compare($minutesUntilArrival, $this->value);
-            
+
             case 'time_after_arrival':
                 // Get the last stop's arrival time (or specific stop if provided)
                 if ($specificStopId) {
@@ -96,16 +107,18 @@ class RuleCondition extends Model
                 } else {
                     $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
                 }
-                if (!$stopTime) return false;
-                
+                if (! $stopTime) {
+                    return false;
+                }
+
                 $arrivalTime = Carbon::createFromFormat('H:i:s', $stopTime->arrival_time);
                 $now = Carbon::now();
-                
+
                 // Calculate minutes after arrival (positive = arrived, negative = not yet arrived)
                 $minutesAfterArrival = $now->diffInMinutes($arrivalTime, false);
-                
+
                 return $this->compare($minutesAfterArrival, $this->value);
-            
+
             case 'time_since_arrival':
                 // Get the last stop's arrival time (or specific stop if provided)
                 if ($specificStopId) {
@@ -113,20 +126,23 @@ class RuleCondition extends Model
                 } else {
                     $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
                 }
-                if (!$stopTime) return false;
-                
+                if (! $stopTime) {
+                    return false;
+                }
+
                 $arrivalTime = Carbon::createFromFormat('H:i:s', $stopTime->arrival_time);
                 $minutesSinceArrival = Carbon::now()->diffInMinutes($arrivalTime, false);
+
                 return $this->compare($minutesSinceArrival, $this->value);
-            
+
             case 'platform_change':
                 // This would need specific logic for platform changes
                 return false;
-            
+
             case 'delay_duration':
                 // This would need specific logic for delay calculations
                 return false;
-            
+
             case 'current_status':
                 // Check StopStatus for specific stop or first stop
                 if ($specificStopId) {
@@ -135,17 +151,17 @@ class RuleCondition extends Model
                         ->first();
                     $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
                 } else {
-                $firstStopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
-                if (!$firstStopTime) {
-                    $statusValue = 'On Time';
-                } else {
-                    $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
-                        ->where('stop_id', $firstStopTime->stop_id)
-                        ->first();
-                    $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
+                    $firstStopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+                    if (! $firstStopTime) {
+                        $statusValue = 'On Time';
+                    } else {
+                        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+                            ->where('stop_id', $firstStopTime->stop_id)
+                            ->first();
+                        $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
                     }
                 }
-                
+
                 // If the value is numeric (status ID), get the actual status text
                 if (is_numeric($this->value)) {
                     $status = \App\Models\Status::find($this->value);
@@ -153,25 +169,70 @@ class RuleCondition extends Model
                 } else {
                     $compareValue = $this->value;
                 }
-                
+
                 // Normalize both values for comparison (case-insensitive, handle dash/space differences)
                 $normalizedStatusValue = strtolower(str_replace([' ', '-'], '', $statusValue));
                 $normalizedCompareValue = strtolower(str_replace([' ', '-'], '', $compareValue));
-                
+
                 // Debug logging removed - rule is working correctly
-                
+
                 return $this->compare($normalizedStatusValue, $normalizedCompareValue);
-            
+
             case 'time_of_day':
                 $currentTime = Carbon::now()->format('H:i:s');
+
                 return $this->compare($currentTime, $this->value);
-            
+
             case 'train_number':
                 $trainNumber = $train->trip_short_name ?? $train->trip_id;
                 // Extract just the train number (first part before space)
                 $extractedTrainNumber = explode(' ', $trainNumber)[0];
+
                 return $this->compare($extractedTrainNumber, $this->value);
-            
+
+                // Realtime Data Conditions
+            case 'delay_minutes':
+                return $this->evaluateDelayMinutes($train, $specificStopId);
+
+            case 'delay_percentage':
+                return $this->evaluateDelayPercentage($train, $specificStopId);
+
+            case 'platform_changed':
+                return $this->evaluatePlatformChanged($train, $specificStopId);
+
+            case 'specific_platform':
+                return $this->evaluateSpecificPlatform($train, $specificStopId);
+
+            case 'is_cancelled':
+                return $this->evaluateIsCancelled($train, $specificStopId);
+
+            case 'has_realtime_update':
+                return $this->evaluateHasRealtimeUpdate($train, $specificStopId);
+
+                // Route/Direction Conditions
+            case 'route_id':
+                return $this->compare($train->route_id, $this->value);
+
+            case 'direction_id':
+                return $this->compare($train->direction_id, $this->value);
+
+            case 'destination_station':
+                return $this->evaluateDestinationStation($train, $specificStopId);
+
+                // Time Window Conditions
+            case 'time_range':
+                return $this->evaluateTimeRange($train, $specificStopId);
+
+            case 'day_of_week':
+                return $this->evaluateDayOfWeek($train, $specificStopId);
+
+            case 'is_peak_time':
+                return $this->evaluateIsPeakTime($train, $specificStopId);
+
+                // Service Conditions
+            case 'wheelchair_accessible':
+                return $this->compare($train->wheelchair_accessible, $this->value);
+
             default:
                 return false;
         }
@@ -192,8 +253,10 @@ class RuleCondition extends Model
                 // For time-based conditions, use tolerance window to handle timing issues
                 if (in_array($this->condition_type, ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival'])) {
                     $tolerance = $this->tolerance_minutes ?? 1;
+
                     return abs($value1 - $value2) <= $tolerance;
                 }
+
                 return $value1 == $value2;
             case '!=':
                 return $value1 != $value2;
@@ -201,4 +264,196 @@ class RuleCondition extends Model
                 return false;
         }
     }
-} 
+
+    // New condition evaluation methods
+    private function evaluateDelayMinutes($train, $specificStopId = null)
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+
+        if (! $stopTime) {
+            return false;
+        }
+
+        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+            ->where('stop_id', $stopTime->stop_id)
+            ->first();
+
+        if (! $stopStatus || ! $stopStatus->new_departure_time) {
+            return false;
+        }
+
+        $scheduledTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
+        $actualTime = Carbon::createFromFormat('H:i:s', $stopStatus->new_departure_time);
+        $delayMinutes = $scheduledTime->diffInMinutes($actualTime, false);
+
+        return $this->compare($delayMinutes, $this->value);
+    }
+
+    private function evaluateDelayPercentage($train, $specificStopId = null)
+    {
+        // Calculate total journey time
+        $firstStop = $train->stopTimes()->orderBy('stop_sequence')->first();
+        $lastStop = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+
+        if (! $firstStop || ! $lastStop) {
+            return false;
+        }
+
+        $journeyTime = Carbon::createFromFormat('H:i:s', $firstStop->departure_time)
+            ->diffInMinutes(Carbon::createFromFormat('H:i:s', $lastStop->arrival_time));
+
+        $delayMinutes = $this->getDelayMinutes($train, $specificStopId);
+        if ($delayMinutes === false) {
+            return false;
+        }
+
+        $delayPercentage = ($delayMinutes / $journeyTime) * 100;
+
+        return $this->compare($delayPercentage, $this->value);
+    }
+
+    private function evaluatePlatformChanged($train, $specificStopId = null)
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+
+        if (! $stopTime) {
+            return false;
+        }
+
+        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+            ->where('stop_id', $stopTime->stop_id)
+            ->first();
+
+        if (! $stopStatus) {
+            return false;
+        }
+
+        $scheduledPlatform = $stopTime->stop->platform_code ?? '';
+        $actualPlatform = $stopStatus->departure_platform ?? '';
+
+        return $scheduledPlatform !== $actualPlatform;
+    }
+
+    private function evaluateSpecificPlatform($train, $specificStopId = null)
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+
+        if (! $stopTime) {
+            return false;
+        }
+
+        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+            ->where('stop_id', $stopTime->stop_id)
+            ->first();
+
+        if (! $stopStatus) {
+            return false;
+        }
+
+        return $this->compare($stopStatus->departure_platform, $this->value);
+    }
+
+    private function evaluateIsCancelled($train, $specificStopId = null)
+    {
+        $query = \App\Models\StopStatus::where('trip_id', $train->trip_id);
+
+        if ($specificStopId) {
+            $query->where('stop_id', $specificStopId);
+        }
+
+        return $query->where('status', 'cancelled')->exists();
+    }
+
+    private function evaluateHasRealtimeUpdate($train, $specificStopId = null)
+    {
+        $query = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+            ->where('is_realtime_update', true);
+
+        if ($specificStopId) {
+            $query->where('stop_id', $specificStopId);
+        }
+
+        return $query->exists();
+    }
+
+    private function evaluateDestinationStation($train, $specificStopId = null)
+    {
+        $lastStop = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+        if (! $lastStop) {
+            return false;
+        }
+
+        $destinationId = $lastStop->stop_id;
+        $destinationName = $lastStop->stop->stop_name ?? '';
+
+        return $this->compare($destinationId, $this->value) ||
+               $this->compare($destinationName, $this->value);
+    }
+
+    private function evaluateTimeRange($train, $specificStopId = null)
+    {
+        $currentTime = Carbon::now()->format('H:i:s');
+        $startTime = $this->value;
+        $endTime = $this->value_secondary;
+
+        return $currentTime >= $startTime && $currentTime <= $endTime;
+    }
+
+    private function evaluateDayOfWeek($train, $specificStopId = null)
+    {
+        $currentDay = Carbon::now()->dayOfWeek; // 0 = Sunday, 1 = Monday, etc.
+        $allowedDays = explode(',', $this->value);
+
+        return in_array($currentDay, $allowedDays);
+    }
+
+    private function evaluateIsPeakTime($train, $specificStopId = null)
+    {
+        $currentTime = Carbon::now();
+        $hour = $currentTime->hour;
+
+        // Define peak hours: 7-9am and 4-7pm
+        $morningPeak = $hour >= 7 && $hour < 9;
+        $eveningPeak = $hour >= 16 && $hour < 19;
+
+        return $morningPeak || $eveningPeak;
+    }
+
+    private function getDelayMinutes($train, $specificStopId = null)
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+
+        if (! $stopTime) {
+            return false;
+        }
+
+        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
+            ->where('stop_id', $stopTime->stop_id)
+            ->first();
+
+        if (! $stopStatus || ! $stopStatus->new_departure_time) {
+            return false;
+        }
+
+        $scheduledTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
+        $actualTime = Carbon::createFromFormat('H:i:s', $stopStatus->new_departure_time);
+
+        return $scheduledTime->diffInMinutes($actualTime, false);
+    }
+}

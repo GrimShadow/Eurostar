@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class GtfsStop extends Model
 {
+    use HasFactory;
+
     protected $table = 'gtfs_stops';
+
     protected $primaryKey = 'stop_id';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -17,13 +22,13 @@ class GtfsStop extends Model
         'stop_lon',
         'location_type',
         'parent_station',
-        'platform_code'
+        'platform_code',
     ];
 
     protected $casts = [
         'stop_lon' => 'decimal:6',
         'stop_lat' => 'decimal:6',
-        'location_type' => 'integer'
+        'location_type' => 'integer',
     ];
 
     public function stopTimes()

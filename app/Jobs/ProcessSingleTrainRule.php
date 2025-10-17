@@ -296,10 +296,20 @@ class ProcessSingleTrainRule implements ShouldQueue
 
     private function applyActionToStops($rule, $train, $stopIds)
     {
-        if ($rule->action === 'set_status') {
-            $this->setTrainStatusAtStops($rule, $train, $stopIds);
-        } elseif ($rule->action === 'make_announcement') {
-            $this->makeAnnouncement($rule, $train);
+        $actions = $rule->getActions();
+
+        foreach ($actions as $index => $action) {
+            $actionValue = is_array($rule->action_value) && isset($rule->action_value[$index])
+                ? $rule->action_value[$index]
+                : $rule->action_value;
+
+            if ($action === 'set_status') {
+                $this->setTrainStatusAtStops($rule, $train, $stopIds, $actionValue);
+            } elseif ($action === 'make_announcement') {
+                $this->makeAnnouncement($rule, $train, $actionValue);
+            } elseif ($action === 'update_platform') {
+                $this->updatePlatform($rule, $train, $stopIds, $actionValue);
+            }
         }
 
         // Record the execution for each unique stop to prevent re-triggering
@@ -309,9 +319,10 @@ class ProcessSingleTrainRule implements ShouldQueue
                 $rule->id,
                 $train->trip_id,
                 $stopId,
-                $rule->action,
+                implode(',', $actions),
                 [
-                    'action_value' => $rule->action_value,
+                    'actions' => $actions,
+                    'action_values' => $rule->action_value,
                     'train_number' => $train->trip_short_name ?? $train->trip_id,
                 ]
             );
@@ -347,12 +358,13 @@ class ProcessSingleTrainRule implements ShouldQueue
         return strtoupper($hex);
     }
 
-    private function setTrainStatusAtStops($rule, $train, $stopIds)
+    private function setTrainStatusAtStops($rule, $train, $stopIds, $actionValue = null)
     {
         // Get the status text from the statuses table
-        $status = Status::find($rule->action_value);
+        $statusId = $actionValue ?? $rule->action_value;
+        $status = Status::find($statusId);
         if (! $status) {
-            LogHelper::rulesError("Status with ID {$rule->action_value} not found for rule {$rule->id}");
+            LogHelper::rulesError("Status with ID {$statusId} not found for rule {$rule->id}");
 
             return;
         }
@@ -407,6 +419,43 @@ class ProcessSingleTrainRule implements ShouldQueue
         } catch (\Exception $e) {
             DB::rollBack();
             LogHelper::rulesError("Failed to update train status at stops for train {$train->trip_id}", [
+                'rule_id' => $rule->id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    private function updatePlatform($rule, $train, $stopIds, $actionValue)
+    {
+        if (! is_array($actionValue) || ! isset($actionValue['platform'])) {
+            LogHelper::rulesError("Invalid platform action value for rule {$rule->id}");
+
+            return;
+        }
+
+        $platform = $actionValue['platform'];
+
+        DB::beginTransaction();
+        try {
+            foreach ($stopIds as $stopId) {
+                StopStatus::updateOrCreate(
+                    ['trip_id' => $train->trip_id, 'stop_id' => $stopId],
+                    [
+                        'departure_platform' => $platform,
+                        'arrival_platform' => $platform,
+                        'is_realtime_update' => true,
+                        'updated_at' => now(),
+                    ]
+                );
+            }
+
+            DB::commit();
+            LogHelper::rulesInfo("Updated platform for train {$train->trip_id} to {$platform} at stops: ".implode(', ', $stopIds));
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            LogHelper::rulesError("Failed to update platform for train {$train->trip_id}", [
                 'rule_id' => $rule->id,
                 'error' => $e->getMessage(),
             ]);

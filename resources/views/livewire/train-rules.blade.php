@@ -38,12 +38,32 @@
                                 <label class="block text-sm font-medium text-gray-700">Condition Type</label>
                                 <select wire:model.live="conditions.{{ $index }}.condition_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                                     <option value="">Select Type</option>
-                                    <option value="time_until_departure">Time Until Departure</option>
-                                    <option value="time_after_departure">Time After Departure</option>
-                                    <option value="time_until_arrival">Time Until Arrival</option>
-                                    <option value="time_after_arrival">Time After Arrival</option>
-                                    <option value="current_status">Current Status</option>
-                                    <option value="train_number">Train Number</option>
+                                    <optgroup label="Time-Based">
+                                        <option value="time_until_departure">Time Until Departure</option>
+                                        <option value="time_after_departure">Time After Departure</option>
+                                        <option value="time_until_arrival">Time Until Arrival</option>
+                                        <option value="time_after_arrival">Time After Arrival</option>
+                                        <option value="time_range">Time Range</option>
+                                        <option value="day_of_week">Day of Week</option>
+                                        <option value="is_peak_time">Is Peak Time</option>
+                                    </optgroup>
+                                    <optgroup label="Realtime Data">
+                                        <option value="delay_minutes">Delay (Minutes)</option>
+                                        <option value="delay_percentage">Delay (Percentage)</option>
+                                        <option value="platform_changed">Platform Changed</option>
+                                        <option value="is_cancelled">Is Cancelled</option>
+                                        <option value="has_realtime_update">Has Realtime Update</option>
+                                    </optgroup>
+                                    <optgroup label="Route/Service">
+                                        <option value="route_id">Route ID</option>
+                                        <option value="direction_id">Direction</option>
+                                        <option value="destination_station">Destination Station</option>
+                                        <option value="wheelchair_accessible">Wheelchair Accessible</option>
+                                    </optgroup>
+                                    <optgroup label="General">
+                                        <option value="current_status">Current Status</option>
+                                        <option value="train_number">Train Number</option>
+                                    </optgroup>
                                 </select>
                                 @error("conditions.{$index}.condition_type") <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                             </div>
@@ -106,6 +126,33 @@
             </div>
 
             <div class="mt-8">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Rule Settings</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Priority</label>
+                        <input type="number" wire:model="priority" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500" placeholder="0 (higher = executes first)">
+                        @error('priority') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Execution Mode</label>
+                        <select wire:model="executionMode" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                            <option value="first_match">First Match</option>
+                            <option value="all_matches">All Matches</option>
+                            <option value="highest_priority">Highest Priority</option>
+                        </select>
+                        @error('executionMode') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Active</label>
+                        <div class="mt-1">
+                            <input type="checkbox" wire:model="isActive" class="rounded border-gray-300 text-neutral-600 shadow-sm focus:border-neutral-300 focus:ring focus:ring-neutral-200 focus:ring-opacity-50">
+                            <span class="ml-2 text-sm text-gray-700">Enable this rule</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Then</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -114,6 +161,7 @@
                             <option value="">Select Action</option>
                             <option value="set_status">Set Status</option>
                             <option value="make_announcement">Make Announcement</option>
+                            <option value="update_platform">Update Platform</option>
                         </select>
                         @error('action') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                     </div>
@@ -256,6 +304,12 @@
                                     @endforeach
                                 </div>
                             @endif
+                        </div>
+                    @elseif($action === 'update_platform')
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Platform Number</label>
+                            <input type="text" wire:model="actionValue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500" placeholder="Enter platform number (e.g., 1, 2A, 3B)">
+                            @error('actionValue') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                         </div>
                     @endif
                 </div>
