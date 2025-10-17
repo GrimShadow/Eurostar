@@ -9,14 +9,18 @@ return new class extends Migration
     public function up()
     {
         Schema::table('gtfs_stop_times', function (Blueprint $table) {
-            $table->time('new_departure_time')->nullable()->after('departure_time');
+            if (!Schema::hasColumn('gtfs_stop_times', 'new_departure_time')) {
+                $table->time('new_departure_time')->nullable()->after('departure_time');
+            }
         });
     }
 
     public function down()
     {
         Schema::table('gtfs_stop_times', function (Blueprint $table) {
-            $table->dropColumn('new_departure_time');
+            if (Schema::hasColumn('gtfs_stop_times', 'new_departure_time')) {
+                $table->dropColumn('new_departure_time');
+            }
         });
     }
 }; 
