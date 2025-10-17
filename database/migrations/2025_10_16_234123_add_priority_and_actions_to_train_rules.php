@@ -30,10 +30,8 @@ return new class extends Migration
                 $table->json('action_value')->change();
             }
 
-            // Add indexes for performance (only if they don't exist)
-            if (!$this->indexExists('train_rules', 'train_rules_is_active_priority_index')) {
-                $table->index(['is_active', 'priority']);
-            }
+            // Add indexes for performance
+            $table->index(['is_active', 'priority']);
         });
     }
 
@@ -43,10 +41,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('train_rules', function (Blueprint $table) {
-            // Drop index if it exists
-            if ($this->indexExists('train_rules', 'train_rules_is_active_priority_index')) {
-                $table->dropIndex(['is_active', 'priority']);
-            }
+            // Drop index
+            $table->dropIndex(['is_active', 'priority']);
             
             // Drop columns if they exist
             $columnsToDrop = [];
@@ -71,12 +67,4 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Check if an index exists on a table
-     */
-    private function indexExists(string $table, string $index): bool
-    {
-        $indexes = Schema::getConnection()->getDoctrineSchemaManager()->listTableIndexes($table);
-        return array_key_exists($index, $indexes);
-    }
 };
