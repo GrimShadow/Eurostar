@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -24,9 +25,13 @@ return new class extends Migration
             
             // Change action and action_value to JSON if they're not already
             if (Schema::hasColumn('train_rules', 'action')) {
+                // First, clean up any invalid JSON data
+                $this->cleanupActionData();
                 $table->json('action')->change();
             }
             if (Schema::hasColumn('train_rules', 'action_value')) {
+                // First, clean up any invalid JSON data
+                $this->cleanupActionValueData();
                 $table->json('action_value')->change();
             }
 
@@ -65,6 +70,64 @@ return new class extends Migration
                 $table->string('action_value')->change();
             }
         });
+    }
+
+    /**
+     * Clean up action data to ensure it's valid JSON
+     */
+    private function cleanupActionData(): void
+    {
+        $rules = DB::table('train_rules')->whereNotNull('action')->get();
+        
+        foreach ($rules as $rule) {
+            $action = $rule->action;
+            
+            // If it's already valid JSON, skip
+            if (is_string($action) && json_decode($action) !== null) {
+                continue;
+            }
+            
+            // If it's a string but not JSON, wrap it in an array
+            if (is_string($action) && !empty($action)) {
+                $jsonAction = json_encode([$action]);
+            } else {
+                // If it's null or empty, set a default
+                $jsonAction = json_encode(['set_status']);
+            }
+            
+            DB::table('train_rules')
+                ->where('id', $rule->id)
+                ->update(['action' => $jsonAction]);
+        }
+    }
+
+    /**
+     * Clean up action_value data to ensure it's valid JSON
+     */
+    private function cleanupActionValueData(): void
+    {
+        $rules = DB::table('train_rules')->whereNotNull('action_value')->get();
+        
+        foreach ($rules as $rule) {
+            $actionValue = $rule->action_value;
+            
+            // If it's already valid JSON, skip
+            if (is_string($actionValue) && json_decode($actionValue) !== null) {
+                continue;
+            }
+            
+            // If it's a string but not JSON, wrap it in an array
+            if (is_string($actionValue) && !empty($actionValue)) {
+                $jsonActionValue = json_encode([$actionValue]);
+            } else {
+                // If it's null or empty, set a default
+                $jsonActionValue = json_encode([null]);
+            }
+            
+            DB::table('train_rules')
+                ->where('id', $rule->id)
+                ->update(['action_value' => $jsonActionValue]);
+        }
     }
 
 };
