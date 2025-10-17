@@ -12,9 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('rule_conditions', function (Blueprint $table) {
-            $table->string('value_secondary')->nullable()->after('value');
-            $table->enum('threshold_type', ['absolute', 'percentage'])->default('absolute')->after('value_secondary');
-            $table->string('reference_field')->nullable()->after('threshold_type');
+            if (!Schema::hasColumn('rule_conditions', 'value_secondary')) {
+                $table->string('value_secondary')->nullable()->after('value');
+            }
+            if (!Schema::hasColumn('rule_conditions', 'threshold_type')) {
+                $table->enum('threshold_type', ['absolute', 'percentage'])->default('absolute')->after('value_secondary');
+            }
+            if (!Schema::hasColumn('rule_conditions', 'reference_field')) {
+                $table->string('reference_field')->nullable()->after('threshold_type');
+            }
         });
     }
 
@@ -24,7 +30,20 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('rule_conditions', function (Blueprint $table) {
-            $table->dropColumn(['value_secondary', 'threshold_type', 'reference_field']);
+            $columnsToDrop = [];
+            if (Schema::hasColumn('rule_conditions', 'value_secondary')) {
+                $columnsToDrop[] = 'value_secondary';
+            }
+            if (Schema::hasColumn('rule_conditions', 'threshold_type')) {
+                $columnsToDrop[] = 'threshold_type';
+            }
+            if (Schema::hasColumn('rule_conditions', 'reference_field')) {
+                $columnsToDrop[] = 'reference_field';
+            }
+            
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
         });
     }
 };

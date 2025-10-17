@@ -12,9 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('rule_conditions', function (Blueprint $table) {
-            $table->string('group_id')->nullable()->after('train_rule_id');
-            $table->enum('group_operator', ['and', 'or'])->nullable()->after('group_id');
-            $table->integer('nesting_level')->default(0)->after('group_operator');
+            if (!Schema::hasColumn('rule_conditions', 'group_id')) {
+                $table->string('group_id')->nullable()->after('train_rule_id');
+            }
+            if (!Schema::hasColumn('rule_conditions', 'group_operator')) {
+                $table->enum('group_operator', ['and', 'or'])->nullable()->after('group_id');
+            }
+            if (!Schema::hasColumn('rule_conditions', 'nesting_level')) {
+                $table->integer('nesting_level')->default(0)->after('group_operator');
+            }
         });
     }
 
@@ -24,7 +30,20 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('rule_conditions', function (Blueprint $table) {
-            $table->dropColumn(['group_id', 'group_operator', 'nesting_level']);
+            $columnsToDrop = [];
+            if (Schema::hasColumn('rule_conditions', 'group_id')) {
+                $columnsToDrop[] = 'group_id';
+            }
+            if (Schema::hasColumn('rule_conditions', 'group_operator')) {
+                $columnsToDrop[] = 'group_operator';
+            }
+            if (Schema::hasColumn('rule_conditions', 'nesting_level')) {
+                $columnsToDrop[] = 'nesting_level';
+            }
+            
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
         });
     }
 };

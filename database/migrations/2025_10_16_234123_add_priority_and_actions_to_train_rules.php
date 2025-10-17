@@ -12,13 +12,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('train_rules', function (Blueprint $table) {
-            $table->integer('priority')->default(0)->after('is_active');
-            $table->json('action')->change();
-            $table->json('action_value')->change();
-            $table->enum('execution_mode', ['first_match', 'all_matches', 'highest_priority'])->default('first_match')->after('priority');
+            // Add priority column if it doesn't exist
+            if (!Schema::hasColumn('train_rules', 'priority')) {
+                $table->integer('priority')->default(0)->after('is_active');
+            }
+            
+            // Add execution_mode column if it doesn't exist
+            if (!Schema::hasColumn('train_rules', 'execution_mode')) {
+                $table->enum('execution_mode', ['first_match', 'all_matches', 'highest_priority'])->default('first_match')->after('priority');
+            }
+            
+            // Change action and action_value to JSON if they're not already
+            if (Schema::hasColumn('train_rules', 'action')) {
+                $table->json('action')->change();
+            }
+            if (Schema::hasColumn('train_rules', 'action_value')) {
+                $table->json('action_value')->change();
+            }
 
-            // Add indexes for performance
-            $table->index(['is_active', 'priority']);
+            // Add indexes for performance (only if they don't exist)
+            if (!$this->indexExists('train_rules', 'train_rules_is_active_priority_index')) {
+                $table->index(['is_active', 'priority']);
+            }
         });
     }
 
@@ -28,10 +43,40 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('train_rules', function (Blueprint $table) {
-            $table->dropIndex(['is_active', 'priority']);
-            $table->dropColumn(['priority', 'execution_mode']);
-            $table->string('action')->change();
-            $table->string('action_value')->change();
+            // Drop index if it exists
+            if ($this->indexExists('train_rules', 'train_rules_is_active_priority_index')) {
+                $table->dropIndex(['is_active', 'priority']);
+            }
+            
+            // Drop columns if they exist
+            $columnsToDrop = [];
+            if (Schema::hasColumn('train_rules', 'priority')) {
+                $columnsToDrop[] = 'priority';
+            }
+            if (Schema::hasColumn('train_rules', 'execution_mode')) {
+                $columnsToDrop[] = 'execution_mode';
+            }
+            
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
+            
+            // Revert action and action_value to string if they exist
+            if (Schema::hasColumn('train_rules', 'action')) {
+                $table->string('action')->change();
+            }
+            if (Schema::hasColumn('train_rules', 'action_value')) {
+                $table->string('action_value')->change();
+            }
         });
+    }
+
+    /**
+     * Check if an index exists on a table
+     */
+    private function indexExists(string $table, string $index): bool
+    {
+        $indexes = Schema::getConnection()->getDoctrineSchemaManager()->listTableIndexes($table);
+        return array_key_exists($index, $indexes);
     }
 };
