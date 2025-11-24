@@ -56,7 +56,7 @@ return new class extends Migration
             }
             if (Schema::hasColumn('train_rules', 'execution_mode')) {
                 $columnsToDrop[] = 'execution_mode';
-            }
+    }
             
             if (!empty($columnsToDrop)) {
                 $table->dropColumn($columnsToDrop);

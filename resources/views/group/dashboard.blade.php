@@ -4,8 +4,8 @@
 
 
             <div class="overflow-hidden">
-                <livewire:train-grid :group="$group" wire:poll.5s />
-                <livewire:train-table :group="$group" wire:poll.5s />
+                <livewire:train-grid :group="$group" wire:poll.30s.visible />
+                <livewire:train-table :group="$group" wire:poll.30s.visible />
             </div>
 
             <!-- Current Time Display -->

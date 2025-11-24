@@ -67,7 +67,7 @@ class TrainRules extends Component
     {
         $rules = [
             'conditions' => 'required|array|min:1',
-            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible',
+            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible,minutes_until_check_in_starts',
             'conditions.*.operator' => 'required',
             'conditions.*.value' => 'required',
             'action' => 'required|in:set_status,make_announcement,update_platform',
@@ -149,6 +149,7 @@ class TrainRules extends Component
                 case 'time_after_departure':
                 case 'time_until_arrival':
                 case 'time_after_arrival':
+                case 'minutes_until_check_in_starts':
                     $this->conditions[$index]['value'] = '0';
                     break;
                 default:
@@ -191,6 +192,7 @@ class TrainRules extends Component
             case 'time_after_arrival':
             case 'delay_minutes':
             case 'delay_percentage':
+            case 'minutes_until_check_in_starts':
                 $this->valueField = [
                     'type' => 'number',
                     'label' => 'Minutes',

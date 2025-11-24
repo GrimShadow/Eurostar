@@ -43,6 +43,7 @@
                                         <option value="time_after_departure">Time After Departure</option>
                                         <option value="time_until_arrival">Time Until Arrival</option>
                                         <option value="time_after_arrival">Time After Arrival</option>
+                                        <option value="minutes_until_check_in_starts">Minutes Until Check-in Starts</option>
                                         <option value="time_range">Time Range</option>
                                         <option value="day_of_week">Day of Week</option>
                                         <option value="is_peak_time">Is Peak Time</option>
@@ -93,7 +94,7 @@
                                             <option value="{{ $status->id }}">{{ $status->status }}</option>
                                         @endforeach
                                     </select>
-                                @elseif(in_array($condition['condition_type'], ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival']))
+                                @elseif(in_array($condition['condition_type'], ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival', 'minutes_until_check_in_starts']))
                                     <div class="flex space-x-2">
                                         <div class="flex-1">
                                             <input type="number" 

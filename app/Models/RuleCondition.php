@@ -119,6 +119,53 @@ class RuleCondition extends Model
 
                 return $this->compare($minutesAfterArrival, $this->value);
 
+            case 'minutes_until_check_in_starts':
+                // Compute minutes until check-in starts for the first (or specific) stop
+                if ($specificStopId) {
+                    $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+                } else {
+                    $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+                }
+                if (! $stopTime) {
+                    return false;
+                }
+
+                $now = Carbon::now();
+                $today = $now->format('Y-m-d');
+
+                // Determine check-in offset minutes
+                $globalCheckInOffset = \App\Models\Setting::where('key', 'global_check_in_offset')->value('value') ?? 90;
+                $specificTrainTimes = \App\Models\Setting::where('key', 'specific_train_check_in_times')->value('value');
+                $specificTrainTimes = $specificTrainTimes ? (is_array($specificTrainTimes) ? $specificTrainTimes : json_decode($specificTrainTimes, true)) : [];
+
+                // Derive a train number similar to API logic
+                $trainNumberRaw = $train->trip_short_name ?? $train->trip_id;
+                $trainNumber = explode(' ', (string) $trainNumberRaw)[0];
+                $checkInOffset = (int) ($specificTrainTimes[$trainNumber] ?? $globalCheckInOffset);
+
+                // Build departure time and check-in start time for today
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->departure_time);
+                $checkInStart = $departureTime->copy()->subMinutes($checkInOffset);
+
+                // If the computed check-in start is in the past but departure is still in the future, it means check-in already started
+                if ($checkInStart->isPast()) {
+                    if ($departureTime->isFuture()) {
+                        $minutesUntilCheckIn = 0;
+                    } else {
+                        // Both are in the past for today; assume next day schedule
+                        $checkInStart = $checkInStart->addDay();
+                        $minutesUntilCheckIn = (int) round($now->diffInMinutes($checkInStart, false));
+                    }
+                } else {
+                    $minutesUntilCheckIn = (int) round($now->diffInMinutes($checkInStart, false));
+                }
+
+                if ($minutesUntilCheckIn < 0) {
+                    $minutesUntilCheckIn = 0;
+                }
+
+                return $this->compare($minutesUntilCheckIn, $this->value);
+
             case 'time_since_arrival':
                 // Get the last stop's arrival time (or specific stop if provided)
                 if ($specificStopId) {

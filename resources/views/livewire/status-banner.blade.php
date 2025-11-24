@@ -1,4 +1,4 @@
-<div wire:poll.5s wire:key="status-banner">
+<div wire:poll.60s.visible wire:key="status-banner">
     @if($showBanner)
         <div class="bg-red-100 border-t-4 border-red-500 rounded-b text-red-900 px-4 py-3 shadow-md" role="alert">
             <div class="flex">

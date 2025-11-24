@@ -24,6 +24,13 @@ class Kernel extends ConsoleKernel
             ->onFailure(function () {
                 \Log::error('GTFS Realtime command failed');
             });
+
+        // Clean up expired cache entries hourly to prevent database bloat
+        $schedule->command('cache:cleanup-expired')
+            ->hourly()
+            ->onFailure(function () {
+                \Log::error('Cache cleanup command failed');
+            });
     }
 
     /**

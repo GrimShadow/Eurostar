@@ -1,4 +1,4 @@
-<div wire:init="loadTrains" wire:poll.10s="loadTrains">
+<div wire:init="loadTrains">
     <div x-data="{ 
             modalOpen: false, 
             selectedTrain: null,
