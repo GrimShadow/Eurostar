@@ -73,8 +73,9 @@ class TrainTable extends Component
 
     public function loadTrains()
     {
-        // Create a cache key based on group, page, and current time (rounded to nearest minute)
-        $cacheKey = "train_table_group_{$this->group->id}_page_{$this->page}_".now()->format('Y-m-d_H:i');
+        // Use 5-minute cache intervals for better cache hit rate
+        $interval = floor(now()->minute / 5) * 5;
+        $cacheKey = "train_table_group_{$this->group->id}_page_{$this->page}_".now()->format('Y-m-d')."_{$interval}";
 
         // Cache the expensive query result for 5 minutes
         $results = Cache::remember($cacheKey, now()->addMinutes(5), function () {
@@ -288,14 +289,17 @@ class TrainTable extends Component
      */
     private function clearTrainTableCache()
     {
-        // Clear current minute cache for all pages
+        // Clear current 5-minute interval cache for all pages
+        $interval = floor(now()->minute / 5) * 5;
+        $previousInterval = floor(now()->subMinutes(5)->minute / 5) * 5;
+
         for ($page = 1; $page <= 10; $page++) { // Clear up to 10 pages
-            $currentCacheKey = "train_table_group_{$this->group->id}_page_{$page}_".now()->format('Y-m-d_H:i');
+            $currentCacheKey = "train_table_group_{$this->group->id}_page_{$page}_".now()->format('Y-m-d')."_{$interval}";
             Cache::forget($currentCacheKey);
 
-            // Also clear the previous minute cache in case we're at the boundary
-            $previousMinuteCacheKey = "train_table_group_{$this->group->id}_page_{$page}_".now()->subMinute()->format('Y-m-d_H:i');
-            Cache::forget($previousMinuteCacheKey);
+            // Also clear the previous 5-minute interval cache in case we're at the boundary
+            $previousCacheKey = "train_table_group_{$this->group->id}_page_{$page}_".now()->format('Y-m-d')."_{$previousInterval}";
+            Cache::forget($previousCacheKey);
         }
 
         // Clear API cache as well to ensure consistency
@@ -318,11 +322,28 @@ class TrainTable extends Component
 
     public function render()
     {
-        return view('livewire.train-table', [
-            'trains' => $this->trains,
-            'total' => $this->total,
-            'page' => $this->page,
-            'perPage' => $this->perPage,
-        ]);
+        try {
+            return view('livewire.train-table', [
+                'trains' => $this->trains,
+                'total' => $this->total,
+                'page' => $this->page,
+                'perPage' => $this->perPage,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('TrainTable render error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'group_id' => $this->group->id ?? null,
+            ]);
+
+            // Return view with error state instead of crashing
+            return view('livewire.train-table', [
+                'trains' => [],
+                'total' => 0,
+                'page' => 1,
+                'perPage' => $this->perPage,
+                'error' => 'Unable to load train data. Please refresh the page.',
+            ]);
+        }
     }
 }

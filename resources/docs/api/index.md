@@ -139,6 +139,8 @@ All list endpoints support pagination:
 
 ## Endpoints
 
+For detailed endpoint documentation with Postman examples, see [API Endpoints Reference](./endpoints.md).
+
 ### Announcements
 
 #### List Announcements
@@ -451,10 +453,21 @@ announcement = client.announcements.create({
 
 You can test the API using any of the following tools:
 
-* **Postman** (recommended)
-* **cURL**
+* **Postman** (recommended) - Import the [Postman Collection](./eurostar-api.postman_collection.json)
+* **cURL** - See [API Endpoints Reference](./endpoints.md) for cURL examples
 * **Insomnia**
 * **SDKs** (PHP, JS, Python)
+
+### Postman Collection
+
+A complete Postman collection is available for easy import:
+
+1. Download [eurostar-api.postman_collection.json](./eurostar-api.postman_collection.json)
+2. Open Postman and click **Import**
+3. Select the downloaded file
+4. Configure environment variables:
+   - `base_url`: Your API base URL
+   - `api_token`: Your API token (auto-populated after generating token)
 
 ### Sandbox Environment
 

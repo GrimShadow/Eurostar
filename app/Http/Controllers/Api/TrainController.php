@@ -4,14 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\GtfsTrip;
-use App\Models\TrainStatus;
-use App\Models\StopStatus;
 use App\Models\Setting;
 use App\Models\Status;
+use App\Models\StopStatus;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class TrainController extends Controller
 {
@@ -30,65 +28,66 @@ class TrainController extends Controller
         foreach ($rgbArray as $component) {
             $hex .= str_pad(dechex(trim($component)), 2, '0', STR_PAD_LEFT);
         }
+
         return strtoupper($hex);
     }
 
     private function getPlatformCode($stopId, $platformCode, $manualPlatform, $tripId = null)
     {
         // If we have a platform code from the stop, use it
-        if (!empty($platformCode)) {
+        if (! empty($platformCode)) {
             return $platformCode;
         }
-        
+
         // If we have a manually set platform, use it
-        if (!empty($manualPlatform) && $manualPlatform !== 'TBD') {
+        if (! empty($manualPlatform) && $manualPlatform !== 'TBD') {
             return $manualPlatform;
         }
-        
+
         // Check for platform assignments in the train_platform_assignments table
         if ($tripId) {
             $platformAssignment = DB::table('train_platform_assignments')
                 ->where('trip_id', $tripId)
                 ->where('stop_id', $stopId)
                 ->first();
-            
-            if ($platformAssignment && !empty($platformAssignment->platform_code) && $platformAssignment->platform_code !== 'TBD') {
+
+            if ($platformAssignment && ! empty($platformAssignment->platform_code) && $platformAssignment->platform_code !== 'TBD') {
                 return $platformAssignment->platform_code;
             }
         }
-        
+
         // If the stop ID is a base stop (like amsterdam_centraal), look up the actual platform from GTFS data
-        if (strpos($stopId, '_') === false || !preg_match('/_\d+[a-z]?$/', $stopId)) {
+        if (strpos($stopId, '_') === false || ! preg_match('/_\d+[a-z]?$/', $stopId)) {
             // If the stop ID is a base stop (like amsterdam_centraal), look up available platform codes
             // from the platform-specific stops in the GTFS data
             $platformStops = DB::table('gtfs_stops')
-                ->where('stop_id', 'LIKE', $stopId . '_%')
+                ->where('stop_id', 'LIKE', $stopId.'_%')
                 ->whereNotNull('platform_code')
                 ->where('platform_code', '!=', '')
                 ->orderBy('platform_code')
                 ->pluck('platform_code');
-            
+
             if ($platformStops->isNotEmpty()) {
                 // Return the first available platform code
                 return $platformStops->first();
             }
-            
+
             return 'TBD';
         }
-        
+
         return 'TBD';
     }
 
     public function today()
     {
         // Create a cache key based on current time (rounded to nearest minute for more frequent updates)
-        $cacheKey = 'train_api_today_' . now()->format('Y-m-d_H:i');
-        
+        $cacheKey = 'train_api_today_'.now()->format('Y-m-d_H:i');
+
         // Cache the expensive query result for 1 minute to allow minutes to update more frequently
         $result = Cache::remember($cacheKey, now()->addMinute(), function () {
             return $this->getTrainsApiData();
         });
-        
+
         return response()->json($result)
             ->header('Cache-Control', 'public, max-age=60'); // 1 minute client-side cache
     }
@@ -97,7 +96,7 @@ class TrainController extends Controller
     {
         // Ensure we're reading the most up-to-date data
         DB::connection()->reconnect();
-        
+
         $today = Carbon::now()->format('Y-m-d');
         $startTime = '00:00:00';
         $endTime = '23:59:59';
@@ -122,9 +121,9 @@ class TrainController extends Controller
                     'count' => 0,
                     'time_window' => [
                         'start' => $startTime,
-                        'end' => $endTime
-                    ]
-                ]
+                        'end' => $endTime,
+                    ],
+                ],
             ];
         }
 
@@ -149,7 +148,7 @@ class TrainController extends Controller
                 'arrival_stop.stop_id as arrival_stop_id',
                 'arrival_stop.arrival_time',
                 'train_platform_assignments.platform_code as departure_platform',
-                'arrival_platform_assignments.platform_code as arrival_platform'
+                'arrival_platform_assignments.platform_code as arrival_platform',
             ])
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
             ->join('gtfs_stop_times as departure_stop', function ($join) {
@@ -207,7 +206,7 @@ class TrainController extends Controller
                 'gtfs_stop_times.departure_time',
                 'gtfs_stop_times.new_departure_time',
                 'gtfs_stops.stop_name',
-                'gtfs_stops.platform_code'
+                'gtfs_stops.platform_code',
             ])
             ->orderBy('gtfs_stop_times.trip_id')
             ->orderBy('gtfs_stop_times.stop_sequence')
@@ -215,11 +214,20 @@ class TrainController extends Controller
             ->groupBy('trip_id')
             ->map(function ($tripStops) {
                 return $tripStops->groupBy(function ($stop) {
-                    return $stop->stop_sequence . '_' . $stop->arrival_time . '_' . $stop->departure_time;
+                    return $stop->stop_sequence.'_'.$stop->arrival_time.'_'.$stop->departure_time;
                 })->map(function ($groupedStops) {
-                    // Take the first stop that has a platform code, or the first one if none have it
+                    // Prioritize stops with new_departure_time set (updated stops)
+                    $stopWithNewTime = $groupedStops->first(function ($stop) {
+                        return ! empty($stop->new_departure_time);
+                    });
+
+                    if ($stopWithNewTime) {
+                        return $stopWithNewTime;
+                    }
+
+                    // Otherwise, take the first stop that has a platform code, or the first one if none have it
                     return $groupedStops->first(function ($stop) {
-                        return !empty($stop->platform_code);
+                        return ! empty($stop->platform_code);
                     }) ?? $groupedStops->first();
                 })->values();
             });
@@ -232,15 +240,14 @@ class TrainController extends Controller
                 return $statuses->keyBy('stop_id');
             });
 
-
         // Map the trips with their stops
         $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset, $specificTrainTimes) {
             $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset, $specificTrainTimes) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
-                
+
                 // Determine check-in offset for this train
                 $trainNumber = $train->number;
-                $checkInOffset = (int)($specificTrainTimes[$trainNumber] ?? $globalCheckInOffset);
+                $checkInOffset = (int) ($specificTrainTimes[$trainNumber] ?? $globalCheckInOffset);
 
                 // Calculate check-in start time by subtracting check-in time from departure time
                 $departureTime = Carbon::createFromFormat('H:i:s', $stop->departure_time);
@@ -248,24 +255,24 @@ class TrainController extends Controller
 
                 // Calculate minutes until check-in starts
                 $now = Carbon::now();
-                $checkInStartTime = Carbon::createFromFormat('Y-m-d H:i', $now->format('Y-m-d') . ' ' . $checkInStarts);
-                
+                $checkInStartTime = Carbon::createFromFormat('Y-m-d H:i', $now->format('Y-m-d').' '.$checkInStarts);
+
                 // If check-in start time is in the past for today, check if departure is also in the past
                 if ($checkInStartTime->isPast()) {
-                    $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d') . ' ' . $stop->departure_time);
+                    $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d').' '.$stop->departure_time);
                     if ($departureTimeToday->isPast()) {
                         // Both check-in and departure are in the past, so this is for tomorrow
                         $checkInStartTime->addDay();
-                        $minutesUntilCheckInStarts = (int)round($now->diffInMinutes($checkInStartTime, false));
+                        $minutesUntilCheckInStarts = (int) round($now->diffInMinutes($checkInStartTime, false));
                     } else {
                         // Check-in is in the past but departure is in the future, so check-in has already started
                         $minutesUntilCheckInStarts = 0;
                     }
                 } else {
                     // Check-in is in the future for today
-                    $minutesUntilCheckInStarts = (int)round($now->diffInMinutes($checkInStartTime, false));
+                    $minutesUntilCheckInStarts = (int) round($now->diffInMinutes($checkInStartTime, false));
                 }
-                
+
                 // Ensure we don't return negative values
                 if ($minutesUntilCheckInStarts < 0) {
                     $minutesUntilCheckInStarts = 0;
@@ -300,9 +307,9 @@ class TrainController extends Controller
                     'status_updated_at' => $statusUpdatedAt,
                     'departure_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->departure_platform, $train->trip_id),
                     'arrival_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->arrival_platform, $train->trip_id),
-                    'check_in_time' => (int)$checkInOffset,
+                    'check_in_time' => (int) $checkInOffset,
                     'check_in_starts' => $checkInStarts,
-                    'minutes_until_check_in_starts' => $minutesUntilCheckInStarts
+                    'minutes_until_check_in_starts' => $minutesUntilCheckInStarts,
                 ];
             })->values();
 
@@ -319,7 +326,6 @@ class TrainController extends Controller
                 $firstStopStatus = $stopStatuses->get($train->trip_id)?->get($firstStop['stop_id']);
             }
 
-
             return [
                 'number' => $train->number,
                 'trip_id' => $train->trip_id,
@@ -331,22 +337,22 @@ class TrainController extends Controller
                 'status_color_hex' => $firstStopStatus?->status_color_hex ?? '#9CA3AF',
                 'departure_platform' => $firstStop['departure_platform'] ?? 'TBD',
                 'arrival_platform' => $trainStops->last()['arrival_platform'] ?? 'TBD',
-                'stops' => $trainStops
+                'stops' => $trainStops,
             ];
         })->values();
 
         return [
             'data' => [
-                'stops' => $trains
+                'stops' => $trains,
             ],
             'meta' => [
                 'date' => $today,
                 'count' => $trains->count(),
                 'time_window' => [
                     'start' => $startTime,
-                    'end' => $endTime
-                ]
-            ]
+                    'end' => $endTime,
+                ],
+            ],
         ];
     }
 }

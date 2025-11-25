@@ -1,0 +1,638 @@
+{
+  "info": {
+    "name": "Eurostar Announcement System API",
+    "description": "Complete API collection for Eurostar Announcement System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "eurostar-api"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Generate API Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('api_token', jsonData.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"your-password\",\n  \"device_name\": \"Postman API Client\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sanctum/token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sanctum", "token"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"secure-password-123\",\n  \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"password\": \"new-password-123\",\n  \"role\": \"administrator\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Train Data",
+      "item": [
+        {
+          "name": "Get Today's Trains",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/trains/today",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trains", "today"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "GTFS Updates",
+      "item": [
+        {
+          "name": "Store GTFS Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"header\": {\n    \"gtfs_realtime_version\": \"2.0\",\n    \"incrementality\": 0,\n    \"timestamp\": 1705315200\n  },\n  \"entity\": [\n    {\n      \"id\": \"trip_update_1\",\n      \"trip_update\": {\n        \"trip\": {\n          \"trip_id\": \"9133-1124\",\n          \"route_id\": \"IC\",\n          \"direction_id\": 0\n        },\n        \"stop_time_update\": [\n          {\n            \"stop_sequence\": 1,\n            \"stop_id\": \"amsterdam_centraal_15\"\n          }\n        ]\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/update",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "update"]
+            }
+          }
+        },
+        {
+          "name": "List GTFS Updates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/updates?page=1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "updates"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get GTFS Update",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/updates/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "updates", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "GTFS Status Management",
+      "item": [
+        {
+          "name": "Update Stop Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip_id\": \"9133-1124\",\n  \"stop_id\": \"amsterdam_centraal_15\",\n  \"status\": \"delayed\",\n  \"departure_platform\": \"15\",\n  \"arrival_platform\": \"15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/stop-status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "stop-status"]
+            }
+          }
+        },
+        {
+          "name": "Get Stop Statuses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/stop-statuses/:tripId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "stop-statuses", ":tripId"],
+              "variable": [
+                {
+                  "key": "tripId",
+                  "value": "9133-1124"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Train Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trip_id\": \"9133-1124\",\n  \"status\": \"delayed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/train-status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "train-status"]
+            }
+          }
+        },
+        {
+          "name": "Get Train Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/train-status/:tripId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "train-status", ":tripId"],
+              "variable": [
+                {
+                  "key": "tripId",
+                  "value": "9133-1124"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Announcements",
+      "item": [
+        {
+          "name": "List All Announcements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/announcements",
+              "host": ["{{base_url}}"],
+              "path": ["api", "announcements"]
+            }
+          }
+        },
+        {
+          "name": "Get Latest Announcements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/announcements/latest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "announcements", "latest"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Broker",
+      "item": [
+        {
+          "name": "Get Pending Announcements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/broker/pending-announcements",
+              "host": ["{{base_url}}"],
+              "path": ["api", "broker", "pending-announcements"]
+            }
+          }
+        },
+        {
+          "name": "Update Announcement Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"response\": \"Announcement sent successfully\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/broker/announcement/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "broker", "announcement", ":id", "status"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Aviavox",
+      "item": [
+        {
+          "name": "Handle Aviavox Response (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<AIP>\n  <Announcement>\n    <ID>12345</ID>\n    <Status>Completed</Status>\n    <MessageName>CHECKIN_AWARE_FAULT</MessageName>\n    <Text>Service 9133 check-in is now open</Text>\n    <Zones>Terminal</Zones>\n    <Description>Check-in announcement</Description>\n    <ChainID>67890</ChainID>\n  </Announcement>\n</AIP>"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/aviavox/response",
+              "host": ["{{base_url}}"],
+              "path": ["api", "aviavox", "response"]
+            }
+          }
+        },
+        {
+          "name": "Handle Aviavox Response (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/aviavox/response?status=completed&id=12345",
+              "host": ["{{base_url}}"],
+              "path": ["api", "aviavox", "response"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "completed"
+                },
+                {
+                  "key": "id",
+                  "value": "12345"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Aviavox Responses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/aviavox/responses?status=Completed&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "aviavox", "responses"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Completed",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "20",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Heartbeat",
+      "item": [
+        {
+          "name": "Send GTFS Heartbeat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timestamp\": \"2024-01-15T10:30:00Z\",\n  \"status\": \"up\",\n  \"statusReason\": \"All systems operational\",\n  \"lastUpdateSentTimestamp\": \"2024-01-15T10:29:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/gtfs/heartbeat",
+              "host": ["{{base_url}}"],
+              "path": ["api", "gtfs", "heartbeat"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://your-domain.com",
+      "type": "string"
+    },
+    {
+      "key": "api_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+
