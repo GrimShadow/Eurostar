@@ -5,6 +5,8 @@
             status: 'on-time',
             newTime: null,
             platform: null,
+            checkInStartTime: null,
+            checkInStatusId: null,
             init() {
                 this.$watch('selectedTrain', value => {
                     if (value) {
@@ -12,6 +14,14 @@
                         this.newTime = train.new_departure_time || train.departure_time;
                         this.status = train.status;
                         this.platform = train.departure_platform !== 'TBD' ? train.departure_platform : null;
+                        // Set check-in start time from train data
+                        if (train.check_in_starts) {
+                            this.checkInStartTime = train.check_in_starts;
+                        } else {
+                            this.checkInStartTime = null;
+                        }
+                        // Set check-in status from train data
+                        this.checkInStatusId = train.check_in_status_id || null;
                     }
                 })
             }
@@ -152,6 +162,18 @@
                                         </div>
                                     </div>
                                 </div>
+                                @if(isset($train['check_in_starts']))
+                                    <div class="border-t pt-2 mt-2">
+                                        <div class="text-sm text-gray-500">
+                                            Check-in starts: <span class="font-semibold text-gray-700">{{ $train['check_in_starts'] }}</span>
+                                            @if(isset($train['minutes_until_check_in_starts']) && $train['minutes_until_check_in_starts'] > 0)
+                                                <span class="text-gray-400">({{ $train['minutes_until_check_in_starts'] }} min)</span>
+                                            @elseif(isset($train['minutes_until_check_in_starts']) && $train['minutes_until_check_in_starts'] === 0)
+                                                <span class="text-green-600 font-semibold">(Now)</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
                         </div>
 
@@ -164,6 +186,18 @@
                                 </span>
                             </div>
                         </div>
+
+                        <!-- Check-in Status Badge -->
+                        @if(isset($train['check_in_status']) && $train['check_in_status'])
+                            <div class="mt-4">
+                                <div class="text-sm text-gray-500 mb-1">Check-in Status</div>
+                                <div class="flex items-center">
+                                    <span class="text-lg font-semibold" style="color: rgb({{ $train['check_in_status_color'] ?? '156,163,175' }});">
+                                        {{ $train['check_in_status'] }}
+                                    </span>
+                                </div>
+                            </div>
+                        @endif
 
                         <div class="mt-4">
                             <button 
@@ -214,6 +248,27 @@
                                     class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                     placeholder="Enter platform number">
                             </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Check-in Start Time</label>
+                                <input type="time" x-model="checkInStartTime"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <p class="mt-1 text-sm text-gray-500">The time when check-in starts for this train</p>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Check-in Status</label>
+                                <select x-model="checkInStatusId"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <option value="">None</option>
+                                    @if(isset($checkInStatuses) && $checkInStatuses->count() > 0)
+                                        @foreach($checkInStatuses as $checkInStatus)
+                                        <option value="{{ $checkInStatus->id }}">{{ $checkInStatus->status }}</option>
+                                        @endforeach
+                                    @endif
+                                </select>
+                                <p class="mt-1 text-sm text-gray-500">Select the check-in status for this train</p>
+                            </div>
                         </div>
 
                         <div class="flex justify-end space-x-3 mt-6">
@@ -226,7 +281,9 @@
                                     JSON.parse(selectedTrain).trip_id,
                                     status,
                                     newTime,
-                                    platform
+                                    platform,
+                                    checkInStartTime,
+                                    checkInStatusId
                                 )"
                                 @click="modalOpen = false"
                                 type="button" 

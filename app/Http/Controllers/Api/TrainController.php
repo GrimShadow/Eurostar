@@ -7,6 +7,7 @@ use App\Models\GtfsTrip;
 use App\Models\Setting;
 use App\Models\Status;
 use App\Models\StopStatus;
+use App\Models\TrainCheckInStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -240,9 +241,19 @@ class TrainController extends Controller
                 return $statuses->keyBy('stop_id');
             });
 
+        // Get all train check-in statuses
+        $trainCheckInStatuses = TrainCheckInStatus::whereIn('trip_id', $tripIds)
+            ->with('checkInStatus')
+            ->get()
+            ->keyBy('trip_id');
+
         // Map the trips with their stops
-        $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $globalCheckInOffset, $specificTrainTimes) {
-            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $globalCheckInOffset, $specificTrainTimes) {
+        $trains = $trips->unique('trip_id')->map(function ($train) use ($stops, $stopStatuses, $trainCheckInStatuses, $globalCheckInOffset, $specificTrainTimes) {
+            // Get check-in status for this train
+            $trainCheckInStatus = $trainCheckInStatuses->get($train->trip_id);
+            $checkInStatus = $trainCheckInStatus?->checkInStatus;
+
+            $trainStops = $stops->get($train->trip_id, collect())->map(function ($stop) use ($stopStatuses, $train, $checkInStatus, $globalCheckInOffset, $specificTrainTimes) {
                 $stopStatus = $stopStatuses->get($train->trip_id)?->get($stop->stop_id);
 
                 // Determine check-in offset for this train
@@ -305,6 +316,9 @@ class TrainController extends Controller
                     'status_color' => $stopStatus?->status_color ?? '156,163,175',
                     'status_color_hex' => $stopStatus?->status_color_hex ?? '#9CA3AF',
                     'status_updated_at' => $statusUpdatedAt,
+                    'check_in_status' => $checkInStatus?->status ?? null,
+                    'check_in_status_color' => $checkInStatus?->color_rgb ?? null,
+                    'check_in_status_color_hex' => $checkInStatus ? $this->rgbToHex($checkInStatus->color_rgb) : null,
                     'departure_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->departure_platform, $train->trip_id),
                     'arrival_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->arrival_platform, $train->trip_id),
                     'check_in_time' => (int) $checkInOffset,

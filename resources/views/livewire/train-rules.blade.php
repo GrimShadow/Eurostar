@@ -1,7 +1,13 @@
 <div class="bg-white shadow-sm sm:rounded-lg divide-y divide-gray-200">
-    <!-- Create Rule Form -->
+    <!-- Create/Edit Rule Form -->
     <div class="p-6">
-        <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Create New Rule</h3>
+        <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">
+            @if($editingRuleId)
+                Edit Rule
+            @else
+                Create New Rule
+            @endif
+        </h3>
         @if (session()->has('error'))
             <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
                 {{ session('error') }}
@@ -20,9 +26,9 @@
                         Add Condition
                     </button>
                 </div>
-                <div class="space-y-4">
+                <div class="space-y-4" wire:key="conditions-container-{{ $tableKey }}">
                     @foreach($conditions as $index => $condition)
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end" wire:key="condition-{{ $index }}-{{ $tableKey }}">
                             @if($index > 0)
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700">Logical Operator</label>
@@ -158,7 +164,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Action Type</label>
-                        <select wire:model.live="action" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                        <select wire:model.live="action" wire:key="action-select-{{ $tableKey }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                             <option value="">Select Action</option>
                             <option value="set_status">Set Status</option>
                             <option value="make_announcement">Make Announcement</option>
@@ -319,14 +325,24 @@
             </div>
 
             <div class="flex justify-end space-x-3 mt-6">
-                <button type="button" wire:click="resetForm" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
-                    Reset Form
-                </button>
+                @if($editingRuleId)
+                    <button type="button" wire:click="cancelEdit" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
+                        Cancel
+                    </button>
+                @else
+                    <button type="button" wire:click="resetForm" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Reset Form
+                    </button>
+                @endif
                 <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-neutral-600 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500">
-                    Create Rule
+                    @if($editingRuleId)
+                        Update Rule
+                    @else
+                        Create Rule
+                    @endif
                 </button>
             </div>
         </form>
@@ -347,7 +363,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     @foreach($rules as $rule)
-                        <tr>
+                        <tr class="{{ $editingRuleId === $rule->id ? 'bg-blue-50' : '' }}">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 @foreach($rule->conditions as $index => $condition)
                                     @if($index > 0)
@@ -420,11 +436,17 @@
                                 </button>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <button wire:click="deleteRule({{ $rule->id }})" 
-                                    wire:confirm="Are you sure you want to delete this rule?"
-                                    class="text-red-600 hover:text-red-900">
-                                    Delete
-                                </button>
+                                <div class="flex space-x-3">
+                                    <button wire:click="editRule({{ $rule->id }})" 
+                                        class="text-blue-600 hover:text-blue-900">
+                                        Edit
+                                    </button>
+                                    <button wire:click="deleteRule({{ $rule->id }})" 
+                                        wire:confirm="Are you sure you want to delete this rule?"
+                                        class="text-red-600 hover:text-red-900">
+                                        Delete
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     @endforeach

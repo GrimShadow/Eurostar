@@ -63,6 +63,8 @@ class TrainRules extends Component
 
     public $tableKey = 0;
 
+    public $editingRuleId = null;
+
     protected function rules()
     {
         $rules = [
@@ -291,22 +293,58 @@ class TrainRules extends Component
     {
         $this->validate();
 
-        // Create the rule
-        $rule = TrainRule::create([
-            'action' => $this->action,
-            'action_value' => $this->action === 'set_status' ? $this->actionValue : json_encode([
+        // Prepare action value based on action type
+        if ($this->action === 'set_status') {
+            $actionValue = $this->actionValue;
+        } elseif ($this->action === 'update_platform') {
+            $actionValue = $this->actionValue;
+        } else {
+            // make_announcement
+            $actionValue = json_encode([
                 'template_id' => $this->selectedTemplate,
                 'zone_strategy' => $this->zoneSelectionStrategy,
                 'zone' => $this->zoneSelectionStrategy === 'specific_zone' ? $this->announcementZone : null,
                 'variables' => $this->processTemplateVariables(),
                 'variable_types' => $this->variableTypes,
-            ]),
-            'is_active' => $this->isActive,
-            'priority' => $this->priority,
-            'execution_mode' => $this->executionMode,
-        ]);
+            ]);
+        }
 
-        // Clear train rules cache to ensure new rules are loaded immediately
+        // Update existing rule or create new one
+        if ($this->editingRuleId) {
+            $rule = TrainRule::find($this->editingRuleId);
+            if (! $rule) {
+                session()->flash('error', 'Rule not found.');
+
+                return;
+            }
+
+            // Update the rule
+            $rule->update([
+                'action' => $this->action,
+                'action_value' => $actionValue,
+                'is_active' => $this->isActive,
+                'priority' => $this->priority,
+                'execution_mode' => $this->executionMode,
+            ]);
+
+            // Delete existing conditions
+            RuleCondition::where('train_rule_id', $rule->id)->delete();
+
+            $message = 'Rule updated successfully.';
+        } else {
+            // Create new rule
+            $rule = TrainRule::create([
+                'action' => $this->action,
+                'action_value' => $actionValue,
+                'is_active' => $this->isActive,
+                'priority' => $this->priority,
+                'execution_mode' => $this->executionMode,
+            ]);
+
+            $message = 'Rule created successfully.';
+        }
+
+        // Clear train rules cache to ensure new/updated rules are loaded immediately
         $this->clearTrainRulesCache();
 
         // Save each condition
@@ -330,7 +368,7 @@ class TrainRules extends Component
         $this->resetForm();
         $this->resetPage();
         $this->tableKey++;
-        session()->flash('message', 'Rule created successfully.');
+        session()->flash('message', $message);
     }
 
     public function toggleRule($ruleId)
@@ -381,6 +419,7 @@ class TrainRules extends Component
             'templateVariables',
             'variableTypes',
             'conditions',
+            'editingRuleId',
         ]);
 
         // Reset valueField to initial state
@@ -389,11 +428,142 @@ class TrainRules extends Component
             'label' => 'Value',
         ];
 
+        // Reset defaults
+        $this->priority = 0;
+        $this->executionMode = 'first_match';
+        $this->zoneSelectionStrategy = 'group_zones';
+
         // Add a fresh condition
         $this->addCondition();
 
         // Clear any validation errors
         $this->resetValidation();
+    }
+
+    /**
+     * Load a rule for editing
+     */
+    public function editRule($ruleId)
+    {
+        $rule = TrainRule::with('conditions')->find($ruleId);
+
+        if (! $rule) {
+            session()->flash('error', 'Rule not found.');
+
+            return;
+        }
+
+        // Set editing mode
+        $this->editingRuleId = $rule->id;
+
+        // Load rule properties
+        // Note: action is cast to array in model, but we store it as a string
+        // Work with the cast value directly - Laravel handles the JSON decoding
+        $modelAction = $rule->action;
+
+        // Handle array cast - if it's an array, take first element, otherwise use as string
+        $extractedAction = '';
+        if (is_array($modelAction) && ! empty($modelAction)) {
+            $extractedAction = (string) ($modelAction[0] ?? '');
+        } elseif (is_string($modelAction)) {
+            $extractedAction = $modelAction;
+        }
+
+        // Ensure action is set as a clean string to match option values exactly
+        $this->action = trim($extractedAction);
+
+        $this->isActive = (bool) $rule->is_active;
+        $this->priority = (int) ($rule->priority ?? 0);
+        $this->executionMode = (string) ($rule->execution_mode ?? 'first_match');
+
+        // Load conditions - build array first, then assign all at once
+        // This ensures Livewire detects the change properly
+        $loadedConditions = [];
+        foreach ($rule->conditions->sortBy('order') as $condition) {
+            $loadedConditions[] = [
+                'condition_type' => trim((string) ($condition->condition_type ?? '')),
+                'operator' => trim((string) ($condition->operator ?? '')),
+                'value' => trim((string) ($condition->value ?? '')),
+                'logical_operator' => trim((string) ($condition->logical_operator ?? 'and')),
+            ];
+        }
+
+        // Ensure array is properly indexed (sequential numeric keys starting from 0)
+        $loadedConditions = array_values($loadedConditions);
+
+        // If no conditions, add one
+        if (empty($loadedConditions)) {
+            $loadedConditions = [[
+                'condition_type' => '',
+                'operator' => '',
+                'value' => '',
+                'logical_operator' => 'and',
+            ]];
+        }
+
+        // Assign the complete array at once - this helps Livewire detect the change
+        $this->conditions = $loadedConditions;
+
+        // Load action-specific data based on the loaded action
+        // Note: action_value is cast to array in the model, but for set_status it's just an ID
+        $modelActionValue = $rule->action_value;
+
+        if ($this->action === 'set_status') {
+            // For set_status, action_value is the status ID (may be stored as string or int)
+            if (is_array($modelActionValue) && ! empty($modelActionValue)) {
+                $this->actionValue = (string) ($modelActionValue[0] ?? '');
+            } elseif (is_string($modelActionValue) || is_numeric($modelActionValue)) {
+                $this->actionValue = (string) $modelActionValue;
+            } else {
+                $this->actionValue = '';
+            }
+        } elseif ($this->action === 'make_announcement') {
+            // For make_announcement, action_value is JSON/array with template and zone info
+            if (is_array($modelActionValue)) {
+                $announcementData = $modelActionValue;
+            } else {
+                $announcementData = json_decode((string) $modelActionValue, true);
+            }
+
+            if ($announcementData) {
+                $this->selectedTemplate = (string) ($announcementData['template_id'] ?? '');
+                $this->zoneSelectionStrategy = (string) ($announcementData['zone_strategy'] ?? 'group_zones');
+                $this->announcementZone = (string) ($announcementData['zone'] ?? '');
+
+                // Load template variables and types
+                $this->templateVariables = $announcementData['variables'] ?? [];
+                $this->variableTypes = $announcementData['variable_types'] ?? [];
+
+                // Trigger template selection to load variables if template is set
+                if ($this->selectedTemplate) {
+                    $this->updatedSelectedTemplate($this->selectedTemplate);
+                    // Restore the variable values and types after template loads
+                    $this->templateVariables = $announcementData['variables'] ?? [];
+                    $this->variableTypes = $announcementData['variable_types'] ?? [];
+                }
+            }
+        } elseif ($this->action === 'update_platform') {
+            // For update_platform, action_value is the platform string
+            if (is_array($modelActionValue) && ! empty($modelActionValue)) {
+                $this->actionValue = (string) ($modelActionValue[0] ?? '');
+            } elseif (is_string($modelActionValue)) {
+                $this->actionValue = $modelActionValue;
+            } else {
+                $this->actionValue = '';
+            }
+        }
+
+        // Force Livewire to detect all changes
+        // Increment tableKey to force view update
+        $this->tableKey++;
+    }
+
+    /**
+     * Cancel editing and reset form
+     */
+    public function cancelEdit()
+    {
+        $this->resetForm();
     }
 
     /**

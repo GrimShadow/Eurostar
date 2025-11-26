@@ -2,11 +2,14 @@
 
 namespace App\Livewire;
 
+use App\Models\CheckInStatus;
 use App\Models\Group;
 use App\Models\GtfsStopTime;
 use App\Models\GtfsTrip;
+use App\Models\Setting;
 use App\Models\Status;
 use App\Models\StopStatus;
+use App\Models\TrainCheckInStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -194,6 +197,20 @@ class TrainGrid extends Component
         // Load all statuses once and cache them
         $allStatuses = Status::all()->keyBy('status');
 
+        // Batch load all train check-in statuses
+        $allTrainCheckInStatuses = TrainCheckInStatus::whereIn('trip_id', $tripIds)
+            ->with('checkInStatus')
+            ->get()
+            ->keyBy('trip_id');
+
+        // Load all check-in statuses once and cache them
+        $allCheckInStatuses = CheckInStatus::all()->keyBy('id');
+
+        // Load check-in time settings
+        $globalCheckInOffset = (int) (Setting::where('key', 'global_check_in_offset')->value('value') ?? 90);
+        $specificTrainTimesSetting = Setting::where('key', 'specific_train_check_in_times')->value('value');
+        $specificTrainTimes = $specificTrainTimesSetting ? json_decode($specificTrainTimesSetting, true) : [];
+
         $trains = [];
         $currentTimeObj = now();
 
@@ -232,11 +249,46 @@ class TrainGrid extends Component
             // Get all stop statuses for this trip from the pre-loaded collection
             $stopStatuses = $allStopStatuses->get($uniqueTrip->trip_id, collect());
 
+            // Determine check-in offset for this train
+            $trainNumber = $uniqueTrip->trip_short_name;
+            $checkInOffset = (int) ($specificTrainTimes[$trainNumber] ?? $globalCheckInOffset);
+
             // Map the stops to match API format
-            $mappedStops = $stops->map(function ($stop) use ($stopStatuses, $uniqueTrip, $allStatuses) {
+            $mappedStops = $stops->map(function ($stop) use ($stopStatuses, $uniqueTrip, $allStatuses, $checkInOffset) {
                 $stopStatus = $stopStatuses->get($stop->stop_id);
                 $statusKey = $stopStatus?->status ?? 'on-time';
                 $status = $allStatuses->get($statusKey);
+
+                // Calculate check-in start time by subtracting check-in time from departure time
+                // Use new_departure_time if available, otherwise use scheduled departure_time
+                $actualDepartureTime = $stop->new_departure_time ?? $stop->departure_time;
+                $departureTime = Carbon::createFromFormat('H:i:s', $actualDepartureTime);
+                $checkInStarts = $departureTime->copy()->subMinutes($checkInOffset)->format('H:i');
+
+                // Calculate minutes until check-in starts
+                $now = Carbon::now();
+                $checkInStartTime = Carbon::createFromFormat('Y-m-d H:i', $now->format('Y-m-d').' '.$checkInStarts);
+
+                // If check-in start time is in the past for today, check if departure is also in the past
+                if ($checkInStartTime->isPast()) {
+                    $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d').' '.$actualDepartureTime);
+                    if ($departureTimeToday->isPast()) {
+                        // Both check-in and departure are in the past, so this is for tomorrow
+                        $checkInStartTime->addDay();
+                        $minutesUntilCheckInStarts = (int) round($now->diffInMinutes($checkInStartTime, false));
+                    } else {
+                        // Check-in is in the past but departure is in the future, so check-in has already started
+                        $minutesUntilCheckInStarts = 0;
+                    }
+                } else {
+                    // Check-in is in the future for today
+                    $minutesUntilCheckInStarts = (int) round($now->diffInMinutes($checkInStartTime, false));
+                }
+
+                // Ensure we don't return negative values
+                if ($minutesUntilCheckInStarts < 0) {
+                    $minutesUntilCheckInStarts = 0;
+                }
 
                 return [
                     'stop_id' => $stop->stop_id,
@@ -251,7 +303,9 @@ class TrainGrid extends Component
                     'departure_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->departure_platform, $uniqueTrip->trip_id),
                     'arrival_platform' => $this->getPlatformCode($stop->stop_id, $stop->platform_code, $stopStatus?->arrival_platform, $uniqueTrip->trip_id),
                     'is_realtime_update' => $stopStatus?->is_realtime_update ?? false,
-                    'check_in_time' => 90,
+                    'check_in_time' => $checkInOffset,
+                    'check_in_starts' => $checkInStarts,
+                    'minutes_until_check_in_starts' => $minutesUntilCheckInStarts,
                 ];
             })->values()->toArray();
 
@@ -271,7 +325,12 @@ class TrainGrid extends Component
             $firstStopStatusKey = $firstStopStatus?->status ?? 'on-time';
             $firstStopStatusObj = $allStatuses->get($firstStopStatusKey);
 
+            // Get check-in status for this train
+            $trainCheckInStatus = $allTrainCheckInStatuses->get($uniqueTrip->trip_id);
+            $checkInStatus = $trainCheckInStatus?->checkInStatus;
+
             // Create the train entry matching API format
+            $firstStopData = $mappedStops[0] ?? [];
             $trains[] = [
                 'number' => $uniqueTrip->trip_short_name,
                 'trip_id' => $uniqueTrip->trip_id,
@@ -289,6 +348,13 @@ class TrainGrid extends Component
                 'arrival_platform' => $mappedStops[count($mappedStops) - 1]['arrival_platform'] ?? 'TBD',
                 'stop_name' => $stops->first()->stop_name,
                 'is_realtime_update' => $firstStopStatus?->is_realtime_update ?? false,
+                'check_in_time' => $checkInOffset,
+                'check_in_starts' => $firstStopData['check_in_starts'] ?? null,
+                'minutes_until_check_in_starts' => $firstStopData['minutes_until_check_in_starts'] ?? 0,
+                'check_in_status' => $checkInStatus?->status ?? null,
+                'check_in_status_id' => $checkInStatus?->id ?? null,
+                'check_in_status_color' => $checkInStatus?->color_rgb ?? null,
+                'check_in_status_color_hex' => $checkInStatus ? $this->rgbToHex($checkInStatus->color_rgb) : null,
                 'stops' => $mappedStops,
             ];
         }
@@ -429,7 +495,42 @@ class TrainGrid extends Component
         );
     }
 
-    public function updateTrainStatus($tripId, $status, $newTime = null, $platform = null)
+    public function updateTrainCheckInStatus($tripId, $checkInStatusId = null): void
+    {
+        try {
+            // Clear cache to ensure instant updates are visible
+            $this->clearTrainGridCache();
+
+            if ($checkInStatusId) {
+                TrainCheckInStatus::updateOrCreate(
+                    [
+                        'trip_id' => $tripId,
+                    ],
+                    [
+                        'check_in_status_id' => $checkInStatusId,
+                    ]
+                );
+            } else {
+                // If null, remove the check-in status
+                TrainCheckInStatus::where('trip_id', $tripId)->delete();
+            }
+
+            // Reload the trains data
+            $this->loadTrains();
+
+            // Force a refresh of the view
+            $this->dispatch('refresh');
+        } catch (\Exception $e) {
+            Log::error('Error updating train check-in status:', [
+                'trip_id' => $tripId,
+                'check_in_status_id' => $checkInStatusId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+    }
+
+    public function updateTrainStatus($tripId, $status, $newTime = null, $platform = null, $checkInStartTime = null, $checkInStatusId = null)
     {
         try {
             // Clear cache to ensure instant updates are visible
@@ -564,6 +665,76 @@ class TrainGrid extends Component
                     'stop_id' => $matchingStop->stop_id,
                     'status' => $status,
                 ]);
+            }
+
+            // Update check-in status if provided
+            if ($checkInStatusId !== null) {
+                $this->updateTrainCheckInStatus($tripId, $checkInStatusId);
+            }
+
+            // Update check-in time offset if check-in start time is provided
+            if ($checkInStartTime !== null && trim($checkInStartTime) !== '') {
+                // Get the train number and departure time from the database
+                $trip = GtfsTrip::where('trip_id', $tripId)->first();
+
+                if ($trip && $trip->trip_short_name) {
+                    // Get the actual departure time (use new_departure_time if available, otherwise scheduled)
+                    $firstStopTime = DB::table('gtfs_stop_times')
+                        ->where('trip_id', $tripId)
+                        ->where('stop_sequence', 1)
+                        ->select('new_departure_time', 'departure_time')
+                        ->first();
+
+                    $actualDepartureTime = $firstStopTime->new_departure_time ?? $firstStopTime->departure_time;
+
+                    if ($actualDepartureTime) {
+                        // Calculate the offset in minutes from check-in start time and departure time
+                        // Handle both HH:MM and HH:MM:SS formats
+                        $checkInStartTimeFormatted = $checkInStartTime;
+                        if (preg_match('/^\d{2}:\d{2}$/', $checkInStartTimeFormatted)) {
+                            $checkInStartTimeFormatted = $checkInStartTimeFormatted.':00';
+                        }
+
+                        $checkInStart = Carbon::createFromFormat('H:i:s', $checkInStartTimeFormatted);
+                        $departure = Carbon::createFromFormat('H:i:s', $actualDepartureTime);
+
+                        // Calculate difference in minutes (departure - check-in start)
+                        // diffInMinutes returns positive if departure is after check-in start
+                        $checkInOffset = (int) round($checkInStart->diffInMinutes($departure, false));
+
+                        // Only save if offset is positive (check-in must be before departure)
+                        if ($checkInOffset > 0) {
+                            $trainNumber = $trip->trip_short_name;
+
+                            // Load existing specific train times
+                            $specificTrainTimesSetting = Setting::where('key', 'specific_train_check_in_times')->value('value');
+                            $specificTrainTimes = $specificTrainTimesSetting ? json_decode($specificTrainTimesSetting, true) : [];
+
+                            // Update or add the train's check-in offset
+                            $specificTrainTimes[$trainNumber] = $checkInOffset;
+
+                            // Save back to settings
+                            Setting::updateOrCreate(
+                                ['key' => 'specific_train_check_in_times'],
+                                ['value' => json_encode($specificTrainTimes)]
+                            );
+
+                            Log::info('Updated check-in time from start time', [
+                                'trip_id' => $tripId,
+                                'train_number' => $trainNumber,
+                                'check_in_start_time' => $checkInStartTime,
+                                'departure_time' => $actualDepartureTime,
+                                'calculated_offset' => $checkInOffset,
+                            ]);
+                        } else {
+                            Log::warning('Check-in start time must be before departure time', [
+                                'trip_id' => $tripId,
+                                'check_in_start_time' => $checkInStartTime,
+                                'departure_time' => $actualDepartureTime,
+                            ]);
+                        }
+                    }
+                }
             }
 
             // Reload the trains data (cache is already cleared above)
@@ -736,8 +907,14 @@ class TrainGrid extends Component
                 return Status::all();
             });
 
+            // Load check-in statuses for the view (cached to avoid repeated queries)
+            $checkInStatuses = Cache::remember('all_check_in_statuses', now()->addHours(24), function () {
+                return CheckInStatus::orderByRaw('LOWER(status) ASC')->get();
+            });
+
             return view('livewire.train-grid', [
                 'statuses' => $statuses,
+                'checkInStatuses' => $checkInStatuses,
             ]);
         } catch (\Exception $e) {
             Log::error('TrainGrid render error', [
@@ -749,6 +926,7 @@ class TrainGrid extends Component
             // Return view with error state instead of crashing
             return view('livewire.train-grid', [
                 'statuses' => collect(),
+                'checkInStatuses' => collect(),
                 'error' => 'Unable to load train data. Please refresh the page.',
             ]);
         }

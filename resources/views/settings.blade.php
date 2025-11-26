@@ -44,7 +44,7 @@
                                 <dl class="grid grid-cols-1 gap-2 text-sm">
                                     <div class="flex justify-between">
                                         <dt class="text-gray-500">Version</dt>
-                                        <dd class="font-medium text-gray-900">25.08.09</dd>
+                                        <dd class="font-medium text-gray-900">2511.4</dd>
                                     </div>
                                     <div class="flex justify-between">
                                         <dt class="text-gray-500">Environment</dt>
@@ -98,6 +98,50 @@
                             <div x-show="open" class="px-6 pb-6">
                                 <div class="pt-4">
                                     <livewire:train-statuses />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Check-in Status Settings Card -->
+                    <div
+                        class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-300">
+                        <div x-data="{ open: false }" class="divide-y divide-gray-100">
+                            <!-- Card Header -->
+                            <div class="px-6 py-5">
+                                <button @click="open = !open"
+                                    class="w-full flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 rounded-lg p-2 -m-2 transition-colors duration-200 hover:bg-gray-50">
+                                    <div class="flex items-center space-x-4">
+                                        <div class="flex-shrink-0">
+                                            <div
+                                                class="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-semibold text-gray-900">Check-in Status Settings</h3>
+                                            <p class="text-sm text-gray-500">Manage check-in status types and their display
+                                                colors</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex-shrink-0">
+                                        <svg class="h-5 w-5 text-gray-400 transition-transform duration-200"
+                                            :class="{ 'rotate-180': open }" xmlns="http://www.w3.org/2000/svg"
+                                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <!-- Card Content -->
+                            <div x-show="open" class="px-6 pb-6">
+                                <div class="pt-4">
+                                    <livewire:check-in-statuses />
                                 </div>
                             </div>
                         </div>

@@ -64,7 +64,7 @@
                         <x-dropdown-link :href="route('settings.logs')">
                             {{ __('View Logs') }}
                         </x-dropdown-link>
-                        <x-dropdown-link :href="route('documentation.index')">
+                        <x-dropdown-link :href="route('documentation.index')" target="_blank">
                             {{ __('Documentation') }}
                         </x-dropdown-link> 
 
