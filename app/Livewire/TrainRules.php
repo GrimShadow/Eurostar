@@ -127,6 +127,16 @@ class TrainRules extends Component
         ];
     }
 
+    /**
+     * Clear announcementZone when switching back to group_zones
+     */
+    public function updatedZoneSelectionStrategy($value)
+    {
+        if ($value === 'group_zones') {
+            $this->announcementZone = '';
+        }
+    }
+
     public function removeCondition($index)
     {
         unset($this->conditions[$index]);

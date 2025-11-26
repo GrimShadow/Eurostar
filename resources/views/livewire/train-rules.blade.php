@@ -200,6 +200,7 @@
                                         <label class="inline-flex items-center">
                                             <input 
                                                 type="radio" 
+                                                name="zoneSelectionStrategy"
                                                 wire:model.live="zoneSelectionStrategy" 
                                                 value="group_zones" 
                                                 class="form-radio text-neutral-600 focus:ring-neutral-500"
@@ -209,6 +210,7 @@
                                         <label class="inline-flex items-center">
                                             <input 
                                                 type="radio" 
+                                                name="zoneSelectionStrategy"
                                                 wire:model.live="zoneSelectionStrategy" 
                                                 value="specific_zone" 
                                                 class="form-radio text-neutral-600 focus:ring-neutral-500"
