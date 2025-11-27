@@ -179,7 +179,7 @@
 
                         <!-- Status Badge -->
                         <div class="mt-4">
-                            <div class="text-sm text-gray-500 mb-1">Status</div>
+                            <div class="text-sm text-gray-500 mb-1">Train Status</div>
                             <div class="flex items-center">
                                 <span class="text-lg font-semibold" style="color: rgb({{ $train['status_color'] ?? '156,163,175' }});">
                                     {{ isset($train['status']) && !empty($train['status']) ? ucfirst($train['status']) : 'On time' }}
