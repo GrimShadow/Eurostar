@@ -167,6 +167,7 @@
                         <select wire:model.live="action" wire:key="action-select-{{ $tableKey }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
                             <option value="">Select Action</option>
                             <option value="set_status">Set Status</option>
+                            <option value="set_check_in_status">Set Check-in Status</option>
                             <option value="make_announcement">Make Announcement</option>
                             <option value="update_platform">Update Platform</option>
                         </select>
@@ -180,6 +181,17 @@
                                 <option value="">Select Status</option>
                                 @foreach($statuses as $status)
                                     <option value="{{ $status->id }}">{{ $status->status }}</option>
+                                @endforeach
+                            </select>
+                            @error('actionValue') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        </div>
+                    @elseif($action === 'set_check_in_status')
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Check-in Status</label>
+                            <select wire:model.live="actionValue" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                                <option value="">Select Check-in Status</option>
+                                @foreach($checkInStatuses as $checkInStatus)
+                                    <option value="{{ $checkInStatus->id }}">{{ $checkInStatus->status }}</option>
                                 @endforeach
                             </select>
                             @error('actionValue') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
@@ -390,6 +402,11 @@
                                         $status = \App\Models\Status::find($rule->action_value);
                                     @endphp
                                     Set status to {{ $status ? $status->status : 'Unknown Status' }}
+                                @elseif($rule->action === 'set_check_in_status')
+                                    @php
+                                        $checkInStatus = \App\Models\CheckInStatus::find($rule->action_value);
+                                    @endphp
+                                    Set check-in status to {{ $checkInStatus ? $checkInStatus->status : 'Unknown Check-in Status' }}
                                 @elseif($rule->action === 'make_announcement')
                                     @php
                                         $announcementData = json_decode($rule->action_value, true);

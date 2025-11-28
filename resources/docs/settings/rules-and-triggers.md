@@ -189,7 +189,20 @@ Changes the train's status to a selected status from your configured statuses.
 - Action: Set Status to "Boarding"
 - Result: When a train is 10 minutes or less from departure, automatically change status to "Boarding"
 
-#### 2. Make Announcement
+#### 2. Set Check-in Status
+
+Changes the train's check-in status to a selected check-in status from your configured check-in statuses.
+
+**Configuration:**
+- **Check-in Status**: Select from the dropdown of available check-in statuses
+- The check-in status will be applied to the train and displayed in the train grid and API
+
+**Example:**
+- Condition: Minutes Until Check-in Starts <= 15
+- Action: Set Check-in Status to "Pre-check-in"
+- Result: When check-in starts in 15 minutes or less, automatically set check-in status to "Pre-check-in"
+
+#### 3. Make Announcement
 
 Triggers an automated announcement using AviaVox templates.
 
@@ -211,7 +224,7 @@ Triggers an automated announcement using AviaVox templates.
   - Variables: Platform number (dynamic)
 - Result: When a train is 5 minutes from departure and platform has changed, announce the platform change to all group zones
 
-#### 3. Update Platform
+#### 4. Update Platform
 
 Updates the platform information for the train.
 

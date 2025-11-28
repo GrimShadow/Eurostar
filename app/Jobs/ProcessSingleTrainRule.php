@@ -4,9 +4,11 @@ namespace App\Jobs;
 
 use App\Events\TrainStatusUpdated;
 use App\Models\AviavoxTemplate;
+use App\Models\CheckInStatus;
 use App\Models\Group;
 use App\Models\Status;
 use App\Models\StopStatus;
+use App\Models\TrainCheckInStatus;
 use App\Models\TrainRule;
 use App\Models\TrainRuleExecution;
 use App\Models\TrainStatus;
@@ -305,6 +307,8 @@ class ProcessSingleTrainRule implements ShouldQueue
 
             if ($action === 'set_status') {
                 $this->setTrainStatusAtStops($rule, $train, $stopIds, $actionValue);
+            } elseif ($action === 'set_check_in_status') {
+                $this->setCheckInStatus($rule, $train, $actionValue);
             } elseif ($action === 'make_announcement') {
                 $this->makeAnnouncement($rule, $train, $actionValue);
             } elseif ($action === 'update_platform') {
@@ -423,6 +427,34 @@ class ProcessSingleTrainRule implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
             throw $e;
+        }
+    }
+
+    private function setCheckInStatus($rule, $train, $actionValue = null)
+    {
+        // Get the check-in status from the check_in_statuses table
+        $checkInStatusId = $actionValue ?? $rule->action_value;
+        $checkInStatus = CheckInStatus::find($checkInStatusId);
+        if (! $checkInStatus) {
+            LogHelper::rulesError("Check-in status with ID {$checkInStatusId} not found for rule {$rule->id}");
+
+            return;
+        }
+
+        try {
+            // Update or create the check-in status assignment
+            TrainCheckInStatus::updateOrCreate(
+                [
+                    'trip_id' => $train->trip_id,
+                ],
+                [
+                    'check_in_status_id' => $checkInStatus->id,
+                ]
+            );
+
+            LogHelper::rulesInfo("Set check-in status '{$checkInStatus->status}' for train {$train->trip_id} via rule {$rule->id}");
+        } catch (\Exception $e) {
+            LogHelper::rulesError("Error setting check-in status for train {$train->trip_id}: ".$e->getMessage());
         }
     }
 

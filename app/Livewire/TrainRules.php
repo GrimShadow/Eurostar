@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\AviavoxTemplate;
+use App\Models\CheckInStatus;
 use App\Models\RuleCondition;
 use App\Models\Status;
 use App\Models\TrainRule;
@@ -39,6 +40,8 @@ class TrainRules extends Component
 
     public $statuses;
 
+    public $checkInStatuses;
+
     public $selectedAnnouncement = '';
 
     public $selectedTemplate = '';
@@ -72,12 +75,14 @@ class TrainRules extends Component
             'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible,minutes_until_check_in_starts',
             'conditions.*.operator' => 'required',
             'conditions.*.value' => 'required',
-            'action' => 'required|in:set_status,make_announcement,update_platform',
+            'action' => 'required|in:set_status,make_announcement,update_platform,set_check_in_status',
         ];
 
         // Add action-specific validation
         if ($this->action === 'set_status') {
             $rules['actionValue'] = 'required|exists:statuses,id';
+        } elseif ($this->action === 'set_check_in_status') {
+            $rules['actionValue'] = 'required|exists:check_in_statuses,id';
         } elseif ($this->action === 'make_announcement') {
             $rules['selectedTemplate'] = 'required|exists:aviavox_templates,id';
 
@@ -108,6 +113,7 @@ class TrainRules extends Component
     public function mount()
     {
         $this->statuses = Status::orderBy('status')->get();
+        $this->checkInStatuses = CheckInStatus::orderByRaw('LOWER(status) ASC')->get();
         $this->availableTemplates = AviavoxTemplate::all();
         $this->zones = Zone::orderBy('value')->get();
         $this->zoneSelectionStrategy = 'group_zones'; // Default to using group zones
@@ -281,6 +287,9 @@ class TrainRules extends Component
         if ($value === 'set_status') {
             // Reset announcement-specific fields when switching to set_status
             $this->reset(['actionValue', 'selectedTemplate', 'announcementZone', 'zoneSelectionStrategy', 'templateVariables', 'variableTypes']);
+        } elseif ($value === 'set_check_in_status') {
+            // Reset other action-specific fields when switching to set_check_in_status
+            $this->reset(['selectedTemplate', 'announcementZone', 'zoneSelectionStrategy', 'templateVariables', 'variableTypes']);
         } elseif ($value === 'make_announcement') {
             // Only reset status-specific fields when switching to make_announcement
             $this->reset(['actionValue']);
@@ -295,6 +304,8 @@ class TrainRules extends Component
 
         // Prepare action value based on action type
         if ($this->action === 'set_status') {
+            $actionValue = $this->actionValue;
+        } elseif ($this->action === 'set_check_in_status') {
             $actionValue = $this->actionValue;
         } elseif ($this->action === 'update_platform') {
             $actionValue = $this->actionValue;
@@ -517,6 +528,15 @@ class TrainRules extends Component
             } else {
                 $this->actionValue = '';
             }
+        } elseif ($this->action === 'set_check_in_status') {
+            // For set_check_in_status, action_value is the check-in status ID (may be stored as string or int)
+            if (is_array($modelActionValue) && ! empty($modelActionValue)) {
+                $this->actionValue = (string) ($modelActionValue[0] ?? '');
+            } elseif (is_string($modelActionValue) || is_numeric($modelActionValue)) {
+                $this->actionValue = (string) $modelActionValue;
+            } else {
+                $this->actionValue = '';
+            }
         } elseif ($this->action === 'make_announcement') {
             // For make_announcement, action_value is JSON/array with template and zone info
             if (is_array($modelActionValue)) {
@@ -635,6 +655,7 @@ class TrainRules extends Component
         return view('livewire.train-rules', [
             'rules' => $rules,
             'statuses' => $this->statuses,
+            'checkInStatuses' => $this->checkInStatuses,
             'availableTemplates' => $this->availableTemplates,
             'zones' => $this->zones,
         ]);

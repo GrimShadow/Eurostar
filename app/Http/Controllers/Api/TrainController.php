@@ -296,6 +296,19 @@ class TrainController extends Controller
                     $newDepartMin = $departureTime->diffInMinutes($newDepartureTime, false);
                 }
 
+                // Calculate minutes until departure
+                // Use new_departure_time if available, otherwise use departure_time
+                $departureTimeToUse = $stop->new_departure_time ? $stop->new_departure_time : $stop->departure_time;
+                $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d').' '.$departureTimeToUse);
+
+                // If departure time is in the past for today, assume it's for tomorrow
+                if ($departureTimeToday->isPast()) {
+                    $departureTimeToday->addDay();
+                }
+
+                // Calculate minutes until departure (negative if already departed)
+                $minutesUntilDeparture = (int) round($now->diffInMinutes($departureTimeToday, false));
+
                 // Format the status updated timestamp in local timezone
                 $statusUpdatedAt = null;
                 if ($stopStatus?->updated_at) {
@@ -324,6 +337,7 @@ class TrainController extends Controller
                     'check_in_time' => (int) $checkInOffset,
                     'check_in_starts' => $checkInStarts,
                     'minutes_until_check_in_starts' => $minutesUntilCheckInStarts,
+                    'minutes_until_departure' => $minutesUntilDeparture,
                 ];
             })->values();
 
