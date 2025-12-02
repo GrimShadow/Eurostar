@@ -259,10 +259,9 @@ class TrainGrid extends Component
                 $statusKey = $stopStatus?->status ?? 'on-time';
                 $status = $allStatuses->get($statusKey);
 
-                // Calculate check-in start time by subtracting check-in time from departure time
-                // Use new_departure_time if available, otherwise use scheduled departure_time
-                $actualDepartureTime = $stop->new_departure_time ?? $stop->departure_time;
-                $departureTime = Carbon::createFromFormat('H:i:s', $actualDepartureTime);
+                // Calculate check-in start time by subtracting check-in time from scheduled departure time
+                // Always use scheduled departure_time (never new_departure_time) so check-in time only changes manually
+                $departureTime = Carbon::createFromFormat('H:i:s', $stop->departure_time);
                 $checkInStarts = $departureTime->copy()->subMinutes($checkInOffset)->format('H:i');
 
                 // Calculate minutes until check-in starts
@@ -271,7 +270,7 @@ class TrainGrid extends Component
 
                 // If check-in start time is in the past for today, check if departure is also in the past
                 if ($checkInStartTime->isPast()) {
-                    $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d').' '.$actualDepartureTime);
+                    $departureTimeToday = Carbon::createFromFormat('Y-m-d H:i:s', $now->format('Y-m-d').' '.$stop->departure_time);
                     if ($departureTimeToday->isPast()) {
                         // Both check-in and departure are in the past, so this is for tomorrow
                         $checkInStartTime->addDay();
