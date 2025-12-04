@@ -10,6 +10,12 @@ use App\Services\LogHelper;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schedule;
+
+// Schedule GTFS Realtime updates every minute
+Schedule::command(FetchGtfsRealtime::class)->everyMinute()->withoutOverlapping()->runInBackground()->onFailure(function () {
+    \Log::error('GTFS Realtime command failed');
+});
 
 class FetchGtfsRealtime extends Command
 {

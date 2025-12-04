@@ -16,14 +16,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Schedule GTFS Realtime updates based on configured interval
-        $schedule->command('gtfs:fetch-realtime')
-            ->everyThirtySeconds()
-            ->withoutOverlapping()
-            ->runInBackground()
-            ->onFailure(function () {
-                \Log::error('GTFS Realtime command failed');
-            });
+        // GTFS Realtime is now scheduled in FetchGtfsRealtime.php
 
         // Clean up expired cache entries hourly to prevent database bloat
         $schedule->command('cache:cleanup-expired')
