@@ -18,9 +18,9 @@ class Kernel extends ConsoleKernel
     {
         // GTFS Realtime is now scheduled in FetchGtfsRealtime.php
 
-        // Clean up expired cache entries hourly to prevent database bloat
+        // Clean up expired cache entries every 15 minutes to prevent database bloat
         $schedule->command('cache:cleanup-expired')
-            ->hourly()
+            ->everyFifteenMinutes()
             ->onFailure(function () {
                 \Log::error('Cache cleanup command failed');
             });

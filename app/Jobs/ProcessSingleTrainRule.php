@@ -88,11 +88,12 @@ class ProcessSingleTrainRule implements ShouldQueue
 
     private function getRelevantTrains()
     {
-        // Create a shared cache key for train data across all rule jobs
-        $cacheKey = 'shared_train_data_'.now()->format('Y-m-d_H:i');
+        // Create a shared cache key for train data across all rule jobs (5-minute intervals)
+        $interval = floor(now()->minute / 5) * 5;
+        $cacheKey = 'shared_train_data_'.now()->format('Y-m-d_H:').str_pad($interval, 2, '0', STR_PAD_LEFT);
 
-        // Cache train data for 2 minutes to prevent database storm
-        return Cache::remember($cacheKey, 120, function () {
+        // Cache train data for 5 minutes to prevent database storm
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () {
             return $this->fetchRelevantTrainsFromDatabase();
         });
     }

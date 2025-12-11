@@ -99,6 +99,11 @@ Conditions are organized into several categories:
   - Value type: Select (from available statuses)
   - Example: "Current Status = Delayed" means the train is currently delayed
 
+- **Check-in Status**: The current check-in status of the train
+  - Value type: Select (from available check-in statuses)
+  - Example: "Check-in Status = Pre-check-in" means the train's check-in status is currently "Pre-check-in"
+  - Note: If no check-in status is set for a train, the condition will not match (except when using the "!=" operator, where no status means it doesn't equal the specified value)
+
 - **Train Number**: The train number
   - Value type: Text
   - Example: "Train Number = 9115" means the rule applies to train 9115

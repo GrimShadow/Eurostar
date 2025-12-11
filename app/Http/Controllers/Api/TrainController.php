@@ -81,16 +81,17 @@ class TrainController extends Controller
 
     public function today()
     {
-        // Create a cache key based on current time (rounded to nearest minute for more frequent updates)
-        $cacheKey = 'train_api_today_'.now()->format('Y-m-d_H:i');
+        // Create a cache key based on current time (rounded to 5-minute intervals)
+        $interval = floor(now()->minute / 5) * 5;
+        $cacheKey = 'train_api_today_'.now()->format('Y-m-d_H:').str_pad($interval, 2, '0', STR_PAD_LEFT);
 
-        // Cache the expensive query result for 1 minute to allow minutes to update more frequently
-        $result = Cache::remember($cacheKey, now()->addMinute(), function () {
+        // Cache the expensive query result for 5 minutes
+        $result = Cache::remember($cacheKey, now()->addMinutes(5), function () {
             return $this->getTrainsApiData();
         });
 
         return response()->json($result)
-            ->header('Cache-Control', 'public, max-age=60'); // 1 minute client-side cache
+            ->header('Cache-Control', 'public, max-age=300'); // 5 minutes client-side cache
     }
 
     private function getTrainsApiData()

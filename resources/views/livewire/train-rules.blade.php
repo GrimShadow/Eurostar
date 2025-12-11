@@ -69,6 +69,7 @@
                                     </optgroup>
                                     <optgroup label="General">
                                         <option value="current_status">Current Status</option>
+                                        <option value="check_in_status">Check-in Status</option>
                                         <option value="train_number">Train Number</option>
                                     </optgroup>
                                 </select>
@@ -98,6 +99,13 @@
                                         <option value="">Select Status</option>
                                         @foreach($statuses as $status)
                                             <option value="{{ $status->id }}">{{ $status->status }}</option>
+                                        @endforeach
+                                    </select>
+                                @elseif($condition['condition_type'] === 'check_in_status')
+                                    <select wire:model.live="conditions.{{ $index }}.value" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500">
+                                        <option value="">Select Check-in Status</option>
+                                        @foreach($checkInStatuses as $checkInStatus)
+                                            <option value="{{ $checkInStatus->id }}">{{ $checkInStatus->status }}</option>
                                         @endforeach
                                     </select>
                                 @elseif(in_array($condition['condition_type'], ['time_until_departure', 'time_after_departure', 'time_until_arrival', 'time_after_arrival', 'minutes_until_check_in_starts']))
@@ -388,6 +396,11 @@
                                             $status = \App\Models\Status::find($condition->value);
                                         @endphp
                                         {{ $status ? $status->status : 'Unknown Status' }}
+                                    @elseif($condition->condition_type === 'check_in_status')
+                                        @php
+                                            $checkInStatus = \App\Models\CheckInStatus::find($condition->value);
+                                        @endphp
+                                        {{ $checkInStatus ? $checkInStatus->status : 'Unknown Check-in Status' }}
                                     @elseif($condition->condition_type === 'train_number')
                                         {{ $condition->value }}
                                     @else

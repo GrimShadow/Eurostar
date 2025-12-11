@@ -880,19 +880,12 @@ class TrainGrid extends Component
      */
     private function clearApiCache()
     {
-        // The API uses per-minute cache keys, so we need to clear multiple minute intervals
-        // Clear current minute and surrounding minutes to ensure we catch all variations
-        for ($i = -2; $i <= 2; $i++) {
-            $minute = now()->addMinutes($i);
-            $cacheKey = 'train_api_today_'.$minute->format('Y-m-d_H:i');
-            Cache::forget($cacheKey);
-        }
-
-        // Also clear 5-minute interval caches (if they exist)
+        // Clear 5-minute interval API cache
         $interval = floor(now()->minute / 5) * 5;
         $currentApiCacheKey = 'train_api_today_'.now()->format('Y-m-d_H:').str_pad($interval, 2, '0', STR_PAD_LEFT);
         Cache::forget($currentApiCacheKey);
 
+        // Also clear the previous 5-minute interval cache in case we're at the boundary
         $previousInterval = floor(now()->subMinutes(5)->minute / 5) * 5;
         $previousApiCacheKey = 'train_api_today_'.now()->subMinutes(5)->format('Y-m-d_H:').str_pad($previousInterval, 2, '0', STR_PAD_LEFT);
         Cache::forget($previousApiCacheKey);

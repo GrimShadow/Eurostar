@@ -48,8 +48,9 @@ class RuleCondition extends Model
                 $now = Carbon::now();
                 $today = $now->format('Y-m-d');
 
-                // Create departure time for today
-                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->departure_time);
+                // Use updated departure time if available, otherwise use scheduled time
+                $departureTimeString = $stopTime->new_departure_time ?? $stopTime->departure_time;
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$departureTimeString);
 
                 // Calculate minutes until departure (positive = future, negative = past)
                 $minutesUntilDeparture = $now->diffInMinutes($departureTime, false);
@@ -70,8 +71,9 @@ class RuleCondition extends Model
                 $now = Carbon::now();
                 $today = $now->format('Y-m-d');
 
-                // Create departure time for today
-                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->departure_time);
+                // Use updated departure time if available, otherwise use scheduled time
+                $departureTimeString = $stopTime->new_departure_time ?? $stopTime->departure_time;
+                $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$departureTimeString);
 
                 // Calculate minutes after departure (positive = departed, negative = not yet departed)
                 $minutesAfterDeparture = $departureTime->diffInMinutes($now, false);
@@ -143,7 +145,8 @@ class RuleCondition extends Model
                 $trainNumber = explode(' ', (string) $trainNumberRaw)[0];
                 $checkInOffset = (int) ($specificTrainTimes[$trainNumber] ?? $globalCheckInOffset);
 
-                // Build departure time and check-in start time for today
+                // Always use scheduled departure_time for check-in calculations (never new_departure_time)
+                // so check-in time only changes manually, not automatically with delays
                 $departureTime = Carbon::createFromFormat('Y-m-d H:i:s', $today.' '.$stopTime->departure_time);
                 $checkInStart = $departureTime->copy()->subMinutes($checkInOffset);
 
@@ -224,6 +227,38 @@ class RuleCondition extends Model
                 // Debug logging removed - rule is working correctly
 
                 return $this->compare($normalizedStatusValue, $normalizedCompareValue);
+
+            case 'check_in_status':
+                // Get the check-in status for the train
+                $trainCheckInStatus = \App\Models\TrainCheckInStatus::where('trip_id', $train->trip_id)->first();
+
+                // If no check-in status is set, the condition cannot match (return false)
+                if (! $trainCheckInStatus || ! $trainCheckInStatus->checkInStatus) {
+                    // For != operator, null/no status means it doesn't match, so return true
+                    // For = operator, null/no status means it doesn't match, so return false
+                    if ($this->operator === '!=') {
+                        // If checking for "not equal", and there's no status, it's not equal to the specified value
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                $checkInStatusValue = $trainCheckInStatus->checkInStatus->status;
+
+                // If the value is numeric (check-in status ID), get the actual status text
+                if (is_numeric($this->value)) {
+                    $checkInStatus = \App\Models\CheckInStatus::find($this->value);
+                    $compareValue = $checkInStatus ? $checkInStatus->status : $this->value;
+                } else {
+                    $compareValue = $this->value;
+                }
+
+                // Normalize both values for comparison (case-insensitive, handle dash/space differences)
+                $normalizedCheckInStatusValue = strtolower(str_replace([' ', '-'], '', $checkInStatusValue));
+                $normalizedCompareValue = strtolower(str_replace([' ', '-'], '', $compareValue));
+
+                return $this->compare($normalizedCheckInStatusValue, $normalizedCompareValue);
 
             case 'time_of_day':
                 $currentTime = Carbon::now()->format('H:i:s');
@@ -321,20 +356,12 @@ class RuleCondition extends Model
             $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
         }
 
-        if (! $stopTime) {
-            return false;
-        }
-
-        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
-            ->where('stop_id', $stopTime->stop_id)
-            ->first();
-
-        if (! $stopStatus || ! $stopStatus->new_departure_time) {
+        if (! $stopTime || ! $stopTime->new_departure_time) {
             return false;
         }
 
         $scheduledTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
-        $actualTime = Carbon::createFromFormat('H:i:s', $stopStatus->new_departure_time);
+        $actualTime = Carbon::createFromFormat('H:i:s', $stopTime->new_departure_time);
         $delayMinutes = $scheduledTime->diffInMinutes($actualTime, false);
 
         return $this->compare($delayMinutes, $this->value);
@@ -486,20 +513,12 @@ class RuleCondition extends Model
             $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
         }
 
-        if (! $stopTime) {
-            return false;
-        }
-
-        $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
-            ->where('stop_id', $stopTime->stop_id)
-            ->first();
-
-        if (! $stopStatus || ! $stopStatus->new_departure_time) {
+        if (! $stopTime || ! $stopTime->new_departure_time) {
             return false;
         }
 
         $scheduledTime = Carbon::createFromFormat('H:i:s', $stopTime->departure_time);
-        $actualTime = Carbon::createFromFormat('H:i:s', $stopStatus->new_departure_time);
+        $actualTime = Carbon::createFromFormat('H:i:s', $stopTime->new_departure_time);
 
         return $scheduledTime->diffInMinutes($actualTime, false);
     }

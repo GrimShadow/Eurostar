@@ -96,8 +96,9 @@ class CreateAnnouncement extends Component
             return;
         }
 
-        // Create a cache key based on group and current time (rounded to nearest minute)
-        $cacheKey = "create_announcement_trains_group_{$this->group->id}_".now()->format('Y-m-d_H:i');
+        // Create a cache key based on group and current time (rounded to 5-minute intervals)
+        $interval = floor(now()->minute / 5) * 5;
+        $cacheKey = "create_announcement_trains_group_{$this->group->id}_".now()->format('Y-m-d_H:').str_pad($interval, 2, '0', STR_PAD_LEFT);
 
         // Cache the expensive query result for 5 minutes
         $this->trains = Cache::remember($cacheKey, now()->addMinutes(5), function () {

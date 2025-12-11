@@ -19,6 +19,7 @@ class GtfsStopTime extends Model
         'trip_id',
         'arrival_time',
         'departure_time',
+        'new_departure_time',
         'stop_id',
         'stop_sequence',
         'drop_off_type',

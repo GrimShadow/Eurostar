@@ -72,11 +72,22 @@ class TrainRules extends Component
     {
         $rules = [
             'conditions' => 'required|array|min:1',
-            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible,minutes_until_check_in_starts',
+            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,check_in_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible,minutes_until_check_in_starts',
             'conditions.*.operator' => 'required',
             'conditions.*.value' => 'required',
             'action' => 'required|in:set_status,make_announcement,update_platform,set_check_in_status',
         ];
+
+        // Add condition-specific validation for value field
+        foreach ($this->conditions as $index => $condition) {
+            if (isset($condition['condition_type'])) {
+                if ($condition['condition_type'] === 'current_status') {
+                    $rules["conditions.{$index}.value"] = 'required|exists:statuses,id';
+                } elseif ($condition['condition_type'] === 'check_in_status') {
+                    $rules["conditions.{$index}.value"] = 'required|exists:check_in_statuses,id';
+                }
+            }
+        }
 
         // Add action-specific validation
         if ($this->action === 'set_status') {
