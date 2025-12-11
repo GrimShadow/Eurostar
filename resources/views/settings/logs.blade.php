@@ -60,7 +60,16 @@
                             
                             @foreach ($logs as $log)
                                 @php
-                                    $timestamp = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', trim($log['timestamp']));
+                                    $timestampString = trim($log['timestamp'] ?? '');
+                                    if (empty($timestampString) || strlen($timestampString) < 19) {
+                                        $timestamp = \Carbon\Carbon::now();
+                                    } else {
+                                        try {
+                                            $timestamp = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $timestampString);
+                                        } catch (\Exception $e) {
+                                            $timestamp = \Carbon\Carbon::now();
+                                        }
+                                    }
                                     $dateString = $timestamp->format('Y-m-d');
                                     $content = trim($log['content']);
                                     $logLevel = str_contains($content, '.ERROR:') ? 'ERROR' : (str_contains($content, '.INFO:') ? 'INFO' : 'UNKNOWN');

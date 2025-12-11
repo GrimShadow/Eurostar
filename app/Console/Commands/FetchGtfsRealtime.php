@@ -232,8 +232,12 @@ class FetchGtfsRealtime extends Command
 
         if ($hasUpdates) {
             // Update the stop time with new departure time
+            // Use DB::table() instead of Eloquent update() for composite primary key
             if ($newDepartureTime) {
-                $stopTime->update(['new_departure_time' => $newDepartureTime]);
+                \Illuminate\Support\Facades\DB::table('gtfs_stop_times')
+                    ->where('trip_id', $stopTime->trip_id)
+                    ->where('stop_sequence', $stopTime->stop_sequence)
+                    ->update(['new_departure_time' => $newDepartureTime]);
             }
 
             // Update stop status with delay information
