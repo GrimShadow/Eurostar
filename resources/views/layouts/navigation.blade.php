@@ -19,9 +19,6 @@
                         <x-nav-link :href="route('group.announcements', request()->route('group'))" :active="request()->routeIs('group.announcements')">
                             {{ __('Announcements') }}
                         </x-nav-link>
-                        <x-nav-link :href="route('group.train-info', request()->route('group'))" :active="request()->routeIs('group.train-info')">
-                            {{ __('Train Info') }}
-                        </x-nav-link>
                     @else
                         <x-nav-link :href="route('selector')" :active="request()->routeIs('selector')">
                             {{ __('Selector') }}
@@ -99,9 +96,6 @@
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('group.announcements', request()->route('group'))" :active="request()->routeIs('group.announcements')">
                     {{ __('Announcements') }}
-                </x-responsive-nav-link>
-                <x-responsive-nav-link :href="route('group.train-info', request()->route('group'))" :active="request()->routeIs('group.train-info')">
-                    {{ __('Train Info') }}
                 </x-responsive-nav-link>
             @else
                 <x-responsive-nav-link :href="route('selector')" :active="request()->routeIs('selector')">
