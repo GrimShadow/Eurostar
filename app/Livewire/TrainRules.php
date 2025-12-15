@@ -85,6 +85,8 @@ class TrainRules extends Component
                     $rules["conditions.{$index}.value"] = 'required|exists:statuses,id';
                 } elseif ($condition['condition_type'] === 'check_in_status') {
                     $rules["conditions.{$index}.value"] = 'required|exists:check_in_statuses,id';
+                } elseif ($condition['condition_type'] === 'time_of_day') {
+                    $rules["conditions.{$index}.value"] = 'required|regex:/^([01][0-9]|2[0-3]):[0-5][0-9]$/';
                 }
             }
         }
@@ -166,9 +168,9 @@ class TrainRules extends Component
     {
         // Ensure value is an array
         $currentValue = $this->conditions[$index]['value'] ?? [];
-        if (!is_array($currentValue) && !empty($currentValue)) {
+        if (! is_array($currentValue) && ! empty($currentValue)) {
             $currentValue = explode(',', $currentValue);
-        } elseif (!is_array($currentValue)) {
+        } elseif (! is_array($currentValue)) {
             $currentValue = [];
         }
 
@@ -203,6 +205,9 @@ class TrainRules extends Component
                 case 'time_after_arrival':
                 case 'minutes_until_check_in_starts':
                     $this->conditions[$index]['value'] = '0';
+                    break;
+                case 'time_of_day':
+                    $this->conditions[$index]['value'] = '';
                     break;
                 case 'day_of_week':
                     $this->conditions[$index]['value'] = [];
@@ -287,6 +292,12 @@ class TrainRules extends Component
                     'type' => 'text',
                     'label' => 'Value',
                     'placeholder' => 'Enter value',
+                ];
+                break;
+            case 'time_of_day':
+                $this->valueField = [
+                    'type' => 'time',
+                    'label' => 'Time (HH:MM)',
                 ];
                 break;
             case 'time_range':
@@ -404,6 +415,14 @@ class TrainRules extends Component
             $value = $condition['value'];
             if ($condition['condition_type'] === 'day_of_week' && is_array($value)) {
                 $value = implode(',', $value);
+            }
+
+            // Convert time_of_day from HH:MM to H:i:s format
+            if ($condition['condition_type'] === 'time_of_day' && ! empty($value)) {
+                // If value is in HH:MM format, append :00 for seconds
+                if (preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $value)) {
+                    $value = $value.':00';
+                }
             }
 
             $ruleCondition = new RuleCondition([
@@ -538,6 +557,14 @@ class TrainRules extends Component
             // Convert day_of_week comma-separated string back to array for checkboxes
             if ($condition->condition_type === 'day_of_week' && ! empty($value)) {
                 $value = explode(',', $value);
+            }
+
+            // Convert time_of_day from H:i:s to HH:MM format for time input
+            if ($condition->condition_type === 'time_of_day' && ! empty($value)) {
+                // If value is in H:i:s format, remove seconds
+                if (preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/', $value)) {
+                    $value = substr($value, 0, 5); // Remove :SS part
+                }
             }
 
             $loadedConditions[] = [

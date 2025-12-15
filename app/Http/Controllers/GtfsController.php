@@ -839,7 +839,7 @@ class GtfsController extends Controller
         }
 
         try {
-            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => '4'])->get($gtfsSettings->realtime_url);
+            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => 'v4'])->get($gtfsSettings->realtime_url);
 
             if (! $response->successful()) {
                 return response()->json([

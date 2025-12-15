@@ -50,6 +50,7 @@
                                         <option value="time_until_arrival">Time Until Arrival</option>
                                         <option value="time_after_arrival">Time After Arrival</option>
                                         <option value="minutes_until_check_in_starts">Minutes Until Check-in Starts</option>
+                                        <option value="time_of_day">Time Equals</option>
                                         <option value="time_range">Time Range</option>
                                         <option value="day_of_week">Day of Week</option>
                                         <option value="is_peak_time">Is Peak Time</option>
@@ -117,9 +118,15 @@
                                                 step="1"
                                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
                                                 placeholder="Enter minutes">
-                                                <p class="text-xs text-gray-500">
+                                            <p class="text-xs text-gray-500 mt-1">Value is in minutes</p>
                                         </div>
                                     </div>
+                                @elseif($condition['condition_type'] === 'time_of_day')
+                                    <input type="time" 
+                                        wire:model.live="conditions.{{ $index }}.value" 
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
+                                        placeholder="HH:MM">
+                                    <p class="text-xs text-gray-500 mt-1">Enter time in 24-hour format (HH:MM)</p>
                                 @elseif($condition['condition_type'] === 'day_of_week')
                                     <div class="mt-1 space-y-2">
                                         @php
@@ -447,6 +454,8 @@
                                             }, $days);
                                         @endphp
                                         {{ !empty($dayLabels) ? implode(', ', $dayLabels) : 'No day selected' }}
+                                    @elseif($condition->condition_type === 'time_of_day')
+                                        {{ $condition->value }}
                                     @else
                                         {{ $condition->value }} minutes
                                     @endif

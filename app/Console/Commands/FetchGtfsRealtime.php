@@ -57,7 +57,7 @@ class FetchGtfsRealtime extends Command
             ]);
 
             // Fetch realtime data
-            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => '4'])->get($settings->realtime_url);
+            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => 'v4'])->get($settings->realtime_url);
 
             if (! $response->successful()) {
                 throw new \Exception("HTTP error: {$response->status()}");
