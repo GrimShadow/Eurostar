@@ -162,6 +162,29 @@ class TrainRules extends Component
         $this->conditions = array_values($this->conditions);
     }
 
+    public function toggleDayOfWeek($index, $dayValue)
+    {
+        // Ensure value is an array
+        $currentValue = $this->conditions[$index]['value'] ?? [];
+        if (!is_array($currentValue) && !empty($currentValue)) {
+            $currentValue = explode(',', $currentValue);
+        } elseif (!is_array($currentValue)) {
+            $currentValue = [];
+        }
+
+        // Toggle the day value
+        if (in_array($dayValue, $currentValue)) {
+            // Remove the day
+            $currentValue = array_values(array_diff($currentValue, [$dayValue]));
+        } else {
+            // Add the day
+            $currentValue[] = $dayValue;
+            sort($currentValue);
+        }
+
+        $this->conditions[$index]['value'] = $currentValue;
+    }
+
     public function updatedConditions($value, $key)
     {
         $parts = explode('.', $key);
@@ -180,6 +203,9 @@ class TrainRules extends Component
                 case 'time_after_arrival':
                 case 'minutes_until_check_in_starts':
                     $this->conditions[$index]['value'] = '0';
+                    break;
+                case 'day_of_week':
+                    $this->conditions[$index]['value'] = [];
                     break;
                 default:
                     $this->conditions[$index]['value'] = '';
@@ -374,11 +400,17 @@ class TrainRules extends Component
             // Calculate appropriate tolerance based on condition type and operator
             $tolerance = $this->calculateTolerance($condition);
 
+            // Convert day_of_week array to comma-separated string
+            $value = $condition['value'];
+            if ($condition['condition_type'] === 'day_of_week' && is_array($value)) {
+                $value = implode(',', $value);
+            }
+
             $ruleCondition = new RuleCondition([
                 'train_rule_id' => $rule->id,
                 'condition_type' => $condition['condition_type'],
                 'operator' => $condition['operator'],
-                'value' => $condition['value'],
+                'value' => $value,
                 'logical_operator' => $index > 0 ? $condition['logical_operator'] : null,
                 'order' => $index,
                 'tolerance_minutes' => $tolerance,
@@ -502,10 +534,16 @@ class TrainRules extends Component
         // This ensures Livewire detects the change properly
         $loadedConditions = [];
         foreach ($rule->conditions->sortBy('order') as $condition) {
+            $value = trim((string) ($condition->value ?? ''));
+            // Convert day_of_week comma-separated string back to array for checkboxes
+            if ($condition->condition_type === 'day_of_week' && ! empty($value)) {
+                $value = explode(',', $value);
+            }
+
             $loadedConditions[] = [
                 'condition_type' => trim((string) ($condition->condition_type ?? '')),
                 'operator' => trim((string) ($condition->operator ?? '')),
-                'value' => trim((string) ($condition->value ?? '')),
+                'value' => $value,
                 'logical_operator' => trim((string) ($condition->logical_operator ?? 'and')),
             ];
         }

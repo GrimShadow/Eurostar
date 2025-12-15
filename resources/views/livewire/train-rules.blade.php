@@ -120,6 +120,40 @@
                                                 <p class="text-xs text-gray-500">
                                         </div>
                                     </div>
+                                @elseif($condition['condition_type'] === 'day_of_week')
+                                    <div class="mt-1 space-y-2">
+                                        @php
+                                            $dayOptions = [
+                                                '1' => 'Monday',
+                                                '2' => 'Tuesday',
+                                                '3' => 'Wednesday',
+                                                '4' => 'Thursday',
+                                                '5' => 'Friday',
+                                                '6' => 'Saturday',
+                                                '0' => 'Sunday',
+                                            ];
+                                            // Ensure value is an array for checkboxes
+                                            $currentValue = $condition['value'] ?? [];
+                                            if (!is_array($currentValue) && !empty($currentValue)) {
+                                                $currentValue = explode(',', $currentValue);
+                                            } elseif (!is_array($currentValue)) {
+                                                $currentValue = [];
+                                            }
+                                        @endphp
+                                        <div class="grid grid-cols-2 gap-2">
+                                            @foreach($dayOptions as $dayValue => $dayLabel)
+                                                <label class="inline-flex items-center">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        wire:click="toggleDayOfWeek({{ $index }}, '{{ $dayValue }}')"
+                                                        @if(in_array($dayValue, $currentValue)) checked @endif
+                                                        class="rounded border-gray-300 text-neutral-600 shadow-sm focus:border-neutral-300 focus:ring focus:ring-neutral-200 focus:ring-opacity-50"
+                                                    >
+                                                    <span class="ml-2 text-sm text-gray-700">{{ $dayLabel }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                    </div>
                                 @else
                                     <input type="text" 
                                         wire:model.live="conditions.{{ $index }}.value" 
@@ -403,6 +437,16 @@
                                         {{ $checkInStatus ? $checkInStatus->status : 'Unknown Check-in Status' }}
                                     @elseif($condition->condition_type === 'train_number')
                                         {{ $condition->value }}
+                                    @elseif($condition->condition_type === 'day_of_week')
+                                        @php
+                                            $dayNames = ['0' => 'Sunday', '1' => 'Monday', '2' => 'Tuesday', '3' => 'Wednesday', '4' => 'Thursday', '5' => 'Friday', '6' => 'Saturday'];
+                                            // Handle both single values and comma-separated values (for backward compatibility)
+                                            $days = !empty($condition->value) ? explode(',', $condition->value) : [];
+                                            $dayLabels = array_map(function($day) use ($dayNames) {
+                                                return $dayNames[trim($day)] ?? trim($day);
+                                            }, $days);
+                                        @endphp
+                                        {{ !empty($dayLabels) ? implode(', ', $dayLabels) : 'No day selected' }}
                                     @else
                                         {{ $condition->value }} minutes
                                     @endif
