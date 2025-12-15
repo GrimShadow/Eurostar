@@ -215,9 +215,7 @@ class TrainController extends Controller
             ->get()
             ->groupBy('trip_id')
             ->map(function ($tripStops) {
-                return $tripStops->groupBy(function ($stop) {
-                    return $stop->stop_sequence.'_'.$stop->arrival_time.'_'.$stop->departure_time;
-                })->map(function ($groupedStops) {
+                return $tripStops->groupBy('stop_sequence')->map(function ($groupedStops) {
                     // Prioritize stops with new_departure_time set (updated stops)
                     $stopWithNewTime = $groupedStops->first(function ($stop) {
                         return ! empty($stop->new_departure_time);
@@ -227,10 +225,28 @@ class TrainController extends Controller
                         return $stopWithNewTime;
                     }
 
-                    // Otherwise, take the first stop that has a platform code, or the first one if none have it
-                    return $groupedStops->first(function ($stop) {
+                    // If multiple stops exist, prefer the one with a platform code
+                    $stopWithPlatform = $groupedStops->first(function ($stop) {
                         return ! empty($stop->platform_code);
-                    }) ?? $groupedStops->first();
+                    });
+
+                    if ($stopWithPlatform) {
+                        return $stopWithPlatform;
+                    }
+
+                    // Prefer platform-specific stops (those with underscore and number/letter suffix)
+                    // like amsterdam_centraal_15 over amsterdam_centraal
+                    $platformSpecificStop = $groupedStops->first(function ($stop) {
+                        return preg_match('/_\d+[a-z]?$/', $stop->stop_id);
+                    });
+
+                    if ($platformSpecificStop) {
+                        return $platformSpecificStop;
+                    }
+
+                    // Otherwise, take the one with the latest departure time
+                    // (most recent schedule update)
+                    return $groupedStops->sortByDesc('departure_time')->first();
                 })->values();
             });
 
