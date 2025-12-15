@@ -1162,9 +1162,8 @@ Send a heartbeat signal to indicate GTFS realtime feed is active.
 ```
 
 **Response Notes:**
-- Triggers a `HeartbeatReceived` event that broadcasts to connected clients
 - Used to monitor GTFS realtime feed health
-- Status banner component listens for these events
+- Status banner component checks heartbeat status via polling
 
 **cURL Example:**
 ```bash
