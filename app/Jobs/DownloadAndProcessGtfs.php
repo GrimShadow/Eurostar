@@ -298,8 +298,13 @@ class DownloadAndProcessGtfs implements ShouldQueue
             GtfsCalendarDate::query()->delete();
 
             $created = 0;
+            $skipped = 0;
             $batch = [];
             $batchSize = 1000;
+
+            // Only import calendar dates within 14 days from today
+            $today = now()->startOfDay();
+            $maxDate = now()->addDays(14)->endOfDay();
 
             while (($data = fgetcsv($file)) !== false) {
                 try {
@@ -311,6 +316,14 @@ class DownloadAndProcessGtfs implements ShouldQueue
                     $month = substr($dateString, 4, 2);
                     $day = substr($dateString, 6, 2);
                     $formattedDate = "{$year}-{$month}-{$day}";
+
+                    // Check if date is within 14 days from today
+                    $date = \Carbon\Carbon::parse($formattedDate);
+                    if ($date->lt($today) || $date->gt($maxDate)) {
+                        $skipped++;
+
+                        continue;
+                    }
 
                     $batch[] = [
                         'service_id' => $calendarData['service_id'],
@@ -345,6 +358,7 @@ class DownloadAndProcessGtfs implements ShouldQueue
 
             Log::info('GTFS calendar dates sync completed', [
                 'created' => $created,
+                'skipped' => $skipped,
             ]);
 
         } catch (\Exception $e) {

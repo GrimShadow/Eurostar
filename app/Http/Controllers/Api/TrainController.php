@@ -342,7 +342,7 @@ class TrainController extends Controller
                     'new_departure_time' => $stop->new_departure_time ? substr($stop->new_departure_time, 0, 5) : null,
                     'new_depart_min' => $newDepartMin,
                     'stop_sequence' => $stop->stop_sequence,
-                    'status' => $stopStatus?->status ?? 'on-time',
+                    'status' => ucfirst($stopStatus?->status ?? 'on-time'),
                     'status_color' => $stopStatus?->status_color ?? '156,163,175',
                     'status_color_hex' => $stopStatus?->status_color_hex ?? '#9CA3AF',
                     'status_updated_at' => $statusUpdatedAt,

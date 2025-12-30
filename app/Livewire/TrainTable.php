@@ -100,15 +100,21 @@ class TrainTable extends Component
             ->get();
 
         $processedTrains = $trains->map(function ($train) {
+            // Use realtime status if available, otherwise fall back to manual status
+            $status = $train->realtime_status ?? $train->status_text ?? $train->train_status ?? 'on-time';
+
+            // Use realtime status color if available, otherwise fall back to manual status color
+            $statusColor = $train->realtime_status_color ?? $train->color_rgb ?? '156,163,175';
+
             return [
                 'number' => $train->number,
                 'departure' => substr($train->departure, 0, 5),
                 'route_long_name' => $train->route_long_name,
-                'status' => ucfirst($train->status_text ?? $train->train_status ?? 'on-time'),
-                'status_color' => $train->color_rgb ?? '156,163,175',
+                'status' => ucfirst($status),
+                'status_color' => $statusColor,
                 'departure_platform' => $train->departure_platform ?? 'TBD',
                 'arrival_platform' => $train->arrival_platform ?? 'TBD',
-                'is_realtime_update' => false,
+                'is_realtime_update' => ! empty($train->realtime_status),
             ];
         });
 
@@ -144,8 +150,15 @@ class TrainTable extends Component
                     ->where('first_stop.stop_sequence', '=', 1);
             })
             ->whereIn('gtfs_trips.route_id', $selectedRoutes)
-            ->where('first_stop.departure_time', '>=', $currentTime)
-            ->where('first_stop.departure_time', '<=', $endTime)
+            ->where(function ($query) use ($currentTime, $endTime) {
+                $query->where(function ($q) use ($currentTime, $endTime) {
+                    $q->where('first_stop.departure_time', '>=', $currentTime)
+                        ->where('first_stop.departure_time', '<=', $endTime);
+                })->orWhere(function ($q) use ($currentTime, $endTime) {
+                    $q->where('first_stop.new_departure_time', '>=', $currentTime)
+                        ->where('first_stop.new_departure_time', '<=', $endTime);
+                });
+            })
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('gtfs_calendar_dates')
@@ -186,15 +199,18 @@ class TrainTable extends Component
                 DB::raw('SUBSTRING_INDEX(gtfs_trips.trip_id, "-", 1) as train_number'),
                 'gtfs_trips.trip_id',
                 'gtfs_trips.route_id',
-                'first_stop.departure_time as departure',
-                'last_stop.arrival_time as arrival',
+                DB::raw('COALESCE(first_stop.new_departure_time, first_stop.departure_time) as departure'),
+                DB::raw('COALESCE(last_stop.new_departure_time, last_stop.arrival_time) as arrival'),
                 'gtfs_routes.route_long_name',
                 'gtfs_trips.trip_headsign as destination',
                 'train_statuses.status as train_status',
                 'statuses.status as status_text',
                 'statuses.color_rgb',
-                'departure_platform.platform_code as departure_platform',
-                'arrival_platform.platform_code as arrival_platform',
+                DB::raw('COALESCE(first_stop_status.departure_platform, departure_platform.platform_code) as departure_platform'),
+                DB::raw('COALESCE(last_stop_status.arrival_platform, arrival_platform.platform_code) as arrival_platform'),
+                'first_stop_status.status as realtime_status',
+                'first_stop_status.status_color as realtime_status_color',
+                'first_stop_status.status_color_hex as realtime_status_color_hex',
             ])
             ->join('gtfs_stop_times as first_stop', function ($join) {
                 $join->on('gtfs_trips.trip_id', '=', 'first_stop.trip_id')
@@ -217,11 +233,26 @@ class TrainTable extends Component
                 $join->on('gtfs_trips.trip_id', '=', 'arrival_platform.trip_id')
                     ->whereRaw('arrival_platform.stop_id = last_stop.stop_id');
             })
+            ->leftJoin('stop_statuses as first_stop_status', function ($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'first_stop_status.trip_id')
+                    ->whereRaw('first_stop_status.stop_id = first_stop.stop_id');
+            })
+            ->leftJoin('stop_statuses as last_stop_status', function ($join) {
+                $join->on('gtfs_trips.trip_id', '=', 'last_stop_status.trip_id')
+                    ->whereRaw('last_stop_status.stop_id = last_stop.stop_id');
+            })
             ->leftJoin('train_statuses', 'gtfs_trips.trip_id', '=', 'train_statuses.trip_id')
             ->leftJoin('statuses', 'train_statuses.status', '=', 'statuses.status')
             ->whereIn('gtfs_trips.route_id', $selectedRoutes)
-            ->where('first_stop.departure_time', '>=', $currentTime)
-            ->where('first_stop.departure_time', '<=', $endTime)
+            ->where(function ($query) use ($currentTime, $endTime) {
+                $query->where(function ($q) use ($currentTime, $endTime) {
+                    $q->where('first_stop.departure_time', '>=', $currentTime)
+                        ->where('first_stop.departure_time', '<=', $endTime);
+                })->orWhere(function ($q) use ($currentTime, $endTime) {
+                    $q->where('first_stop.new_departure_time', '>=', $currentTime)
+                        ->where('first_stop.new_departure_time', '<=', $endTime);
+                });
+            })
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('gtfs_calendar_dates')
@@ -230,10 +261,12 @@ class TrainTable extends Component
                     ->where('gtfs_calendar_dates.exception_type', 1);
             })
             ->groupBy('gtfs_trips.trip_short_name', 'gtfs_trips.trip_id', 'gtfs_trips.route_id',
-                'first_stop.departure_time', 'last_stop.arrival_time', 'gtfs_routes.route_long_name',
-                'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
-                'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code')
-            ->orderBy('first_stop.departure_time')
+                'first_stop.departure_time', 'first_stop.new_departure_time', 'last_stop.arrival_time', 'last_stop.new_departure_time',
+                'gtfs_routes.route_long_name', 'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
+                'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code',
+                'first_stop_status.departure_platform', 'last_stop_status.arrival_platform', 'first_stop_status.status',
+                'first_stop_status.status_color', 'first_stop_status.status_color_hex')
+            ->orderByRaw('COALESCE(first_stop.new_departure_time, first_stop.departure_time)')
             ->limit(500); // Add safety limit to prevent scanning entire day
 
         return $query;
