@@ -24,6 +24,13 @@ class Kernel extends ConsoleKernel
             ->onFailure(function () {
                 \Log::error('Cache cleanup command failed');
             });
+
+        // Clean up resolved conflicts daily
+        $schedule->command('conflicts:cleanup')
+            ->daily()
+            ->onFailure(function () {
+                \Log::error('Conflict cleanup command failed');
+            });
     }
 
     /**

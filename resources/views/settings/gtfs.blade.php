@@ -96,34 +96,122 @@
                                     </div>
                                 </div>
                                 <div class="space-y-4">
+                                    <!-- Source Selection Toggle -->
                                     <div>
-                                        <label for="realtime_url" class="block text-sm font-medium text-gray-700 mb-1">GTFS Realtime URL</label>
-                                        <input type="url" name="realtime_url" id="realtime_url" 
-                                            value="{{ old('realtime_url', $gtfsSettings?->realtime_url) }}"
-                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
-                                            placeholder="https://example.com/gtfs-realtime.json">
-                                        <p class="mt-1 text-xs text-gray-500">URL to the GTFS realtime JSON feed for live updates.</p>
-                                        @error('realtime_url')
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Realtime Source</label>
+                                        <div class="flex items-center space-x-6">
+                                            <label class="flex items-center">
+                                                <input type="radio" name="realtime_source" value="primary" 
+                                                    {{ old('realtime_source', $gtfsSettings?->realtime_source ?? 'primary') === 'primary' ? 'checked' : '' }}
+                                                    class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300">
+                                                <span class="ml-2 text-sm text-gray-700">Primary</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="radio" name="realtime_source" value="secondary"
+                                                    {{ old('realtime_source', $gtfsSettings?->realtime_source ?? 'primary') === 'secondary' ? 'checked' : '' }}
+                                                    class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300">
+                                                <span class="ml-2 text-sm text-gray-700">Secondary</span>
+                                            </label>
+                                        </div>
+                                        <p class="mt-1 text-xs text-gray-500">Select which realtime data source to use.</p>
+                                        @error('realtime_source')
                                             <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
                                         @enderror
                                     </div>
 
-                                    <div>
-                                        <label for="realtime_update_interval" class="block text-sm font-medium text-gray-700 mb-1">Update Interval</label>
-                                        <div class="flex items-center space-x-2">
-                                            <input type="number" name="realtime_update_interval" id="realtime_update_interval" 
-                                                value="{{ old('realtime_update_interval', $gtfsSettings?->realtime_update_interval ?? 30) }}"
-                                                min="10" max="300"
-                                                class="block w-24 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
-                                                placeholder="30">
-                                            <span class="text-sm text-gray-500">seconds (10-300)</span>
+                                    <!-- Primary Source Fields -->
+                                    <div id="primary-source-fields" class="space-y-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                        <div class="flex items-center mb-2">
+                                            <span class="text-sm font-medium text-gray-700">Primary Source Configuration</span>
                                         </div>
-                                        <p class="mt-1 text-xs text-gray-500">How often to fetch realtime updates.</p>
-                                        @error('realtime_update_interval')
-                                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
-                                        @enderror
+                                        <div>
+                                            <label for="realtime_url" class="block text-sm font-medium text-gray-700 mb-1">GTFS Realtime URL</label>
+                                            <input type="url" name="realtime_url" id="realtime_url" 
+                                                value="{{ old('realtime_url', $gtfsSettings?->realtime_url) }}"
+                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                                                placeholder="https://example.com/gtfs-realtime.json">
+                                            <p class="mt-1 text-xs text-gray-500">URL to the GTFS realtime JSON feed for live updates.</p>
+                                            @error('realtime_url')
+                                                <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+
+                                        <div>
+                                            <label for="realtime_update_interval" class="block text-sm font-medium text-gray-700 mb-1">Update Interval</label>
+                                            <div class="flex items-center space-x-2">
+                                                <input type="number" name="realtime_update_interval" id="realtime_update_interval" 
+                                                    value="{{ old('realtime_update_interval', $gtfsSettings?->realtime_update_interval ?? 30) }}"
+                                                    min="10" max="300"
+                                                    class="block w-24 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                                                    placeholder="30">
+                                                <span class="text-sm text-gray-500">seconds (10-300)</span>
+                                            </div>
+                                            <p class="mt-1 text-xs text-gray-500">How often to fetch realtime updates.</p>
+                                            @error('realtime_update_interval')
+                                                <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+                                    </div>
+
+                                    <!-- Secondary Source Fields -->
+                                    <div id="secondary-source-fields" class="space-y-4 border border-gray-200 rounded-lg p-4 bg-gray-50 hidden">
+                                        <div class="flex items-center mb-2">
+                                            <span class="text-sm font-medium text-gray-700">Secondary Source Configuration</span>
+                                        </div>
+                                        <div>
+                                            <label for="secondary_realtime_url" class="block text-sm font-medium text-gray-700 mb-1">GTFS Realtime URL</label>
+                                            <input type="url" name="secondary_realtime_url" id="secondary_realtime_url" 
+                                                value="{{ old('secondary_realtime_url', $gtfsSettings?->secondary_realtime_url) }}"
+                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                                                placeholder="https://example.com/gtfs-realtime-secondary.json">
+                                            <p class="mt-1 text-xs text-gray-500">URL to the secondary GTFS realtime JSON feed for live updates.</p>
+                                            @error('secondary_realtime_url')
+                                                <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+
+                                        <div>
+                                            <label for="secondary_realtime_update_interval" class="block text-sm font-medium text-gray-700 mb-1">Update Interval</label>
+                                            <div class="flex items-center space-x-2">
+                                                <input type="number" name="secondary_realtime_update_interval" id="secondary_realtime_update_interval" 
+                                                    value="{{ old('secondary_realtime_update_interval', $gtfsSettings?->secondary_realtime_update_interval ?? 30) }}"
+                                                    min="10" max="300"
+                                                    class="block w-24 rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 text-sm"
+                                                    placeholder="30">
+                                                <span class="text-sm text-gray-500">seconds (10-300)</span>
+                                            </div>
+                                            <p class="mt-1 text-xs text-gray-500">How often to fetch realtime updates.</p>
+                                            @error('secondary_realtime_update_interval')
+                                                <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                            @enderror
+                                        </div>
                                     </div>
                                 </div>
+
+                                <script>
+                                    document.addEventListener('DOMContentLoaded', function() {
+                                        const primaryRadio = document.querySelector('input[name="realtime_source"][value="primary"]');
+                                        const secondaryRadio = document.querySelector('input[name="realtime_source"][value="secondary"]');
+                                        const primaryFields = document.getElementById('primary-source-fields');
+                                        const secondaryFields = document.getElementById('secondary-source-fields');
+
+                                        function toggleFields() {
+                                            if (primaryRadio.checked) {
+                                                primaryFields.classList.remove('hidden');
+                                                secondaryFields.classList.add('hidden');
+                                            } else {
+                                                primaryFields.classList.add('hidden');
+                                                secondaryFields.classList.remove('hidden');
+                                            }
+                                        }
+
+                                        primaryRadio.addEventListener('change', toggleFields);
+                                        secondaryRadio.addEventListener('change', toggleFields);
+                                        
+                                        // Initialize on page load
+                                        toggleFields();
+                                    });
+                                </script>
                             </div>
 
                             <!-- Form Actions -->

@@ -3,9 +3,11 @@
 namespace App\Livewire;
 
 use App\Models\GtfsTrip;
+use App\Models\RealtimeConflict;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
 
@@ -27,8 +29,15 @@ class TrainTable extends Component
 
     public $group;
 
+    public $conflicts = [];
+
+    public $showConflictModal = false;
+
+    public $currentConflict = null;
+
     protected $listeners = [
         'echo:train-statuses,TrainStatusUpdated' => 'handleTrainStatusUpdated',
+        'echo:realtime-conflicts,RealtimeConflictDetected' => 'handleConflictDetected',
     ];
 
     public function handleTrainStatusUpdated($event)
@@ -45,6 +54,81 @@ class TrainTable extends Component
         $this->time = Carbon::now()->format('H:i');
         $this->loadSelectedRoutes();
         $this->loadTrains();
+        $this->loadConflicts();
+    }
+
+    public function loadConflicts()
+    {
+        $this->conflicts = RealtimeConflict::unresolved()
+            ->with(['trip', 'stop', 'manualUser'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->toArray();
+    }
+
+    public function handleConflictDetected($event)
+    {
+        // Add conflict to list
+        $this->loadConflicts();
+
+        // Show modal if not already showing
+        if (! $this->showConflictModal && count($this->conflicts) > 0) {
+            $this->showConflictModal = true;
+            $this->currentConflict = $this->conflicts[0] ?? null;
+        }
+    }
+
+    public function useRealtimeValue($conflictId)
+    {
+        $this->resolveConflict($conflictId, 'use_realtime');
+    }
+
+    public function keepManualValue($conflictId)
+    {
+        $this->resolveConflict($conflictId, 'keep_manual');
+    }
+
+    public function resolveConflict($conflictId, $resolution)
+    {
+        try {
+            $response = Http::withToken(request()->cookie('laravel_session'))
+                ->post(url('/api/gtfs/resolve-conflict'), [
+                    'conflict_id' => $conflictId,
+                    'resolution' => $resolution,
+                ]);
+
+            if ($response->successful()) {
+                // Reload conflicts
+                $this->loadConflicts();
+
+                // Reload trains to reflect changes
+                $this->loadTrains();
+
+                // Close modal if no more conflicts
+                if (count($this->conflicts) === 0) {
+                    $this->showConflictModal = false;
+                    $this->currentConflict = null;
+                } else {
+                    $this->currentConflict = $this->conflicts[0] ?? null;
+                }
+
+                session()->flash('success', 'Conflict resolved successfully');
+            } else {
+                session()->flash('error', 'Failed to resolve conflict');
+            }
+        } catch (\Exception $e) {
+            Log::error('Error resolving conflict', [
+                'conflict_id' => $conflictId,
+                'error' => $e->getMessage(),
+            ]);
+            session()->flash('error', 'Failed to resolve conflict: '.$e->getMessage());
+        }
+    }
+
+    public function closeConflictModal()
+    {
+        $this->showConflictModal = false;
+        $this->currentConflict = null;
     }
 
     public function loadSelectedRoutes()
@@ -206,8 +290,8 @@ class TrainTable extends Component
                 'train_statuses.status as train_status',
                 'statuses.status as status_text',
                 'statuses.color_rgb',
-                DB::raw('COALESCE(first_stop_status.departure_platform, departure_platform.platform_code) as departure_platform'),
-                DB::raw('COALESCE(last_stop_status.arrival_platform, arrival_platform.platform_code) as arrival_platform'),
+                DB::raw('COALESCE(first_stop_status.departure_platform, departure_platform.platform_code, first_stop_gtfs.platform_code) as departure_platform'),
+                DB::raw('COALESCE(last_stop_status.arrival_platform, arrival_platform.platform_code, last_stop_gtfs.platform_code) as arrival_platform'),
                 'first_stop_status.status as realtime_status',
                 'first_stop_status.status_color as realtime_status_color',
                 'first_stop_status.status_color_hex as realtime_status_color_hex',
@@ -225,6 +309,8 @@ class TrainTable extends Component
                     )');
             })
             ->join('gtfs_routes', 'gtfs_trips.route_id', '=', 'gtfs_routes.route_id')
+            ->leftJoin('gtfs_stops as first_stop_gtfs', 'first_stop.stop_id', '=', 'first_stop_gtfs.stop_id')
+            ->leftJoin('gtfs_stops as last_stop_gtfs', 'last_stop.stop_id', '=', 'last_stop_gtfs.stop_id')
             ->leftJoin('train_platform_assignments as departure_platform', function ($join) {
                 $join->on('gtfs_trips.trip_id', '=', 'departure_platform.trip_id')
                     ->whereRaw('departure_platform.stop_id = first_stop.stop_id');
@@ -265,7 +351,8 @@ class TrainTable extends Component
                 'gtfs_routes.route_long_name', 'gtfs_trips.trip_headsign', 'train_statuses.status', 'statuses.status',
                 'statuses.color_rgb', 'departure_platform.platform_code', 'arrival_platform.platform_code',
                 'first_stop_status.departure_platform', 'last_stop_status.arrival_platform', 'first_stop_status.status',
-                'first_stop_status.status_color', 'first_stop_status.status_color_hex')
+                'first_stop_status.status_color', 'first_stop_status.status_color_hex',
+                'first_stop_gtfs.platform_code', 'last_stop_gtfs.platform_code')
             ->orderByRaw('COALESCE(first_stop.new_departure_time, first_stop.departure_time)')
             ->limit(500); // Add safety limit to prevent scanning entire day
 

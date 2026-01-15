@@ -1,4 +1,5 @@
 <div wire:init="loadTrains">
+    @include('livewire.realtime-conflict-modal')
     <div x-data="{ 
             modalOpen: false, 
             selectedTrain: null,

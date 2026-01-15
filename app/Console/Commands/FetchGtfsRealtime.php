@@ -2,13 +2,16 @@
 
 namespace App\Console\Commands;
 
+use App\Events\RealtimeConflictDetected;
 use App\Models\GtfsSetting;
 use App\Models\GtfsStopTime;
 use App\Models\GtfsTrip;
+use App\Models\RealtimeConflict;
 use App\Models\StopStatus;
 use App\Services\LogHelper;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schedule;
 
@@ -44,10 +47,39 @@ class FetchGtfsRealtime extends Command
             // Get GTFS settings
             $settings = GtfsSetting::first();
 
-            if (! $settings || ! $settings->realtime_url) {
-                $this->warn('No GTFS realtime URL configured. Skipping...');
+            if (! $settings) {
+                $this->warn('No GTFS settings configured. Skipping...');
 
                 return Command::SUCCESS;
+            }
+
+            // Determine which source to use
+            $source = $settings->realtime_source ?? 'primary';
+            $realtimeUrl = null;
+            $updateInterval = 30;
+
+            if ($source === 'primary') {
+                $realtimeUrl = $settings->realtime_url;
+                $updateInterval = $settings->realtime_update_interval ?? 30;
+            } else {
+                $realtimeUrl = $settings->secondary_realtime_url;
+                $updateInterval = $settings->secondary_realtime_update_interval ?? 30;
+            }
+
+            if (! $realtimeUrl) {
+                $this->warn("No GTFS realtime URL configured for {$source} source. Skipping...");
+
+                return Command::SUCCESS;
+            }
+
+            // Check if enough time has passed since last update
+            if ($settings->last_realtime_update) {
+                $secondsSinceLastUpdate = now()->diffInSeconds($settings->last_realtime_update);
+                if ($secondsSinceLastUpdate < $updateInterval) {
+                    $this->info("Skipping fetch - only {$secondsSinceLastUpdate} seconds since last update (interval: {$updateInterval}s)");
+
+                    return Command::SUCCESS;
+                }
             }
 
             // Update last fetch attempt
@@ -56,8 +88,10 @@ class FetchGtfsRealtime extends Command
                 'realtime_status' => 'fetching',
             ]);
 
+            $this->info("Fetching from {$source} source: {$realtimeUrl}");
+
             // Fetch realtime data
-            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => 'v4'])->get($settings->realtime_url);
+            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => 'v4'])->get($realtimeUrl);
 
             if (! $response->successful()) {
                 throw new \Exception("HTTP error: {$response->status()}");
@@ -80,7 +114,7 @@ class FetchGtfsRealtime extends Command
                 'last_realtime_update' => now(),
             ]);
 
-            $this->info("Successfully processed {$processedCount} trip updates");
+            $this->info("Successfully processed {$processedCount} trip updates from {$source} source");
 
             return Command::SUCCESS;
 
@@ -188,6 +222,41 @@ class FetchGtfsRealtime extends Command
         $platformCode = $this->extractPlatformCode($assignedStopId);
 
         if ($platformCode) {
+            // Check if there's a manual change to the platform
+            $stopStatus = StopStatus::where('trip_id', $tripId)
+                ->where('stop_id', $stopId)
+                ->first();
+
+            // Check if platform was manually changed and differs from realtime value
+            if ($stopStatus && $stopStatus->is_manual_change) {
+                $manualPlatform = $stopStatus->departure_platform ?? $stopStatus->arrival_platform;
+                if ($manualPlatform && $manualPlatform !== $platformCode && $manualPlatform !== 'TBD') {
+                    // Create conflict
+                    $conflict = RealtimeConflict::create([
+                        'trip_id' => $tripId,
+                        'stop_id' => $stopId,
+                        'field_type' => 'platform',
+                        'manual_value' => $manualPlatform,
+                        'realtime_value' => $platformCode,
+                        'manual_user_id' => $stopStatus->manually_changed_by,
+                    ]);
+
+                    // Broadcast conflict detected event
+                    event(new RealtimeConflictDetected(
+                        $tripId,
+                        $stopId,
+                        'platform',
+                        $manualPlatform,
+                        $platformCode,
+                        $conflict->id,
+                        $stopStatus->manually_changed_by
+                    ));
+
+                    return; // Don't update, wait for user resolution
+                }
+            }
+
+            // No conflict, proceed with update
             StopStatus::updateOrCreate(
                 [
                     'trip_id' => $tripId,
@@ -231,26 +300,66 @@ class FetchGtfsRealtime extends Command
         }
 
         if ($hasUpdates) {
-            // Update the stop time with new departure time
-            // Use DB::table() instead of Eloquent update() for composite primary key
+            // Check for manual changes before updating departure time
             if ($newDepartureTime) {
-                \Illuminate\Support\Facades\DB::table('gtfs_stop_times')
+                // Get current stop time data to check for manual changes
+                $currentStopTime = DB::table('gtfs_stop_times')
                     ->where('trip_id', $stopTime->trip_id)
                     ->where('stop_sequence', $stopTime->stop_sequence)
-                    ->update(['new_departure_time' => $newDepartureTime]);
+                    ->first();
+
+                // Check if there's a manual change and it differs from realtime value
+                if ($currentStopTime && $currentStopTime->is_manual_change) {
+                    $manualValue = $currentStopTime->new_departure_time ?? $currentStopTime->departure_time;
+                    if ($manualValue && $manualValue !== $newDepartureTime) {
+                        // Create conflict
+                        $conflict = RealtimeConflict::create([
+                            'trip_id' => $tripId,
+                            'stop_id' => $stopTime->stop_id,
+                            'field_type' => 'departure_time',
+                            'manual_value' => $manualValue,
+                            'realtime_value' => $newDepartureTime,
+                            'manual_user_id' => $currentStopTime->manually_changed_by,
+                        ]);
+
+                        // Broadcast conflict detected event
+                        event(new RealtimeConflictDetected(
+                            $tripId,
+                            $stopTime->stop_id,
+                            'departure_time',
+                            $manualValue,
+                            $newDepartureTime,
+                            $conflict->id,
+                            $currentStopTime->manually_changed_by
+                        ));
+
+                        // Don't update departure time, wait for user resolution
+                        $newDepartureTime = null;
+                    }
+                }
+
+                // Update the stop time with new departure time if no conflict
+                if ($newDepartureTime) {
+                    DB::table('gtfs_stop_times')
+                        ->where('trip_id', $stopTime->trip_id)
+                        ->where('stop_sequence', $stopTime->stop_sequence)
+                        ->update(['new_departure_time' => $newDepartureTime]);
+                }
             }
 
-            // Update stop status with delay information
-            StopStatus::updateOrCreate(
-                [
-                    'trip_id' => $tripId,
-                    'stop_id' => $stopTime->stop_id,
-                ],
-                [
-                    'is_realtime_update' => true,
-                    'updated_at' => now(),
-                ]
-            );
+            // Update stop status with delay information (only if we updated the time)
+            if ($newDepartureTime || $newArrivalTime) {
+                StopStatus::updateOrCreate(
+                    [
+                        'trip_id' => $tripId,
+                        'stop_id' => $stopTime->stop_id,
+                    ],
+                    [
+                        'is_realtime_update' => true,
+                        'updated_at' => now(),
+                    ]
+                );
+            }
         }
     }
 
@@ -293,8 +402,39 @@ class FetchGtfsRealtime extends Command
      */
     private function handleCancellation(string $tripId): void
     {
-        // Update all stop statuses for this trip to cancelled
+        // Check for manual status changes before updating to cancelled
+        $stopStatuses = StopStatus::where('trip_id', $tripId)
+            ->where('is_manual_change', true)
+            ->get();
+
+        foreach ($stopStatuses as $stopStatus) {
+            // If status was manually changed and it's not already cancelled, create conflict
+            if ($stopStatus->status !== 'cancelled') {
+                $conflict = RealtimeConflict::create([
+                    'trip_id' => $tripId,
+                    'stop_id' => $stopStatus->stop_id,
+                    'field_type' => 'status',
+                    'manual_value' => $stopStatus->status,
+                    'realtime_value' => 'cancelled',
+                    'manual_user_id' => $stopStatus->manually_changed_by,
+                ]);
+
+                // Broadcast conflict detected event
+                event(new RealtimeConflictDetected(
+                    $tripId,
+                    $stopStatus->stop_id,
+                    'status',
+                    $stopStatus->status,
+                    'cancelled',
+                    $conflict->id,
+                    $stopStatus->manually_changed_by
+                ));
+            }
+        }
+
+        // Update stop statuses that weren't manually changed
         StopStatus::where('trip_id', $tripId)
+            ->where('is_manual_change', false)
             ->update([
                 'status' => 'cancelled',
                 'is_realtime_update' => true,

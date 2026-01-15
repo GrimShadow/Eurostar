@@ -1,16 +1,16 @@
 <?php
 
-use App\Http\Controllers\Api\UserController;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\GtfsController;
-use App\Http\Controllers\Api\TrainController;
-use App\Http\Controllers\AviavoxController;
-use App\Http\Controllers\Api\AviavoxApiController;
-use App\Http\Controllers\Api\HeartbeatController;
 use App\Http\Controllers\Api\AnnouncementApiController;
-use App\Http\Controllers\Api\BrokerController;
 use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AviavoxApiController;
+use App\Http\Controllers\Api\BrokerController;
+use App\Http\Controllers\Api\GtfsController;
+use App\Http\Controllers\Api\HeartbeatController;
+use App\Http\Controllers\Api\TrainController;
+use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\AviavoxController;
+use Illuminate\Support\Facades\Route;
 
 Route::post('/aviavox/response', [AviavoxApiController::class, 'handleResponse']);
 Route::get('/aviavox/response', [AviavoxApiController::class, 'handleResponse']);
@@ -33,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/gtfs/stop-statuses/{tripId}', [GtfsController::class, 'getStopStatuses']);
     Route::post('/gtfs/train-status', [GtfsController::class, 'updateTrainStatus']);
     Route::get('/gtfs/train-status/{tripId}', [GtfsController::class, 'getTrainStatus']);
+    Route::post('/gtfs/resolve-conflict', [GtfsController::class, 'resolveConflict'])->name('api.gtfs.resolve-conflict');
 });
 
 Route::post('/sanctum/token', [AuthController::class, 'token']);

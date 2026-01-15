@@ -33,12 +33,18 @@ class GtfsController extends Controller
             'url' => 'required|url',
             'realtime_url' => 'nullable|url',
             'realtime_update_interval' => 'nullable|integer|min:10|max:300',
+            'realtime_source' => 'required|in:primary,secondary',
+            'secondary_realtime_url' => 'nullable|url',
+            'secondary_realtime_update_interval' => 'nullable|integer|min:10|max:300',
         ]);
 
         $gtfsSettings = GtfsSetting::firstOrNew();
         $gtfsSettings->url = $validated['url'];
         $gtfsSettings->realtime_url = $validated['realtime_url'];
         $gtfsSettings->realtime_update_interval = $validated['realtime_update_interval'] ?? 30;
+        $gtfsSettings->realtime_source = $validated['realtime_source'];
+        $gtfsSettings->secondary_realtime_url = $validated['secondary_realtime_url'] ?? null;
+        $gtfsSettings->secondary_realtime_update_interval = $validated['secondary_realtime_update_interval'] ?? 30;
         $gtfsSettings->save();
 
         return redirect()->route('settings.gtfs')->with('success', 'GTFS settings updated successfully.');
@@ -632,6 +638,9 @@ class GtfsController extends Controller
                     'platform_code' => $request->platform_code,
                     'departure_platform' => $request->departure_platform,
                     'arrival_platform' => $request->arrival_platform,
+                    'is_manual_change' => true,
+                    'manually_changed_by' => auth()->id(),
+                    'manually_changed_at' => now(),
                 ]
             );
 
@@ -806,6 +815,9 @@ class GtfsController extends Controller
                 'status' => $request->status,
                 'status_color' => $statusObj?->color_rgb ?? '156,163,175',
                 'status_color_hex' => $statusObj ? $this->rgbToHex($statusObj->color_rgb) : '#9CA3AF',
+                'is_manual_change' => true,
+                'manually_changed_by' => auth()->id(),
+                'manually_changed_at' => now(),
             ]);
 
             // Fire the same event that automated updates fire for consistency
@@ -839,6 +851,89 @@ class GtfsController extends Controller
             'success' => true,
             'data' => $trainStatus,
         ]);
+    }
+
+    public function resolveConflict(Request $request)
+    {
+        $request->validate([
+            'conflict_id' => 'required|integer|exists:realtime_conflicts,id',
+            'resolution' => 'required|string|in:use_realtime,keep_manual',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $conflict = \App\Models\RealtimeConflict::findOrFail($request->conflict_id);
+
+            if ($conflict->isResolved()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Conflict already resolved',
+                ], 400);
+            }
+
+            // Resolve the conflict
+            $conflict->resolve($request->resolution, auth()->id());
+
+            // Apply the resolution
+            if ($request->resolution === 'use_realtime') {
+                // Apply the realtime value
+                if ($conflict->field_type === 'departure_time') {
+                    DB::table('gtfs_stop_times')
+                        ->where('trip_id', $conflict->trip_id)
+                        ->where('stop_id', $conflict->stop_id)
+                        ->update([
+                            'new_departure_time' => $conflict->realtime_value,
+                            'is_manual_change' => false,
+                            'manually_changed_by' => null,
+                            'manually_changed_at' => null,
+                        ]);
+                } elseif ($conflict->field_type === 'platform') {
+                    StopStatus::where('trip_id', $conflict->trip_id)
+                        ->where('stop_id', $conflict->stop_id)
+                        ->update([
+                            'departure_platform' => $conflict->realtime_value,
+                            'arrival_platform' => $conflict->realtime_value,
+                            'is_manual_change' => false,
+                            'manually_changed_by' => null,
+                            'manually_changed_at' => null,
+                        ]);
+                } elseif ($conflict->field_type === 'status') {
+                    StopStatus::where('trip_id', $conflict->trip_id)
+                        ->where('stop_id', $conflict->stop_id)
+                        ->update([
+                            'status' => $conflict->realtime_value,
+                            'is_manual_change' => false,
+                            'manually_changed_by' => null,
+                            'manually_changed_at' => null,
+                        ]);
+                }
+            } else {
+                // Keep manual value - just mark conflict as resolved, value stays the same
+                // No database update needed
+            }
+
+            // Broadcast conflict resolved event
+            event(new \App\Events\TrainStatusUpdated($conflict->trip_id, 'updated'));
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Conflict resolved successfully',
+                'data' => $conflict->fresh(),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            LogHelper::gtfsError('Failed to resolve conflict', [
+                'conflict_id' => $request->conflict_id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to resolve conflict',
+            ], 500);
+        }
     }
 
     public function testRealtime()

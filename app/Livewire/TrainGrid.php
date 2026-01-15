@@ -6,6 +6,7 @@ use App\Models\CheckInStatus;
 use App\Models\Group;
 use App\Models\GtfsStopTime;
 use App\Models\GtfsTrip;
+use App\Models\RealtimeConflict;
 use App\Models\Setting;
 use App\Models\Status;
 use App\Models\StopStatus;
@@ -13,6 +14,7 @@ use App\Models\TrainCheckInStatus;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Livewire\Component;
 
@@ -36,10 +38,17 @@ class TrainGrid extends Component
 
     public $selectedDate;
 
+    public $conflicts = [];
+
+    public $showConflictModal = false;
+
+    public $currentConflict = null;
+
     protected $listeners = [
         'refreshTrains' => 'loadTrains',
         'updateTrainStatus' => 'updateTrainStatus',
         'echo:train-statuses,TrainStatusUpdated' => 'handleTrainStatusUpdated',
+        'echo:realtime-conflicts,RealtimeConflictDetected' => 'handleConflictDetected',
         'updateStopStatus' => 'updateStopStatus',
     ];
 
@@ -48,12 +57,87 @@ class TrainGrid extends Component
         $this->loadTrains();
     }
 
+    public function loadConflicts()
+    {
+        $this->conflicts = RealtimeConflict::unresolved()
+            ->with(['trip', 'stop', 'manualUser'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->toArray();
+    }
+
+    public function handleConflictDetected($event)
+    {
+        // Add conflict to list
+        $this->loadConflicts();
+
+        // Show modal if not already showing
+        if (! $this->showConflictModal && count($this->conflicts) > 0) {
+            $this->showConflictModal = true;
+            $this->currentConflict = $this->conflicts[0] ?? null;
+        }
+    }
+
+    public function useRealtimeValue($conflictId)
+    {
+        $this->resolveConflict($conflictId, 'use_realtime');
+    }
+
+    public function keepManualValue($conflictId)
+    {
+        $this->resolveConflict($conflictId, 'keep_manual');
+    }
+
+    public function resolveConflict($conflictId, $resolution)
+    {
+        try {
+            $response = Http::withToken(request()->cookie('laravel_session'))
+                ->post(url('/api/gtfs/resolve-conflict'), [
+                    'conflict_id' => $conflictId,
+                    'resolution' => $resolution,
+                ]);
+
+            if ($response->successful()) {
+                // Reload conflicts
+                $this->loadConflicts();
+
+                // Reload trains to reflect changes
+                $this->loadTrains();
+
+                // Close modal if no more conflicts
+                if (count($this->conflicts) === 0) {
+                    $this->showConflictModal = false;
+                    $this->currentConflict = null;
+                } else {
+                    $this->currentConflict = $this->conflicts[0] ?? null;
+                }
+
+                session()->flash('success', 'Conflict resolved successfully');
+            } else {
+                session()->flash('error', 'Failed to resolve conflict');
+            }
+        } catch (\Exception $e) {
+            Log::error('Error resolving conflict', [
+                'conflict_id' => $conflictId,
+                'error' => $e->getMessage(),
+            ]);
+            session()->flash('error', 'Failed to resolve conflict: '.$e->getMessage());
+        }
+    }
+
+    public function closeConflictModal()
+    {
+        $this->showConflictModal = false;
+        $this->currentConflict = null;
+    }
+
     public function mount(Group $group)
     {
         $this->group = $group;
         $this->selectedDate = now()->format('Y-m-d');
         $this->loadSelectedStations();
         $this->loadTrains();
+        $this->loadConflicts();
     }
 
     public function loadSelectedStations()
@@ -620,6 +704,9 @@ class TrainGrid extends Component
                         'status' => $status,
                         'status_color' => $statusObj->color_rgb,
                         'status_color_hex' => $this->rgbToHex($statusObj->color_rgb),
+                        'is_manual_change' => true,
+                        'manually_changed_by' => auth()->id(),
+                        'manually_changed_at' => now(),
                         'updated_at' => now(),
                     ]
                 );
@@ -646,7 +733,12 @@ class TrainGrid extends Component
                         $updated = DB::table('gtfs_stop_times')
                             ->where('trip_id', $tripId)
                             ->where('stop_id', $matchingStop->stop_id)
-                            ->update(['new_departure_time' => $formattedTime]);
+                            ->update([
+                                'new_departure_time' => $formattedTime,
+                                'is_manual_change' => true,
+                                'manually_changed_by' => auth()->id(),
+                                'manually_changed_at' => now(),
+                            ]);
 
                         Log::info('Updated departure time', [
                             'trip_id' => $tripId,
@@ -828,6 +920,9 @@ class TrainGrid extends Component
                 'status' => $status,
                 'departure_platform' => $departurePlatform,
                 'arrival_platform' => $arrivalPlatform,
+                'is_manual_change' => true,
+                'manually_changed_by' => auth()->id(),
+                'manually_changed_at' => now(),
             ]
         );
 

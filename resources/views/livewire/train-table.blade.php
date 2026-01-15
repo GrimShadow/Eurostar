@@ -1,4 +1,5 @@
 <div class="bg-white shadow-sm rounded-lg">
+    @include('livewire.realtime-conflict-modal')
     <div class="p-6">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">

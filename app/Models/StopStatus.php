@@ -20,6 +20,9 @@ class StopStatus extends Model
         'departure_platform',
         'arrival_platform',
         'is_realtime_update',
+        'is_manual_change',
+        'manually_changed_by',
+        'manually_changed_at',
     ];
 
     protected $casts = [
@@ -27,6 +30,8 @@ class StopStatus extends Model
         'scheduled_departure_time' => 'datetime',
         'actual_arrival_time' => 'datetime',
         'actual_departure_time' => 'datetime',
+        'is_manual_change' => 'boolean',
+        'manually_changed_at' => 'datetime',
     ];
 
     public function trip()
@@ -37,6 +42,14 @@ class StopStatus extends Model
     public function stop()
     {
         return $this->belongsTo(GtfsStop::class, 'stop_id', 'stop_id');
+    }
+
+    /**
+     * Get the user who manually changed this stop status
+     */
+    public function manuallyChangedBy()
+    {
+        return $this->belongsTo(User::class, 'manually_changed_by');
     }
 
     protected static function boot()
