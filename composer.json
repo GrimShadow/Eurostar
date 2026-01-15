@@ -8,7 +8,7 @@
         "php": "^8.2",
         "blade-ui-kit/blade-heroicons": "^2.4",
         "blade-ui-kit/blade-icons": "^1.7",
-        "devdojo/auth": "^1.0",
+        "devdojo/auth": "^2.0",
         "doctrine/dbal": "^4.2",
         "laravel/framework": "^11.9",
         "laravel/pennant": "^1.17",
