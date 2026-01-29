@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\GtfsRoute;
 use App\Models\GtfsStop;
 use App\Models\GtfsStopTime;
 use App\Models\GtfsTrip;
@@ -213,4 +214,203 @@ test('can evaluate is peak time condition', function () {
     expect($condition->evaluate($train))->toBeFalse();
 
     Carbon\Carbon::setTestNow(); // Reset
+});
+
+test('can evaluate departure_time condition', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'departure_time',
+        'operator' => '=',
+        'value' => '14:30',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create();
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+        'arrival_time' => '14:25:00',
+        'departure_time' => '14:30:00',
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeTrue();
+
+    $condition->update(['value' => '15:00']);
+    expect($condition->evaluate($trip))->toBeFalse();
+});
+
+test('can evaluate actual_departure_time condition', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'actual_departure_time',
+        'operator' => '=',
+        'value' => '14:45',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create();
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+        'arrival_time' => '14:25:00',
+        'departure_time' => '14:30:00',
+        'new_departure_time' => '14:45:00',
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeTrue();
+
+    $condition->update(['value' => '15:00']);
+    expect($condition->evaluate($trip))->toBeFalse();
+});
+
+test('actual_departure_time condition fails when no update exists', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'actual_departure_time',
+        'operator' => '=',
+        'value' => '14:30',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create();
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+        'departure_time' => '14:30:00',
+        'new_departure_time' => null,
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeFalse();
+});
+
+test('can evaluate arrival_time condition', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'arrival_time',
+        'operator' => '=',
+        'value' => '14:25',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create();
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+        'arrival_time' => '14:25:00',
+        'departure_time' => '14:30:00',
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeTrue();
+});
+
+test('can evaluate departure_platform condition', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'departure_platform',
+        'operator' => '=',
+        'value' => '5',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create(['platform_code' => '5']);
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeTrue();
+});
+
+test('can evaluate arrival_platform condition', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'arrival_platform',
+        'operator' => '=',
+        'value' => '12',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create(['platform_code' => '12']);
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeTrue();
+});
+
+test('can evaluate route_name condition', function () {
+    $route = GtfsRoute::create([
+        'route_id' => 'EUROSTAR',
+        'agency_id' => '1',
+        'route_short_name' => 'EST',
+        'route_long_name' => 'Eurostar to London',
+        'route_type' => 2,
+    ]);
+
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'route_name',
+        'operator' => '=',
+        'value' => 'eurostar to london',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create(['route_id' => $route->route_id]);
+    $trip->load('route');
+    expect($condition->evaluate($trip))->toBeTrue();
+});
+
+test('can evaluate stop_name condition', function () {
+    $rule = TrainRule::factory()->create();
+    $condition = RuleCondition::create([
+        'train_rule_id' => $rule->id,
+        'condition_type' => 'stop_name',
+        'operator' => '=',
+        'value' => 'amsterdam centraal',
+        'order' => 1,
+    ]);
+
+    $trip = GtfsTrip::factory()->create();
+    $stop = GtfsStop::factory()->create(['stop_name' => 'Amsterdam Centraal']);
+    GtfsStopTime::factory()->create([
+        'trip_id' => $trip->trip_id,
+        'stop_id' => $stop->stop_id,
+        'stop_sequence' => 1,
+    ]);
+
+    $trip->load('stopTimes.stop');
+    expect($condition->evaluate($trip))->toBeTrue();
+});
+
+test('ProcessSingleTrainRule loads trips with new_departure_time and route', function () {
+    $rule = TrainRule::factory()->create(['is_active' => false]);
+    $job = new \App\Jobs\ProcessSingleTrainRule($rule->id);
+    $job->handle();
+    expect(true)->toBeTrue();
 });

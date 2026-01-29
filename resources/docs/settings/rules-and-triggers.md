@@ -53,6 +53,42 @@ Conditions are organized into several categories:
   - Value type: Boolean (true/false)
   - Example: "Is Peak Time = true" means the rule applies during peak hours
 
+- **Time Since Arrival**: Number of minutes since the train's scheduled arrival time at the final destination
+  - Value type: Number (minutes)
+  - Example: "Time Since Arrival > 5" means the train arrived more than 5 minutes ago
+
+##### Train Data (times and platforms)
+
+These conditions use the same data shown in the train grid (scheduled/actual times, platforms, route and stop names).
+
+- **Departure Time (scheduled)**: The train's scheduled departure time at the first (or selected) stop
+  - Value type: Time (HH:MM, 24-hour)
+  - Example: "Departure Time = 14:30" means the train is scheduled to depart at 2:30 PM
+
+- **Actual Departure Time**: The updated departure time when different from schedule (from realtime or manual updates)
+  - Value type: Time (HH:MM, 24-hour)
+  - Example: "Actual Departure Time = 14:45" means the train's revised departure is 2:45 PM. If no update exists, the condition does not match (except when using !=).
+
+- **Arrival Time**: The train's scheduled arrival time at the first (or selected) stop
+  - Value type: Time (HH:MM, 24-hour)
+  - Example: "Arrival Time > 12:00" means the train arrives after noon
+
+- **Departure Platform**: The platform at the first (or selected) stop (from GTFS, manual override, or platform assignments)
+  - Value type: Text
+  - Example: "Departure Platform = 5" means the train departs from platform 5
+
+- **Arrival Platform**: The platform at the last (or selected) stop
+  - Value type: Text
+  - Example: "Arrival Platform = 12" means the train arrives at platform 12
+
+- **Route Name**: The route's long name (e.g. "Eurostar to London")
+  - Value type: Text (case-insensitive comparison)
+  - Example: "Route Name = Eurostar to London"
+
+- **Stop Name**: The name of the first (or selected) stop
+  - Value type: Text (case-insensitive comparison)
+  - Example: "Stop Name = Amsterdam Centraal"
+
 ##### Realtime Data Conditions
 
 - **Delay (Minutes)**: The delay in minutes compared to scheduled departure time
@@ -74,6 +110,10 @@ Conditions are organized into several categories:
 - **Has Realtime Update**: Whether the train has received a realtime update
   - Value type: Boolean (true/false)
   - Example: "Has Realtime Update = true" means realtime data is available
+
+- **Specific Platform**: The platform at the first (or selected) stop equals the given value
+  - Value type: Text
+  - Example: "Specific Platform = 9" means the train uses platform 9
 
 ##### Route/Service Conditions
 
@@ -124,7 +164,8 @@ Operators define how to compare the condition value:
 The value field type changes based on the selected condition type:
 
 - **Number**: For time-based conditions (minutes) and delay conditions
-- **Text**: For train numbers, route IDs, destination stations, and platform values
+- **Text**: For train numbers, route IDs, destination stations, platform values, route name, and stop name
+- **Time**: For departure time, actual departure time, arrival time, and time-of-day conditions (HH:MM)
 - **Select**: For status conditions (dropdown of available statuses) and day of week
 - **Boolean**: For true/false conditions like platform changed, is cancelled, etc.
 - **Time Range**: For time range conditions (start time - end time format)

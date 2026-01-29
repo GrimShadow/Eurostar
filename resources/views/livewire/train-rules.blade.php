@@ -49,16 +49,27 @@
                                         <option value="time_after_departure">Time After Departure</option>
                                         <option value="time_until_arrival">Time Until Arrival</option>
                                         <option value="time_after_arrival">Time After Arrival</option>
+                                        <option value="time_since_arrival">Time Since Arrival</option>
                                         <option value="minutes_until_check_in_starts">Minutes Until Check-in Starts</option>
                                         <option value="time_of_day">Time Equals</option>
                                         <option value="time_range">Time Range</option>
                                         <option value="day_of_week">Day of Week</option>
                                         <option value="is_peak_time">Is Peak Time</option>
                                     </optgroup>
+                                    <optgroup label="Train Data (times &amp; platforms)">
+                                        <option value="departure_time">Departure Time (scheduled)</option>
+                                        <option value="actual_departure_time">Actual Departure Time</option>
+                                        <option value="arrival_time">Arrival Time</option>
+                                        <option value="departure_platform">Departure Platform</option>
+                                        <option value="arrival_platform">Arrival Platform</option>
+                                        <option value="route_name">Route Name</option>
+                                        <option value="stop_name">Stop Name</option>
+                                    </optgroup>
                                     <optgroup label="Realtime Data">
                                         <option value="delay_minutes">Delay (Minutes)</option>
                                         <option value="delay_percentage">Delay (Percentage)</option>
                                         <option value="platform_changed">Platform Changed</option>
+                                        <option value="specific_platform">Specific Platform</option>
                                         <option value="is_cancelled">Is Cancelled</option>
                                         <option value="has_realtime_update">Has Realtime Update</option>
                                     </optgroup>
@@ -127,6 +138,27 @@
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
                                         placeholder="HH:MM">
                                     <p class="text-xs text-gray-500 mt-1">Enter time in 24-hour format (HH:MM)</p>
+                                @elseif(in_array($condition['condition_type'], ['departure_time', 'actual_departure_time', 'arrival_time']))
+                                    <input type="time" 
+                                        wire:model.live="conditions.{{ $index }}.value" 
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
+                                        placeholder="HH:MM">
+                                    <p class="text-xs text-gray-500 mt-1">Enter time in 24-hour format (HH:MM)</p>
+                                @elseif($condition['condition_type'] === 'departure_platform' || $condition['condition_type'] === 'arrival_platform')
+                                    <input type="text" 
+                                        wire:model.live="conditions.{{ $index }}.value" 
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
+                                        placeholder="Enter platform number">
+                                @elseif($condition['condition_type'] === 'route_name')
+                                    <input type="text" 
+                                        wire:model.live="conditions.{{ $index }}.value" 
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
+                                        placeholder="Enter route name">
+                                @elseif($condition['condition_type'] === 'stop_name')
+                                    <input type="text" 
+                                        wire:model.live="conditions.{{ $index }}.value" 
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-neutral-500 focus:border-neutral-500"
+                                        placeholder="Enter stop name">
                                 @elseif($condition['condition_type'] === 'day_of_week')
                                     <div class="mt-1 space-y-2">
                                         @php
@@ -456,6 +488,12 @@
                                         {{ !empty($dayLabels) ? implode(', ', $dayLabels) : 'No day selected' }}
                                     @elseif($condition->condition_type === 'time_of_day')
                                         {{ $condition->value }}
+                                    @elseif(in_array($condition->condition_type, ['departure_time', 'actual_departure_time', 'arrival_time']))
+                                        {{ $condition->value }}
+                                    @elseif(in_array($condition->condition_type, ['departure_platform', 'arrival_platform', 'route_name', 'stop_name', 'specific_platform', 'route_id', 'direction_id', 'destination_station']))
+                                        {{ $condition->value }}
+                                    @elseif($condition->condition_type === 'time_since_arrival')
+                                        {{ $condition->value }} minutes
                                     @else
                                         {{ $condition->value }} minutes
                                     @endif

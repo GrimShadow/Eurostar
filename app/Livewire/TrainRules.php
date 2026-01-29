@@ -72,7 +72,7 @@ class TrainRules extends Component
     {
         $rules = [
             'conditions' => 'required|array|min:1',
-            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,check_in_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible,minutes_until_check_in_starts',
+            'conditions.*.condition_type' => 'required|in:time_until_departure,time_after_departure,time_until_arrival,time_after_arrival,time_since_arrival,platform_change,delay_duration,current_status,check_in_status,time_of_day,train_number,delay_minutes,delay_percentage,platform_changed,specific_platform,is_cancelled,has_realtime_update,route_id,direction_id,destination_station,time_range,day_of_week,is_peak_time,wheelchair_accessible,minutes_until_check_in_starts,departure_time,actual_departure_time,arrival_time,departure_platform,arrival_platform,route_name,stop_name',
             'conditions.*.operator' => 'required',
             'conditions.*.value' => 'required',
             'action' => 'required|in:set_status,make_announcement,update_platform,set_check_in_status',
@@ -86,6 +86,8 @@ class TrainRules extends Component
                 } elseif ($condition['condition_type'] === 'check_in_status') {
                     $rules["conditions.{$index}.value"] = 'required|exists:check_in_statuses,id';
                 } elseif ($condition['condition_type'] === 'time_of_day') {
+                    $rules["conditions.{$index}.value"] = 'required|regex:/^([01][0-9]|2[0-3]):[0-5][0-9]$/';
+                } elseif (in_array($condition['condition_type'], ['departure_time', 'actual_departure_time', 'arrival_time'])) {
                     $rules["conditions.{$index}.value"] = 'required|regex:/^([01][0-9]|2[0-3]):[0-5][0-9]$/';
                 }
             }
@@ -207,6 +209,9 @@ class TrainRules extends Component
                     $this->conditions[$index]['value'] = '0';
                     break;
                 case 'time_of_day':
+                case 'departure_time':
+                case 'actual_departure_time':
+                case 'arrival_time':
                     $this->conditions[$index]['value'] = '';
                     break;
                 case 'day_of_week':
@@ -295,9 +300,34 @@ class TrainRules extends Component
                 ];
                 break;
             case 'time_of_day':
+            case 'departure_time':
+            case 'actual_departure_time':
+            case 'arrival_time':
                 $this->valueField = [
                     'type' => 'time',
                     'label' => 'Time (HH:MM)',
+                ];
+                break;
+            case 'departure_platform':
+            case 'arrival_platform':
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Platform',
+                    'placeholder' => 'Enter platform number',
+                ];
+                break;
+            case 'route_name':
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Route Name',
+                    'placeholder' => 'Enter route name',
+                ];
+                break;
+            case 'stop_name':
+                $this->valueField = [
+                    'type' => 'text',
+                    'label' => 'Stop Name',
+                    'placeholder' => 'Enter stop name',
                 ];
                 break;
             case 'time_range':

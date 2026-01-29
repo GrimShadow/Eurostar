@@ -199,12 +199,25 @@ class ProcessSingleTrainRule implements ShouldQueue
             'gtfs_trips.trip_short_name',
             'gtfs_trips.trip_headsign',
             'gtfs_trips.service_id',
+            'gtfs_trips.direction_id',
+            'gtfs_trips.wheelchair_accessible',
         ])
-            ->with(['currentStatus', 'stopTimes' => function ($query) {
-                // Only get first and last stops to minimize data
-                $query->select(['trip_id', 'stop_id', 'stop_sequence', 'arrival_time', 'departure_time'])
-                    ->orderBy('stop_sequence');
-            }])
+            ->with([
+                'currentStatus',
+                'route',
+                'stopTimes' => function ($query) {
+                    $query->select([
+                        'trip_id',
+                        'stop_id',
+                        'stop_sequence',
+                        'arrival_time',
+                        'departure_time',
+                        'new_departure_time',
+                    ])
+                        ->orderBy('stop_sequence')
+                        ->with('stop');
+                },
+            ])
             ->whereIn('trip_id', $uniqueTrainIds->toArray())
             ->limit(500) // Keep the safety limit
             ->get();

@@ -5,6 +5,7 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class RuleCondition extends Model
 {
@@ -295,6 +296,27 @@ class RuleCondition extends Model
             case 'route_id':
                 return $this->compare($train->route_id, $this->value);
 
+            case 'departure_time':
+                return $this->evaluateDepartureTime($train, $specificStopId);
+
+            case 'actual_departure_time':
+                return $this->evaluateActualDepartureTime($train, $specificStopId);
+
+            case 'arrival_time':
+                return $this->evaluateArrivalTime($train, $specificStopId);
+
+            case 'departure_platform':
+                return $this->evaluateDeparturePlatform($train, $specificStopId);
+
+            case 'arrival_platform':
+                return $this->evaluateArrivalPlatform($train, $specificStopId);
+
+            case 'route_name':
+                return $this->evaluateRouteName($train);
+
+            case 'stop_name':
+                return $this->evaluateStopName($train, $specificStopId);
+
             case 'direction_id':
                 return $this->compare($train->direction_id, $this->value);
 
@@ -521,5 +543,191 @@ class RuleCondition extends Model
         $actualTime = Carbon::createFromFormat('H:i:s', $stopTime->new_departure_time);
 
         return $scheduledTime->diffInMinutes($actualTime, false);
+    }
+
+    /**
+     * Normalize time string to HH:MM:SS for comparison.
+     */
+    private function normalizeTimeString(?string $time): string
+    {
+        if (empty($time)) {
+            return '00:00:00';
+        }
+        $time = trim($time);
+        if (preg_match('/^\d{2}:\d{2}$/', $time)) {
+            return $time.':00';
+        }
+        if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)) {
+            return $time;
+        }
+
+        return '00:00:00';
+    }
+
+    /**
+     * Get platform code for a stop (same logic as TrainGrid::getPlatformCode).
+     */
+    private function getPlatformCodeForStop(string $tripId, string $stopId, ?string $platformCode, ?string $manualPlatform): string
+    {
+        if (! empty($platformCode)) {
+            return $platformCode;
+        }
+        if (! empty($manualPlatform) && $manualPlatform !== 'TBD') {
+            return $manualPlatform;
+        }
+        $platformAssignment = DB::table('train_platform_assignments')
+            ->where('trip_id', $tripId)
+            ->where('stop_id', $stopId)
+            ->first();
+        if ($platformAssignment && ! empty($platformAssignment->platform_code) && $platformAssignment->platform_code !== 'TBD') {
+            return $platformAssignment->platform_code;
+        }
+        if (strpos($stopId, '_') === false || ! preg_match('/_\d+[a-z]?$/', $stopId)) {
+            $platformStops = DB::table('gtfs_stops')
+                ->where('stop_id', 'LIKE', $stopId.'_%')
+                ->whereNotNull('platform_code')
+                ->where('platform_code', '!=', '')
+                ->orderBy('platform_code')
+                ->pluck('platform_code');
+            if ($platformStops->isNotEmpty()) {
+                return $platformStops->first();
+            }
+
+            return 'TBD';
+        }
+
+        return 'TBD';
+    }
+
+    private function evaluateDepartureTime($train, $specificStopId = null): bool
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+        if (! $stopTime) {
+            return false;
+        }
+        $trainTime = $this->normalizeTimeString($stopTime->departure_time);
+        $compareValue = $this->normalizeTimeString($this->value);
+
+        return $this->compare($trainTime, $compareValue);
+    }
+
+    private function evaluateActualDepartureTime($train, $specificStopId = null): bool
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+        if (! $stopTime) {
+            return false;
+        }
+        $actualTime = $stopTime->new_departure_time ?? null;
+        if ($actualTime === null) {
+            return $this->operator === '!=' && $this->value !== '';
+        }
+        $trainTime = $this->normalizeTimeString($actualTime);
+        $compareValue = $this->normalizeTimeString($this->value);
+
+        return $this->compare($trainTime, $compareValue);
+    }
+
+    private function evaluateArrivalTime($train, $specificStopId = null): bool
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+        if (! $stopTime) {
+            return false;
+        }
+        $trainTime = $this->normalizeTimeString($stopTime->arrival_time);
+        $compareValue = $this->normalizeTimeString($this->value);
+
+        return $this->compare($trainTime, $compareValue);
+    }
+
+    private function evaluateDeparturePlatform($train, $specificStopId = null): bool
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+        if (! $stopTime) {
+            return false;
+        }
+        $stopStatus = StopStatus::where('trip_id', $train->trip_id)
+            ->where('stop_id', $stopTime->stop_id)
+            ->first();
+        $manualPlatform = $stopStatus->departure_platform ?? $stopStatus->arrival_platform ?? null;
+        $platformCode = $this->getPlatformCodeForStop(
+            $train->trip_id,
+            $stopTime->stop_id,
+            $stopTime->stop->platform_code ?? null,
+            $manualPlatform
+        );
+
+        return $this->compare($platformCode, trim((string) $this->value));
+    }
+
+    private function evaluateArrivalPlatform($train, $specificStopId = null): bool
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderByDesc('stop_sequence')->first();
+        }
+        if (! $stopTime) {
+            return false;
+        }
+        $stopStatus = StopStatus::where('trip_id', $train->trip_id)
+            ->where('stop_id', $stopTime->stop_id)
+            ->first();
+        $manualPlatform = $stopStatus->arrival_platform ?? $stopStatus->departure_platform ?? null;
+        $platformCode = $this->getPlatformCodeForStop(
+            $train->trip_id,
+            $stopTime->stop_id,
+            $stopTime->stop->platform_code ?? null,
+            $manualPlatform
+        );
+
+        return $this->compare($platformCode, trim((string) $this->value));
+    }
+
+    private function evaluateRouteName($train): bool
+    {
+        $route = $train->route;
+        if (! $route) {
+            return false;
+        }
+        $routeName = $route->route_long_name ?? '';
+        $compareValue = trim((string) $this->value);
+        $normalizedRoute = strtolower($routeName);
+        $normalizedValue = strtolower($compareValue);
+
+        return $this->compare($normalizedRoute, $normalizedValue);
+    }
+
+    private function evaluateStopName($train, $specificStopId = null): bool
+    {
+        if ($specificStopId) {
+            $stopTime = $train->stopTimes()->where('stop_id', $specificStopId)->first();
+        } else {
+            $stopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
+        }
+        if (! $stopTime || ! $stopTime->stop) {
+            return false;
+        }
+        $stopName = $stopTime->stop->stop_name ?? '';
+        $compareValue = trim((string) $this->value);
+        $normalizedStop = strtolower($stopName);
+        $normalizedValue = strtolower($compareValue);
+
+        return $this->compare($normalizedStop, $normalizedValue);
     }
 }
