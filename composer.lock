@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6b735cf376f37aaf54f1ebdb3ad40454",
+    "content-hash": "92ab1cce92e5826ac8c5c1dfc407ba28",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -1375,6 +1375,50 @@
             "time": "2025-12-03T09:33:47+00:00"
         },
         {
+            "name": "google/protobuf",
+            "version": "v3.25.8",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/protocolbuffers/protobuf-php.git",
+                "reference": "57d440fc54a00fda5b8781e8d9bf0140ea6d8e52"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/protocolbuffers/protobuf-php/zipball/57d440fc54a00fda5b8781e8d9bf0140ea6d8e52",
+                "reference": "57d440fc54a00fda5b8781e8d9bf0140ea6d8e52",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.0.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": ">=5.0.0"
+            },
+            "suggest": {
+                "ext-bcmath": "Need to support JSON deserialization"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Google\\Protobuf\\": "src/Google/Protobuf",
+                    "GPBMetadata\\Google\\Protobuf\\": "src/GPBMetadata/Google/Protobuf"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-3-Clause"
+            ],
+            "description": "proto library for PHP",
+            "homepage": "https://developers.google.com/protocol-buffers/",
+            "keywords": [
+                "proto"
+            ],
+            "support": {
+                "source": "https://github.com/protocolbuffers/protobuf-php/tree/v3.25.8"
+            },
+            "time": "2025-05-27T21:04:40+00:00"
+        },
+        {
             "name": "graham-campbell/result-type",
             "version": "v1.1.4",
             "source": {
@@ -1846,6 +1890,44 @@
                 }
             ],
             "time": "2025-08-22T14:27:06+00:00"
+        },
+        {
+            "name": "jacekkow/php-gtfs-realtime-bindings",
+            "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/jacekkow/php-gtfs-realtime-bindings.git",
+                "reference": "93f60497ed3a78d067f6f4c3ec58dbd997b916a0"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/jacekkow/php-gtfs-realtime-bindings/zipball/93f60497ed3a78d067f6f4c3ec58dbd997b916a0",
+                "reference": "93f60497ed3a78d067f6f4c3ec58dbd997b916a0",
+                "shasum": ""
+            },
+            "require": {
+                "google/protobuf": "^3.21",
+                "php": ">=8.1"
+            },
+            "default-branch": true,
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "GPBMetadata\\": "out/GPBMetadata/",
+                    "Transit_realtime\\": "out/Transit_realtime/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "description": "PHP bindings for GTFS Realtime",
+            "homepage": "https://github.com/jacekkow/php-gtfs-realtime-bindings",
+            "support": {
+                "issues": "https://github.com/jacekkow/php-gtfs-realtime-bindings/issues",
+                "source": "https://github.com/jacekkow/php-gtfs-realtime-bindings/tree/master"
+            },
+            "time": "2022-06-12T16:31:47+00:00"
         },
         {
             "name": "laravel/folio",
@@ -11332,7 +11414,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "jacekkow/php-gtfs-realtime-bindings": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

@@ -10,6 +10,7 @@
         "blade-ui-kit/blade-icons": "^1.7",
         "devdojo/auth": "^2.0",
         "doctrine/dbal": "^4.2",
+        "jacekkow/php-gtfs-realtime-bindings": "@dev",
         "laravel/framework": "^11.9",
         "laravel/pennant": "^1.17",
         "laravel/pulse": "^1.4",

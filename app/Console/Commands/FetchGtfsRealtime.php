@@ -8,6 +8,7 @@ use App\Models\GtfsStopTime;
 use App\Models\GtfsTrip;
 use App\Models\RealtimeConflict;
 use App\Models\StopStatus;
+use App\Services\GtfsRealtime\ProtobufToArrayConverter;
 use App\Services\LogHelper;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -90,14 +91,19 @@ class FetchGtfsRealtime extends Command
 
             $this->info("Fetching from {$source} source: {$realtimeUrl}");
 
-            // Fetch realtime data
-            $response = Http::timeout(30)->withOptions(['force_ip_resolve' => 'v4'])->get($realtimeUrl);
+            $userAgent = config('app.name').'/1.0 (GTFS Realtime client)';
+            $response = Http::timeout(30)
+                ->withOptions(['force_ip_resolve' => 'v4'])
+                ->withHeaders(['User-Agent' => $userAgent])
+                ->get($realtimeUrl);
 
             if (! $response->successful()) {
                 throw new \Exception("HTTP error: {$response->status()}");
             }
 
-            $realtimeData = $response->json();
+            $body = $response->body();
+            $contentType = $response->header('Content-Type') ?? '';
+            $realtimeData = $this->parseRealtimeResponse($body, $contentType, $realtimeUrl);
 
             if (! $realtimeData || ! isset($realtimeData['entity'])) {
                 throw new \Exception('Invalid realtime data format');
@@ -135,6 +141,38 @@ class FetchGtfsRealtime extends Command
             $this->error("Failed to fetch realtime data: {$e->getMessage()}");
 
             return Command::FAILURE;
+        }
+    }
+
+    /**
+     * Parse response body as JSON or Protobuf into canonical ['entity' => [...]] shape.
+     */
+    private function parseRealtimeResponse(string $body, string $contentType, string $url): ?array
+    {
+        $isJson = str_contains($contentType, 'application/json');
+        $path = parse_url($url, PHP_URL_PATH);
+        $isProtobuf = $contentType === 'application/x-protobuf'
+            || ($contentType === 'application/octet-stream' && is_string($path) && str_ends_with($path, '.pb'));
+
+        if ($isJson) {
+            $decoded = json_decode($body, true);
+
+            return is_array($decoded) ? $decoded : null;
+        }
+
+        if ($isProtobuf) {
+            return app(ProtobufToArrayConverter::class)->convert($body);
+        }
+
+        $decoded = json_decode($body, true);
+        if (is_array($decoded) && isset($decoded['entity'])) {
+            return $decoded;
+        }
+
+        try {
+            return app(ProtobufToArrayConverter::class)->convert($body);
+        } catch (\Exception) {
+            return null;
         }
     }
 

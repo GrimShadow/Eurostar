@@ -26,10 +26,6 @@ class StopStatus extends Model
     ];
 
     protected $casts = [
-        'scheduled_arrival_time' => 'datetime',
-        'scheduled_departure_time' => 'datetime',
-        'actual_arrival_time' => 'datetime',
-        'actual_departure_time' => 'datetime',
         'is_manual_change' => 'boolean',
         'manually_changed_at' => 'datetime',
     ];
