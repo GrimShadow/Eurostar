@@ -192,15 +192,9 @@ class TrainGrid extends Component
         // Set time range based on selected date
         $isToday = $this->selectedDate === now()->format('Y-m-d');
 
-        if ($isToday) {
-            // For today, only show trains that haven't departed yet OR departed within the last 30 minutes
-            $currentTime = now()->subMinutes(30)->format('H:i:s');
-            $endTime = '23:59:59';
-        } else {
-            // For other dates, show all trains
-            $currentTime = '00:00:00';
-            $endTime = '23:59:59';
-        }
+        // Show all trains for the selected day, regardless of departure status
+        $currentTime = '00:00:00';
+        $endTime = '23:59:59';
 
         // Get unique trips for today with optimized query
         $uniqueTrips = DB::table('gtfs_trips')
@@ -310,24 +304,6 @@ class TrainGrid extends Component
 
             if ($stops->isEmpty()) {
                 continue;
-            }
-
-            // For today, check if the train has already departed (and not within the last 30 minutes)
-            if ($isToday) {
-                $firstStop = $stops->first();
-
-                // Create a full datetime for today with the departure time (using the same timezone as the application)
-                $departureDateTime = Carbon::createFromFormat('Y-m-d H:i:s', $currentTimeObj->format('Y-m-d').' '.$firstStop->departure_time, $currentTimeObj->timezone);
-
-                // Check if the train has already departed
-                if ($departureDateTime->isPast()) {
-                    $minutesSinceDeparture = abs($currentTimeObj->diffInMinutes($departureDateTime, false));
-
-                    // If the train departed more than 30 minutes ago, skip it
-                    if ($minutesSinceDeparture > 30) {
-                        continue;
-                    }
-                }
             }
 
             // Get all stop statuses for this trip from the pre-loaded collection

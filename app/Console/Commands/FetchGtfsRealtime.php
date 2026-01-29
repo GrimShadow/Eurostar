@@ -27,7 +27,7 @@ class FetchGtfsRealtime extends Command
      *
      * @var string
      */
-    protected $signature = 'gtfs:fetch-realtime';
+    protected $signature = 'gtfs:fetch-realtime {--force : Force fetch regardless of update interval}';
 
     /**
      * The console command description.
@@ -72,8 +72,8 @@ class FetchGtfsRealtime extends Command
                 return Command::SUCCESS;
             }
 
-            // Check if enough time has passed since last update
-            if ($settings->last_realtime_update) {
+            // Check if enough time has passed since last update (skip when --force)
+            if (! $this->option('force') && $settings->last_realtime_update) {
                 $secondsSinceLastUpdate = now()->diffInSeconds($settings->last_realtime_update);
                 if ($secondsSinceLastUpdate < $updateInterval) {
                     $this->info("Skipping fetch - only {$secondsSinceLastUpdate} seconds since last update (interval: {$updateInterval}s)");
@@ -151,13 +151,18 @@ class FetchGtfsRealtime extends Command
             }
 
             $tripUpdate = $entity['trip_update'];
-            $tripId = $tripUpdate['trip']['trip_id'] ?? null;
+            $feedTripId = $tripUpdate['trip']['trip_id'] ?? null;
 
+            if (! $feedTripId) {
+                continue;
+            }
+
+            // Resolve to DB trip_id (feed may use different format than static GTFS)
+            $tripId = $this->resolveTripId($feedTripId, $tripUpdate['trip']['start_date'] ?? null);
             if (! $tripId) {
                 continue;
             }
 
-            // Check if this trip exists in our database
             $trip = GtfsTrip::where('trip_id', $tripId)->first();
             if (! $trip) {
                 continue;
@@ -179,6 +184,38 @@ class FetchGtfsRealtime extends Command
         }
 
         return $processedCount;
+    }
+
+    /**
+     * Resolve feed trip_id to DB trip_id (static GTFS may use different trip_id format).
+     */
+    private function resolveTripId(string $feedTripId, ?string $startDate): ?string
+    {
+        if (GtfsTrip::where('trip_id', $feedTripId)->exists()) {
+            return $feedTripId;
+        }
+
+        $tripShortName = str_contains($feedTripId, '-')
+            ? explode('-', $feedTripId)[0]
+            : $feedTripId;
+
+        if (! $startDate || strlen($startDate) !== 8) {
+            return null;
+        }
+
+        $date = Carbon::createFromFormat('Ymd', $startDate)->format('Y-m-d');
+
+        $trip = GtfsTrip::where('trip_short_name', $tripShortName)
+            ->whereExists(function ($query) use ($date) {
+                $query->select(DB::raw(1))
+                    ->from('gtfs_calendar_dates')
+                    ->whereColumn('gtfs_calendar_dates.service_id', 'gtfs_trips.service_id')
+                    ->where('gtfs_calendar_dates.date', $date)
+                    ->where('gtfs_calendar_dates.exception_type', 1);
+            })
+            ->first();
+
+        return $trip?->trip_id;
     }
 
     /**
@@ -403,11 +440,11 @@ class FetchGtfsRealtime extends Command
     private function handleCancellation(string $tripId): void
     {
         // Check for manual status changes before updating to cancelled
-        $stopStatuses = StopStatus::where('trip_id', $tripId)
+        $stopStatusesWithManualChange = StopStatus::where('trip_id', $tripId)
             ->where('is_manual_change', true)
             ->get();
 
-        foreach ($stopStatuses as $stopStatus) {
+        foreach ($stopStatusesWithManualChange as $stopStatus) {
             // If status was manually changed and it's not already cancelled, create conflict
             if ($stopStatus->status !== 'cancelled') {
                 $conflict = RealtimeConflict::create([
@@ -432,13 +469,33 @@ class FetchGtfsRealtime extends Command
             }
         }
 
-        // Update stop statuses that weren't manually changed
-        StopStatus::where('trip_id', $tripId)
-            ->where('is_manual_change', false)
-            ->update([
-                'status' => 'cancelled',
-                'is_realtime_update' => true,
-                'updated_at' => now(),
-            ]);
+        // Ensure every stop on the trip has a cancelled status (create rows if none exist)
+        $stopTimes = GtfsStopTime::where('trip_id', $tripId)
+            ->orderBy('stop_sequence')
+            ->get();
+
+        foreach ($stopTimes as $stopTime) {
+            $existing = StopStatus::where('trip_id', $tripId)
+                ->where('stop_id', $stopTime->stop_id)
+                ->first();
+
+            // Skip stops that were manually changed and are not already cancelled (conflict created above)
+            if ($existing && $existing->is_manual_change && $existing->status !== 'cancelled') {
+                continue;
+            }
+
+            StopStatus::updateOrCreate(
+                [
+                    'trip_id' => $tripId,
+                    'stop_id' => $stopTime->stop_id,
+                ],
+                [
+                    'status' => 'cancelled',
+                    'is_realtime_update' => true,
+                    'is_manual_change' => false,
+                    'updated_at' => now(),
+                ]
+            );
+        }
     }
 }
