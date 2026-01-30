@@ -316,7 +316,7 @@ class TrainGrid extends Component
             // Map the stops to match API format
             $mappedStops = $stops->map(function ($stop) use ($stopStatuses, $uniqueTrip, $allStatuses, $checkInOffset) {
                 $stopStatus = $stopStatuses->get($stop->stop_id);
-                $statusKey = $stopStatus?->status ?? 'on-time';
+                $statusKey = $stopStatus?->status ?? Status::getDefaultStatusString();
                 $status = $allStatuses->get($statusKey);
 
                 // Calculate check-in start time by subtracting check-in time from scheduled departure time
@@ -381,7 +381,7 @@ class TrainGrid extends Component
                 $firstStopStatus = $stopStatuses->get($firstStop->stop_id);
             }
 
-            $firstStopStatusKey = $firstStopStatus?->status ?? 'on-time';
+            $firstStopStatusKey = $firstStopStatus?->status ?? Status::getDefaultStatusString();
             $firstStopStatusObj = $allStatuses->get($firstStopStatusKey);
 
             // Get check-in status for this train

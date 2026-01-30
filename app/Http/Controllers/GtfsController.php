@@ -552,15 +552,19 @@ class GtfsController extends Controller
             // Create or update stop status
             $stopStatusKey = $data[$columns['trip_id']].'-'.$data[$columns['stop_id']];
             if (! in_array($stopStatusKey, $processedStopStatuses)) {
+                $defaultStatus = \App\Models\Status::getDefaultForNewTrains();
+                $defaultStatusStr = $defaultStatus?->status ?? 'On Time';
+                $defaultStatusColor = $defaultStatus?->color_rgb ?? '156,163,175';
+                $defaultStatusColorHex = $defaultStatus ? $this->rgbToHex($defaultStatus->color_rgb) : '#9CA3AF';
                 StopStatus::updateOrCreate(
                     [
                         'trip_id' => $data[$columns['trip_id']],
                         'stop_id' => $data[$columns['stop_id']],
                     ],
                     [
-                        'status' => 'on-time',
-                        'status_color' => '156,163,175',
-                        'status_color_hex' => '#9CA3AF',
+                        'status' => $defaultStatusStr,
+                        'status_color' => $defaultStatusColor,
+                        'status_color_hex' => $defaultStatusColorHex,
                         'scheduled_arrival_time' => $data[$columns['arrival_time']],
                         'scheduled_departure_time' => $data[$columns['departure_time']],
                         'departure_platform' => 'TBD',
@@ -611,7 +615,7 @@ class GtfsController extends Controller
         $request->validate([
             'trip_id' => 'required|string',
             'stop_id' => 'required|string',
-            'status' => 'required|string|in:on-time,delayed,cancelled,completed',
+            'status' => 'required|string|exists:statuses,status',
             'actual_arrival_time' => 'nullable|date_format:H:i:s',
             'actual_departure_time' => 'nullable|date_format:H:i:s',
             'platform_code' => 'nullable|string',

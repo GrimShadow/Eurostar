@@ -256,7 +256,7 @@ class ProcessSingleTrainRule implements ShouldQueue
                 $stopStatus = StopStatus::where('trip_id', $train->trip_id)
                     ->where('stop_id', $stopTime->stop_id)
                     ->first();
-                $currentStatus = $stopStatus ? $stopStatus->status : 'On Time';
+                $currentStatus = $stopStatus ? $stopStatus->status : \App\Models\Status::getDefaultStatusString();
 
                 // Check if rule condition is met for this specific stop
                 $conditionMet = $this->shouldTriggerForStop($rule, $train, $stopTime->stop_id);

@@ -200,16 +200,16 @@ class RuleCondition extends Model
                     $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
                         ->where('stop_id', $specificStopId)
                         ->first();
-                    $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
+                    $statusValue = $stopStatus ? $stopStatus->status : Status::getDefaultStatusString();
                 } else {
                     $firstStopTime = $train->stopTimes()->orderBy('stop_sequence')->first();
                     if (! $firstStopTime) {
-                        $statusValue = 'On Time';
+                        $statusValue = Status::getDefaultStatusString();
                     } else {
                         $stopStatus = \App\Models\StopStatus::where('trip_id', $train->trip_id)
                             ->where('stop_id', $firstStopTime->stop_id)
                             ->first();
-                        $statusValue = $stopStatus ? $stopStatus->status : 'On Time';
+                        $statusValue = $stopStatus ? $stopStatus->status : Status::getDefaultStatusString();
                     }
                 }
 

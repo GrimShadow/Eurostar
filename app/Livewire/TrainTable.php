@@ -185,7 +185,7 @@ class TrainTable extends Component
 
         $processedTrains = $trains->map(function ($train) {
             // Use realtime status if available, otherwise fall back to manual status
-            $status = $train->realtime_status ?? $train->status_text ?? $train->train_status ?? 'on-time';
+            $status = $train->realtime_status ?? $train->status_text ?? $train->train_status ?? \App\Models\Status::getDefaultStatusString();
 
             // Use realtime status color if available, otherwise fall back to manual status color
             $statusColor = $train->realtime_status_color ?? $train->color_rgb ?? '156,163,175';

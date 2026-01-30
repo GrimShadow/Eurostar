@@ -1,4 +1,23 @@
 <div class="space-y-6">
+    <!-- Default status for new trains -->
+    <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Default status for new trains</h3>
+        <p class="text-sm text-gray-500 mb-4">Used for trains with no status set (e.g. new from GTFS data).</p>
+        <div class="flex items-center gap-4">
+            <select wire:model.live="defaultTrainStatusId"
+                    wire:change="saveDefaultStatus"
+                    class="rounded-lg border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="">On time (system default)</option>
+                @foreach($allStatuses as $status)
+                    <option value="{{ $status->id }}">{{ $status->status }}</option>
+                @endforeach
+            </select>
+            @if(session()->has('success') && session('success') === 'Default status for new trains updated.')
+                <span class="text-sm text-green-600">Saved.</span>
+            @endif
+        </div>
+    </div>
+
     <!-- Create Status Form -->
     <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
         <div class="flex items-center justify-between mb-4">
