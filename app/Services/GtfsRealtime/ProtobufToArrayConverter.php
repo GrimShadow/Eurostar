@@ -19,7 +19,9 @@ class ProtobufToArrayConverter
         $feed->mergeFromString($binary);
 
         $entities = [];
+        $entityIndex = 0;
         foreach ($feed->getEntity() as $feedEntity) {
+            $entityIndex++;
             $tripUpdate = $feedEntity->getTripUpdate();
             if (! $tripUpdate) {
                 continue;
@@ -30,6 +32,11 @@ class ProtobufToArrayConverter
                 'trip_update' => $this->tripUpdateToArray($tripUpdate),
             ];
             $entities[] = $entity;
+
+            // Cap entities to avoid unbounded memory/time on very large feeds
+            if ($entityIndex >= 10000) {
+                break;
+            }
         }
 
         return ['entity' => $entities];

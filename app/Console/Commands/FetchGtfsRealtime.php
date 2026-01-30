@@ -103,6 +103,7 @@ class FetchGtfsRealtime extends Command
 
             $body = $response->body();
             $contentType = $response->header('Content-Type') ?? '';
+            $this->info('Parsing feed (this may take a moment for large feeds)...');
             $realtimeData = $this->parseRealtimeResponse($body, $contentType, $realtimeUrl);
 
             if (! $realtimeData || ! isset($realtimeData['entity'])) {
@@ -124,7 +125,7 @@ class FetchGtfsRealtime extends Command
 
             return Command::SUCCESS;
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             LogHelper::gtfsError('GTFS Realtime fetch failed', [
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -171,7 +172,7 @@ class FetchGtfsRealtime extends Command
 
         try {
             return app(ProtobufToArrayConverter::class)->convert($body);
-        } catch (\Exception) {
+        } catch (\Throwable $e) {
             return null;
         }
     }
